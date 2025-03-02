@@ -11,7 +11,8 @@ def _():
     from dataclasses import dataclass
     from typing import List, Optional
     import datetime
-    return Enum, List, Optional, dataclass, datetime, mo
+    import pandas
+    return Enum, List, Optional, dataclass, datetime, mo, pandas
 
 
 @app.cell(hide_code=True)
@@ -53,13 +54,18 @@ def _(mo):
 
 
 @app.cell
+def _():
+    from mdp_m01.parser import parse_buffer, Channel, Synthesize, WaveItem, WaveGroup, Wave
+    return Channel, Synthesize, Wave, WaveGroup, WaveItem, parse_buffer
+
+
+@app.cell
 def _(
     available_ports,
     collect_data_button,
     datetime,
     mo,
-    parse_mdp01_data,
-    parse_packet,
+    parse_buffer,
     selected_port_index,
     serial,
     set_packets,
@@ -76,10 +82,10 @@ def _(
         def parse_buf():
             nonlocal buf
             nonlocal packets
-            parsed, buf = parse_mdp01_data(buf)
+            parsed, buf = parse_buffer(buf)
             if parsed:
                 for p in parsed:
-                    packets.append(parse_packet(p))
+                    packets.append(p)
                 set_packets(packets)
 
         with serial.Serial(available_ports[selected_port_index.value].device) as ser:
@@ -101,147 +107,54 @@ def _(refresh_packets):
 
 
 @app.cell
-def _(get_packets, refresh_packets):
+def _(Synthesize, get_packets, pandas, refresh_packets):
     refresh_packets.value
     packets = get_packets()
-    packets
-    return (packets,)
+    channels = []
+    for p in packets:
+        if isinstance(p, Synthesize):
+            channels += p.channels
+    df = pandas.DataFrame(channels)
+    df
+    return channels, df, p, packets
 
 
 @app.cell
-def _():
-    import io
-    from kaitaistruct import KaitaiStream, KaitaiStruct
-    import miniware_mdp_m01
+def _(df, mo):
+    def plot_df(df):
+        plots = []
+        for c in df["channel_index"].unique():
+            channel_df = df[df["channel_index"] == c]
+            machine_type = channel_df["machine_type"].iloc[0]
+            machine_type = str(machine_type).split('.')[1]
+            value_columns = [
+                "temperature",
+                "in_voltage",
+                "in_current",
+                "out_voltage",
+                "out_current",
+                "set_voltage",
+                "set_current",
+            ]
+            melted = channel_df.melt(
+                id_vars=["timestamp_received", "channel_index"],
+                value_vars=value_columns,
+                var_name="value_type",
+                value_name="value",
+            )
+            plots.append(
+                alt.Chart(melted).mark_line().encode(
+                    x="timestamp_received:T",
+                    y="value:Q",
+                    color="value_type:N",
+                ).properties(title=f"C{c+1}: {machine_type}")
+            )
+        return alt.vconcat(*plots)
 
-    MachineType = miniware_mdp_m01.MiniwareMdpM01.MachineType
-    PackType = miniware_mdp_m01.MiniwareMdpM01.PackType
+    import altair as alt
 
-    def parse_mdp01_single_packet(buf):
-        for i in range(len(buf) - 3):
-            if buf[i] == 0x5a and buf[i + 1] == 0x5a:
-                size = buf[i + 3]
-                if len(buf) < i + size:
-                    break
-                packet = io.BytesIO(buf[i:i + size])
-                try:
-                    p = miniware_mdp_m01.MiniwareMdpM01(KaitaiStream(packet))
-                except Exception as e:
-                    return buf[i + 2:], e
-                return buf[i + size:], p
-        return buf, None
-
-    def parse_mdp01_data(buf):
-        memorybuf = memoryview(buf)
-        packets = []
-        while len(memorybuf) > 0:
-            last_len = len(memorybuf)
-            memorybuf, parsed = parse_mdp01_single_packet(memorybuf)
-            if parsed:
-                assert len(parsed.packets) == 1
-                packets.append(parsed.packets[0])
-            if len(memorybuf) == last_len:
-                break
-        return packets, bytes(memorybuf)
-    return (
-        KaitaiStream,
-        KaitaiStruct,
-        MachineType,
-        PackType,
-        io,
-        miniware_mdp_m01,
-        parse_mdp01_data,
-        parse_mdp01_single_packet,
-    )
-
-
-@app.cell
-def _(List, MachineType, Optional, PackType, dataclass, datetime):
-    @dataclass
-    class Channel:
-        index: int
-        timestamp_received: datetime.datetime
-        temperature: float
-        out_voltage: float
-        out_current: float
-        in_voltage: float
-        in_current: float
-        set_voltage: float
-        set_current: float
-
-        online: bool
-        lock: bool
-        output_on: bool
-        machine_type: MachineType
-
-        # color: bytes
-        error: int
-
-        status_load: Optional[bool] = None
-        status_psu: Optional[bool] = None
-
-    @dataclass
-    class Synthesize:
-        channels: List[Channel]
-
-    @dataclass
-    class WaveItem:
-        voltage: float
-        current: float
-
-    @dataclass
-    class WaveGroup:
-        timestamp: int
-        timestamp_received: datetime.datetime
-        items: List[WaveItem]
-
-    @dataclass
-    class Wave:
-        groups: List[WaveGroup]
-
-    def parse_packet(p):
-        if p.pack_type == PackType.wave:
-            wave_groups = []
-            for g in p.data.groups:
-                wave_groups.append(WaveGroup(
-                    timestamp=g.timestamp,
-                    timestamp_received=datetime.datetime.now(),
-                    items=[WaveItem(voltage=i.voltage, current=i.current) for i in g.items]
-                ))
-
-            return Wave(groups=wave_groups)
-        elif p.pack_type == PackType.synthesize:
-            channels = []
-            for index, c in enumerate(p.data.channels):
-                if c.type == MachineType.node:
-                    continue
-                channels.append(Channel(
-                    index=index,
-                    timestamp_received=datetime.datetime.now(),
-                    temperature=c.temperature,
-                    out_voltage=c.out_voltage,
-                    out_current=c.out_current,
-                    in_voltage=c.in_voltage,
-                    in_current=c.in_current,
-                    set_voltage=c.set_voltage,
-                    set_current=c.set_current,
-                    online=c.online,
-                    lock=c.lock,
-                    output_on=c.output_on,
-                    machine_type=c.type,
-                    status_load=c.status_load if hasattr(c, 'status_load') else None,
-                    status_psu=c.status_psu if hasattr(c, 'status_psu') else None,
-                    # color=c.color,
-                    error=c.error
-                ))
-            return Synthesize(channels=channels)
-        assert ValueError(f'Unknown packet type: {p.pack_type}')
-    return Channel, Synthesize, Wave, WaveGroup, WaveItem, parse_packet
-
-
-@app.cell
-def _():
-    return
+    mo.ui.altair_chart(plot_df(df))
+    return alt, plot_df
 
 
 if __name__ == "__main__":
