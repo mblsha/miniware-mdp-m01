@@ -40,6 +40,8 @@ qt_add_executable(mdp_parser_test
     tests/test_addr_parser.cpp
     tests/test_updat_ch_parser.cpp
     tests/test_machine_parser.cpp
+    tests/test_err240_parser.cpp
+    tests/test_heartbeat_generator.cpp
     processingdata.cpp
     processingdata.h
     machine.h
