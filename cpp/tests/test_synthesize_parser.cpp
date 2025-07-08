@@ -3,7 +3,10 @@
 #include <QByteArray>
 #include <QDebug>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class SynthesizePacketTest : public ::testing::Test {
 protected:
@@ -39,6 +42,14 @@ protected:
         delete processor;
     }
     
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
+    }
+    
     // Helper function to create a valid packet with checksum
     QByteArray createPacket(uint8_t type, uint8_t channel, const QByteArray& data) {
         QByteArray packet;
@@ -69,7 +80,7 @@ protected:
         uint16_t setCurrent = 1000,    // 1A preset
         uint16_t temperature = 25,      // 25°C
         bool online = true,
-        uint8_t machineType = 0x10,    // haveLcd
+        uint8_t machineType = 2,    // P906
         bool locked = false,
         bool ccMode = true,
         bool outputOn = true
@@ -167,6 +178,40 @@ TEST_F(SynthesizePacketTest, TestBasicSynthesizePacket) {
     EXPECT_EQ(processor->MDP[1].NO, 1);
     EXPECT_EQ(processor->MDP[1].outPutVoltage, 5100);  // Incremented by 100
     EXPECT_EQ(processor->MDP[1].outPutCurrent, 1050);  // Incremented by 50
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    ASSERT_EQ(kaitai->packets()->size(), 1);
+    
+    auto* pkt = kaitai->packets()->at(0);
+    EXPECT_EQ(pkt->pack_type(), miniware_mdp_m01_t::PACK_TYPE_SYNTHESIZE);
+    EXPECT_EQ(pkt->size(), 156); // 6 header + 150 data
+    
+    auto* syn = static_cast<miniware_mdp_m01_t::synthesize_t*>(pkt->data());
+    EXPECT_EQ(syn->channel(), 0);
+    EXPECT_EQ(syn->channels()->size(), 6);
+    
+    // Verify channel 0 data matches
+    auto* chan0 = syn->channels()->at(0);
+    EXPECT_EQ(chan0->num(), 0);
+    EXPECT_FLOAT_EQ(chan0->out_voltage(), 5.0f);    // 5000mV -> 5.0V
+    EXPECT_FLOAT_EQ(chan0->out_current(), 1.0f);    // 1000mA -> 1.0A
+    EXPECT_FLOAT_EQ(chan0->in_voltage(), 12.0f);    // 12000mV -> 12.0V
+    EXPECT_FLOAT_EQ(chan0->in_current(), 0.5f);     // 500mA -> 0.5A
+    EXPECT_FLOAT_EQ(chan0->set_voltage(), 5.0f);    // 5000mV -> 5.0V
+    EXPECT_FLOAT_EQ(chan0->set_current(), 1.0f);    // 1000mA -> 1.0A
+    EXPECT_FLOAT_EQ(chan0->temperature(), 2.5f);    // 25 raw -> 2.5°C
+    EXPECT_EQ(chan0->online(), 1);
+    EXPECT_EQ(chan0->type(), miniware_mdp_m01_t::MACHINE_TYPE_P906); // 2 maps to P906 in enum
+    EXPECT_EQ(chan0->lock(), 0);
+    EXPECT_EQ(chan0->output_on(), 1);
+    
+    // Verify channel 1 data increments
+    auto* chan1 = syn->channels()->at(1);
+    EXPECT_EQ(chan1->num(), 1);
+    EXPECT_FLOAT_EQ(chan1->out_voltage(), 5.1f);    // 5100mV -> 5.1V
+    EXPECT_FLOAT_EQ(chan1->out_current(), 1.05f);   // 1050mA -> 1.05A
 }
 
 // Test all 6 channels data
@@ -190,6 +235,25 @@ TEST_F(SynthesizePacketTest, TestAllChannelsData) {
             processor->MDP[i].outPutVoltage * processor->MDP[i].outPutCurrent / 1000.0
         );
         EXPECT_EQ(processor->MDP[i].outPutPower, expectedPower);
+    }
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    ASSERT_EQ(kaitai->packets()->size(), 1);
+    
+    auto* pkt = kaitai->packets()->at(0);
+    auto* syn = static_cast<miniware_mdp_m01_t::synthesize_t*>(pkt->data());
+    EXPECT_EQ(syn->channel(), 2); // Channel from packet header
+    
+    // Verify all 6 channels
+    for (int i = 0; i < 6; i++) {
+        auto* chan = syn->channels()->at(i);
+        EXPECT_EQ(chan->num(), i);
+        EXPECT_FLOAT_EQ(chan->out_voltage(), (3300 + i * 100) / 1000.0f);
+        EXPECT_FLOAT_EQ(chan->out_current(), (500 + i * 50) / 1000.0f);
+        EXPECT_EQ(chan->online(), 1);
+        EXPECT_EQ(chan->type(), miniware_mdp_m01_t::MACHINE_TYPE_P906);
     }
 }
 
@@ -240,7 +304,7 @@ TEST_F(SynthesizePacketTest, TestLockStatus) {
     QByteArray synData = createSynthesizeData(
         5000, 1000, 12000, 500, 5000, 1000, 25, 
         true,  // online
-        0x10,  // haveLcd
+        2,  // P906
         true   // locked
     );
     QByteArray packet = createPacket(processingData::PACK_SYNTHESIZE, 0, synData);
@@ -310,6 +374,17 @@ TEST_F(SynthesizePacketTest, TestTemperatureReading) {
     // Verify temperature
     for (int i = 0; i < 6; i++) {
         EXPECT_EQ(processor->MDP[i].temp, testTemp);
+    }
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    auto* syn = static_cast<miniware_mdp_m01_t::synthesize_t*>(kaitai->packets()->at(0)->data());
+    
+    // Verify temperature in all channels
+    for (int i = 0; i < 6; i++) {
+        auto* chan = syn->channels()->at(i);
+        EXPECT_FLOAT_EQ(chan->temperature(), testTemp / 10.0f); // 45 raw -> 4.5°C
     }
 }
 

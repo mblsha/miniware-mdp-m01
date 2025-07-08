@@ -3,7 +3,10 @@
 #include <QByteArray>
 #include <QDebug>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class ProcessingDataTest : public ::testing::Test {
 protected:
@@ -37,6 +40,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper function to create a valid packet with checksum
@@ -136,6 +147,30 @@ TEST_F(ProcessingDataTest, TestWavePacket126Bytes) {
         // First current should be 0.5A (500mA)
         EXPECT_NEAR(firstCurrent.y(), 0.5, 0.001);
     }
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    ASSERT_EQ(kaitai->packets()->size(), 1);
+    
+    auto* pkt = kaitai->packets()->at(0);
+    EXPECT_EQ(pkt->pack_type(), miniware_mdp_m01_t::PACK_TYPE_WAVE);
+    EXPECT_EQ(pkt->size(), 126);
+    
+    auto* wave = static_cast<miniware_mdp_m01_t::wave_t*>(pkt->data());
+    EXPECT_EQ(wave->channel(), 0);
+    EXPECT_EQ(wave->group_size(), 2);
+    EXPECT_EQ(wave->groups()->size(), 10);
+    
+    // Verify first group matches original parser
+    auto* group0 = wave->groups()->at(0);
+    EXPECT_EQ(group0->timestamp(), 1000);
+    EXPECT_EQ(group0->items()->size(), 2);
+    
+    // Check first item values match
+    auto* item0 = group0->items()->at(0);
+    EXPECT_FLOAT_EQ(item0->voltage(), 3.3f);  // 3300mV -> 3.3V
+    EXPECT_FLOAT_EQ(item0->current(), 0.5f);  // 500mA -> 0.5A
 }
 
 // Test PACK_WAVE parsing with 206-byte packet (4 points per group)
@@ -158,6 +193,34 @@ TEST_F(ProcessingDataTest, TestWavePacket206Bytes) {
     // Should have 40 points (10 groups * 4 points)
     EXPECT_EQ(processor->series_V->count(), 40);
     EXPECT_EQ(processor->series_I->count(), 40);
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    ASSERT_EQ(kaitai->packets()->size(), 1);
+    
+    auto* pkt = kaitai->packets()->at(0);
+    EXPECT_EQ(pkt->pack_type(), miniware_mdp_m01_t::PACK_TYPE_WAVE);
+    EXPECT_EQ(pkt->size(), 206);
+    
+    auto* wave = static_cast<miniware_mdp_m01_t::wave_t*>(pkt->data());
+    EXPECT_EQ(wave->channel(), 0);
+    EXPECT_EQ(wave->group_size(), 4);
+    EXPECT_EQ(wave->groups()->size(), 10);
+    
+    // Verify data structure
+    for (int g = 0; g < 10; g++) {
+        auto* group = wave->groups()->at(g);
+        EXPECT_EQ(group->timestamp(), static_cast<uint32_t>(1000 + g * 100));
+        EXPECT_EQ(group->items()->size(), 4);
+        
+        // Check first item in each group
+        auto* item0 = group->items()->at(0);
+        float expectedVoltage = (3300 + g * 100) / 1000.0f;
+        float expectedCurrent = (500 + g * 50) / 1000.0f;
+        EXPECT_FLOAT_EQ(item0->voltage(), expectedVoltage);
+        EXPECT_FLOAT_EQ(item0->current(), expectedCurrent);
+    }
 }
 
 // Test invalid checksum handling
@@ -206,6 +269,22 @@ TEST_F(ProcessingDataTest, TestMultipleWavePackets) {
     
     // Should have more points than before
     EXPECT_GT(processor->series_V->count(), firstCount);
+    
+    // Kaitai cross-validation for both packets
+    auto kaitai1 = parseWithKaitai(packet1);
+    auto kaitai2 = parseWithKaitai(packet2);
+    
+    // Verify first packet
+    ASSERT_NE(kaitai1, nullptr);
+    ASSERT_EQ(kaitai1->packets()->size(), 1);
+    auto* wave1 = static_cast<miniware_mdp_m01_t::wave_t*>(kaitai1->packets()->at(0)->data());
+    EXPECT_EQ(wave1->groups()->at(0)->timestamp(), 1000);
+    
+    // Verify second packet
+    ASSERT_NE(kaitai2, nullptr);
+    ASSERT_EQ(kaitai2->packets()->size(), 1);
+    auto* wave2 = static_cast<miniware_mdp_m01_t::wave_t*>(kaitai2->packets()->at(0)->data());
+    EXPECT_EQ(wave2->groups()->at(0)->timestamp(), 2000);
 }
 
 // Test wave data generation
