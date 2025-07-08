@@ -11,7 +11,7 @@
 #include <QTimer>
 #include <QTime>
 
-QT_CHARTS_USE_NAMESPACE
+QT_USE_NAMESPACE
 
 #define RGB888_RED      0x00ff0000
 #define RGB888_GREEN    0x0000ff00

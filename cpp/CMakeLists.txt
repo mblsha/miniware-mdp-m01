@@ -1,0 +1,28 @@
+cmake_minimum_required(VERSION 3.16)
+project(mdp_parser VERSION 1.0.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Find required Qt components
+find_package(Qt6 REQUIRED COMPONENTS Core Charts)
+
+# Enable Qt MOC
+set(CMAKE_AUTOMOC ON)
+
+# Create executable
+qt_add_executable(mdp_parser
+    main.cpp
+    processingdata.cpp
+    processingdata.h
+    machine.h
+)
+
+# Link Qt libraries
+target_link_libraries(mdp_parser PRIVATE 
+    Qt6::Core
+    Qt6::Charts
+)
+
+# Set up include directories
+target_include_directories(mdp_parser PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
