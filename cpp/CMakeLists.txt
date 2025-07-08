@@ -47,6 +47,7 @@ qt_add_executable(mdp_parser_test
     tests/test_set_i_generator.cpp
     tests/test_set_addr_generator.cpp
     tests/test_set_all_addr_generator.cpp
+    tests/test_set_isoutput_generator.cpp
     processingdata.cpp
     processingdata.h
     machine.h
