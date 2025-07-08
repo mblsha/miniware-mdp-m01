@@ -22,10 +22,16 @@ This is a mixed C++/Python project for handling Miniware MDP (Multi-channel Digi
 ## Key Technical Details
 
 ### Protocol Format
-- Binary protocol defined in `py/mdp_m01/mdp.ksy` (Kaitai Struct format)
-- Packet types: Synthesize (channel status), Wave (measurements), Address, Frequency
+- Binary protocol defined in `cpp/mdp.ksy` (Kaitai Struct format)
+- Incoming packet types fully implemented:
+  - Synthesize (0x11): Channel status with voltage/current/temperature
+  - Wave (0x12): Time-series measurements
+  - Address (0x13): Device addresses and frequencies
+  - Update Channel (0x14): Channel switching command
+  - Machine (0x15): Device type identification
+  - Error 240 (0x23): Error notification
 - Support for 6 channels with voltage/current/temperature monitoring
-- Checksum validation on all packets
+- Checksum validation on all packets (XOR of data bytes)
 - Default channel value: 0xEE (238) when not specified
 
 ### C++ Component
@@ -189,6 +195,53 @@ data.append(voltage_mv & 0xFF);
 data.append((voltage_mv >> 8) & 0xFF);
 ```
 
+## Kaitai Cross-Validation Testing
+
+### Overview
+The C++ tests include Kaitai Struct cross-validation to ensure the Kaitai protocol definition (`cpp/mdp.ksy`) produces semantically identical parsing results to the reference C++ parser. This validates the accuracy of the protocol specification.
+
+### Implementation Pattern
+Each parser test file includes:
+```cpp
+// Helper to parse QByteArray with Kaitai
+std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+    std::string dataStr(data.constData(), data.size());
+    std::istringstream iss(dataStr);
+    auto ks = std::make_unique<kaitai::kstream>(&iss);
+    return std::make_unique<miniware_mdp_m01_t>(ks.get());
+}
+```
+
+### Key Validation Points
+
+1. **Packet Type Enum Values**: The C++ code uses sequential enum values starting from 0x11. The Kaitai definition must match these exact values (not arbitrary hex values).
+
+2. **Address Byte Order**: Address packets store bytes in reverse order in the packet compared to the machine struct:
+   - Packet: `[addr4][addr3][addr2][addr1][addr0]`
+   - Machine struct: `address[0..4]` in normal order
+
+3. **Temperature Representation**: Kaitai stores temperature as `raw_value / 10.0`, while C++ stores the raw value directly.
+
+4. **Machine Type Mapping**: Values differ between packet and internal representation:
+   - `0x10` (haveLcd) → M01 with LCD
+   - `0x11` (noLcd) → M02 without LCD
+   - Unknown values default to noLcd
+
+5. **Empty Packet Handling**: ERR_240 uses the `empty_packet` type with only channel/dummy bytes, no data payload.
+
+### Regenerating Kaitai Code
+When modifying `mdp.ksy`:
+```bash
+cd cpp
+kaitai-struct-compiler -t cpp_stl --outdir build/kaitai_generated mdp.ksy
+```
+
+### Running Cross-Validation Tests
+All parser tests include Kaitai validation:
+```bash
+./mdp_parser_test --gtest_filter="*PacketTest.*"
+```
+
 ## Important Considerations
 
 - The C++ code references Qt's deprecated features and may need updates for newer Qt versions
@@ -198,3 +251,4 @@ data.append((voltage_mv >> 8) & 0xFF);
 - Google Test's gtest_main provides the main() function - don't add it to test files
 - Use QSignalSpy from QtTest to verify Qt signal emissions in tests
 - All packet checksums are calculated as XOR of data bytes only (excluding 6-byte header)
+- Kaitai cross-validation ensures protocol specification accuracy against reference implementation
