@@ -50,6 +50,7 @@ qt_add_executable(mdp_parser_test
     tests/test_set_isoutput_generator.cpp
     tests/test_get_addr_generator.cpp
     tests/test_get_machine_generator.cpp
+    tests/test_start_auto_match_generator.cpp
     processingdata.cpp
     processingdata.h
     machine.h
