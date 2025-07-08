@@ -37,6 +37,7 @@ find_package(GTest REQUIRED)
 qt_add_executable(mdp_parser_test
     tests/test_wave_parser.cpp
     tests/test_synthesize_parser.cpp
+    tests/test_addr_parser.cpp
     processingdata.cpp
     processingdata.h
     machine.h
