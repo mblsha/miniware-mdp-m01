@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required Qt components
-find_package(Qt6 REQUIRED COMPONENTS Core Charts)
+find_package(Qt6 REQUIRED COMPONENTS Core Charts Test)
 
 # Enable Qt MOC
 set(CMAKE_AUTOMOC ON)
@@ -38,6 +38,7 @@ qt_add_executable(mdp_parser_test
     tests/test_wave_parser.cpp
     tests/test_synthesize_parser.cpp
     tests/test_addr_parser.cpp
+    tests/test_updat_ch_parser.cpp
     processingdata.cpp
     processingdata.h
     machine.h
@@ -47,6 +48,7 @@ qt_add_executable(mdp_parser_test
 target_link_libraries(mdp_parser_test PRIVATE 
     Qt6::Core
     Qt6::Charts
+    Qt6::Test
     GTest::gtest_main
     GTest::gtest
 )
