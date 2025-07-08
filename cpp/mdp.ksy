@@ -172,16 +172,16 @@ enums:
     0x17: get_addr
     0x18: set_addr
     0x19: set_ch
-    0x1A: set_v
-    0x1B: set_i
-    0x1C: set_all_addr
-    0x1D: start_auto_match
-    0x1E: stop_auto_match
-    0x1F: reset_to_dfu
+    0x1a: set_v
+    0x1b: set_i
+    0x1c: set_all_addr
+    0x1d: start_auto_match
+    0x1e: stop_auto_match
+    0x1f: reset_to_dfu
     0x20: rgb
     0x21: get_machine
     0x22: heartbeat
-    0xF0: err_240
+    0x23: err_240
 
   machine_type:
     0x00: node
