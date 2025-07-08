@@ -10,7 +10,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Charts)
 # Enable Qt MOC
 set(CMAKE_AUTOMOC ON)
 
-# Create executable
+# Create main executable
 qt_add_executable(mdp_parser
     main.cpp
     processingdata.cpp
@@ -26,3 +26,29 @@ target_link_libraries(mdp_parser PRIVATE
 
 # Set up include directories
 target_include_directories(mdp_parser PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Enable testing
+enable_testing()
+
+# Find Google Test
+find_package(GTest REQUIRED)
+
+# Create test executable
+qt_add_executable(mdp_parser_test
+    tests/test_wave_parser.cpp
+    processingdata.cpp
+    processingdata.h
+    machine.h
+)
+
+# Link test libraries
+target_link_libraries(mdp_parser_test PRIVATE 
+    Qt6::Core
+    Qt6::Charts
+    GTest::gtest_main
+    GTest::gtest
+)
+
+# Add tests
+include(GoogleTest)
+gtest_discover_tests(mdp_parser_test)
