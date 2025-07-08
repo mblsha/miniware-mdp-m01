@@ -50,7 +50,11 @@ TEST_F(KaitaiParserTest, TestHeartbeatPacket) {
     packet.append(static_cast<char>(0x5A));  // Magic 1
     packet.append(static_cast<char>(0x5A));  // Magic 2
     packet.append(static_cast<char>(0x22));  // PACK_TYPE_HEARTBEAT
-    packet.append(static_cast<char>(0x04));  // Size (just header, no data)
+    packet.append(static_cast<char>(0x06));  // Size (6 bytes total for empty packet)
+    
+    // Add channel and dummy bytes for empty_packet
+    packet.append(static_cast<char>(0xEE));  // Channel (default)
+    packet.append(static_cast<char>(0x00));  // Dummy
     
     auto parser = parseWithKaitai(packet);
     ASSERT_NE(parser, nullptr);
@@ -58,7 +62,7 @@ TEST_F(KaitaiParserTest, TestHeartbeatPacket) {
     
     auto* pkt = parser->packets()->at(0);
     EXPECT_EQ(pkt->pack_type(), miniware_mdp_m01_t::PACK_TYPE_HEARTBEAT);
-    EXPECT_EQ(pkt->size(), 4);
+    EXPECT_EQ(pkt->size(), 6);
 }
 
 // Test parsing a wave packet
@@ -211,13 +215,17 @@ TEST_F(KaitaiParserTest, TestMultiplePackets) {
     data.append(static_cast<char>(0x5A));
     data.append(static_cast<char>(0x5A));
     data.append(static_cast<char>(0x22));
-    data.append(static_cast<char>(0x04));
+    data.append(static_cast<char>(0x06));
+    data.append(static_cast<char>(0xEE));  // Channel
+    data.append(static_cast<char>(0x00));  // Dummy
     
     // Second packet: RGB with data
     data.append(static_cast<char>(0x5A));
     data.append(static_cast<char>(0x5A));
     data.append(static_cast<char>(0x20));
-    data.append(static_cast<char>(0x05));
+    data.append(static_cast<char>(0x07));
+    data.append(static_cast<char>(0x00));  // Channel
+    data.append(static_cast<char>(0x00));  // Dummy
     data.append(static_cast<char>(0x01)); // RGB on
     
     auto parser = parseWithKaitai(data);
@@ -227,12 +235,12 @@ TEST_F(KaitaiParserTest, TestMultiplePackets) {
     // Check first packet
     auto* pkt1 = parser->packets()->at(0);
     EXPECT_EQ(pkt1->pack_type(), miniware_mdp_m01_t::PACK_TYPE_HEARTBEAT);
-    EXPECT_EQ(pkt1->size(), 4);
+    EXPECT_EQ(pkt1->size(), 6);
     
     // Check second packet
     auto* pkt2 = parser->packets()->at(1);
     EXPECT_EQ(pkt2->pack_type(), miniware_mdp_m01_t::PACK_TYPE_RGB);
-    EXPECT_EQ(pkt2->size(), 5);
+    EXPECT_EQ(pkt2->size(), 7);
 }
 
 // Test error handling with invalid magic bytes
@@ -241,7 +249,9 @@ TEST_F(KaitaiParserTest, TestInvalidMagicBytes) {
     packet.append(static_cast<char>(0x5A));  // Magic 1
     packet.append(static_cast<char>(0x5B));  // Wrong Magic 2
     packet.append(static_cast<char>(0x22));  // PACK_TYPE_HEARTBEAT
-    packet.append(static_cast<char>(0x04));  // Size
+    packet.append(static_cast<char>(0x06));  // Size
+    packet.append(static_cast<char>(0xEE));  // Channel
+    packet.append(static_cast<char>(0x00));  // Dummy
     
     // Kaitai will throw a generic exception for validation errors
     EXPECT_THROW({

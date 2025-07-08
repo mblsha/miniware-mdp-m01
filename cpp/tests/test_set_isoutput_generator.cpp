@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class SetIsOutputGeneratorTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper to manually create expected packet for comparison
@@ -102,6 +113,22 @@ TEST_F(SetIsOutputGeneratorTest, TestSetOutputOn) {
         EXPECT_EQ(static_cast<uint8_t>(packet[4]), 2);     // Channel
         EXPECT_EQ(static_cast<uint8_t>(packet[5]), 1);     // Checksum (XOR of 1)
         EXPECT_EQ(static_cast<uint8_t>(packet[6]), 1);     // ON state
+        
+        // Kaitai validation
+        auto parsed = parseWithKaitai(packet);
+        ASSERT_NE(parsed, nullptr);
+        ASSERT_EQ(parsed->packets()->size(), 1);
+        
+        auto kpacket = parsed->packets()->at(0);
+        EXPECT_EQ(kpacket->pack_type(), miniware_mdp_m01_t::PACK_TYPE_SET_ISOUTPUT);
+        EXPECT_EQ(kpacket->size(), 7);
+        
+        // Cast to set_isoutput type
+        auto* outputPacket = static_cast<miniware_mdp_m01_t::set_isoutput_t*>(kpacket->data());
+        ASSERT_NE(outputPacket, nullptr);
+        EXPECT_EQ(outputPacket->channel(), 2);
+        EXPECT_EQ(outputPacket->output_state(), 1);
+        EXPECT_TRUE(outputPacket->is_output_on());
     }
 }
 

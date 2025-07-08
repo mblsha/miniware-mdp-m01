@@ -29,6 +29,19 @@ types:
             'pack_type::updat_ch': updat_ch
             'pack_type::machine': machine
             'pack_type::err_240': empty_packet
+            'pack_type::set_isoutput': set_isoutput
+            'pack_type::get_addr': empty_packet
+            'pack_type::set_addr': set_addr
+            'pack_type::set_ch': empty_packet
+            'pack_type::set_v': set_voltage_current
+            'pack_type::set_i': set_voltage_current
+            'pack_type::set_all_addr': set_all_addr
+            'pack_type::start_auto_match': empty_packet
+            'pack_type::stop_auto_match': empty_packet
+            'pack_type::reset_to_dfu': empty_packet
+            'pack_type::rgb': rgb
+            'pack_type::get_machine': empty_packet
+            'pack_type::heartbeat': empty_packet
     -webide-representation: '{pack_type}'
 
   synthesize:
@@ -217,6 +230,107 @@ types:
       - id: dummy
         type: u1
     -webide-representation: 'empty'
+    
+  set_isoutput:
+    instances:
+      is_output_on:
+        value: output_state == 1
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+      - id: output_state
+        type: u1
+    -webide-representation: 'output:{is_output_on}'
+    
+  set_voltage_current:
+    instances:
+      voltage:
+        value: voltage_raw / 1000.0
+      current:
+        value: current_raw / 1000.0
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+      - id: voltage_raw
+        type: u2
+      - id: current_raw
+        type: u2
+    -webide-representation: 'V:{voltage}V I:{current}A'
+    
+  set_addr:
+    instances:
+      frequency:
+        value: 2400 + frequency_offset
+      is_empty:
+        value: (addr_byte0 == 0) and (addr_byte1 == 0) and (addr_byte2 == 0) and (addr_byte3 == 0) and (addr_byte4 == 0)
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+      - id: addr_byte0
+        type: u1
+      - id: addr_byte1
+        type: u1
+      - id: addr_byte2
+        type: u1
+      - id: addr_byte3
+        type: u1
+      - id: addr_byte4
+        type: u1
+      - id: frequency_offset
+        type: u1
+    -webide-representation: 'addr:[{addr_byte0:hex}:{addr_byte1:hex}:{addr_byte2:hex}:{addr_byte3:hex}:{addr_byte4:hex}] freq:{frequency}MHz'
+    
+  set_all_addr:
+    types:
+      address_entry:
+        instances:
+          frequency:
+            value: 2400 + frequency_offset
+          is_empty:
+            value: (addr_byte0 == 0) and (addr_byte1 == 0) and (addr_byte2 == 0) and (addr_byte3 == 0) and (addr_byte4 == 0)
+        seq:
+          - id: addr_byte0
+            type: u1
+          - id: addr_byte1
+            type: u1
+          - id: addr_byte2
+            type: u1
+          - id: addr_byte3
+            type: u1
+          - id: addr_byte4
+            type: u1
+          - id: frequency_offset
+            type: u1
+        -webide-representation: 'addr:[{addr_byte0:hex}:{addr_byte1:hex}:{addr_byte2:hex}:{addr_byte3:hex}:{addr_byte4:hex}] freq:{frequency}MHz'
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+      - id: addresses
+        type: address_entry
+        repeat: expr
+        repeat-expr: 6
+    -webide-representation: 'set_all_addr'
+    
+  rgb:
+    instances:
+      is_rgb_on:
+        value: rgb_state == 1
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+      - id: rgb_state
+        type: u1
+    -webide-representation: 'rgb:{is_rgb_on}'
 
 enums:
   l1060_type:

@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class SetAddressGeneratorTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper to manually create expected packet for comparison
@@ -114,6 +125,28 @@ TEST_F(SetAddressGeneratorTest, TestSetAddressPacket) {
         
         // Verify frequency offset
         EXPECT_EQ(static_cast<uint8_t>(packet[11]), 20);  // 2420 - 2400
+        
+        // Kaitai validation
+        auto parsed = parseWithKaitai(packet);
+        ASSERT_NE(parsed, nullptr);
+        ASSERT_EQ(parsed->packets()->size(), 1);
+        
+        auto kpacket = parsed->packets()->at(0);
+        EXPECT_EQ(kpacket->pack_type(), miniware_mdp_m01_t::PACK_TYPE_SET_ADDR);
+        EXPECT_EQ(kpacket->size(), 12);
+        
+        // Cast to set_addr type
+        auto* addrPacket = static_cast<miniware_mdp_m01_t::set_addr_t*>(kpacket->data());
+        ASSERT_NE(addrPacket, nullptr);
+        EXPECT_EQ(addrPacket->channel(), 2);
+        EXPECT_EQ(addrPacket->addr_byte0(), 0x01);
+        EXPECT_EQ(addrPacket->addr_byte1(), 0x02);
+        EXPECT_EQ(addrPacket->addr_byte2(), 0x03);
+        EXPECT_EQ(addrPacket->addr_byte3(), 0x04);
+        EXPECT_EQ(addrPacket->addr_byte4(), 0x05);
+        EXPECT_EQ(addrPacket->frequency_offset(), 20);
+        EXPECT_EQ(addrPacket->frequency(), 2420);
+        EXPECT_FALSE(addrPacket->is_empty());
     }
 }
 
