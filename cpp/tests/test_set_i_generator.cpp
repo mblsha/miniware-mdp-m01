@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class SetCurrentGeneratorTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper to manually create expected packet for comparison
@@ -113,6 +124,24 @@ TEST_F(SetCurrentGeneratorTest, TestSetCurrentPacket) {
         // Verify current (little endian)
         uint16_t current = static_cast<uint8_t>(packet[8]) | (static_cast<uint8_t>(packet[9]) << 8);
         EXPECT_EQ(current, 1000);
+        
+        // Kaitai validation
+        auto parsed = parseWithKaitai(packet);
+        ASSERT_NE(parsed, nullptr);
+        ASSERT_EQ(parsed->packets()->size(), 1);
+        
+        auto kpacket = parsed->packets()->at(0);
+        EXPECT_EQ(kpacket->pack_type(), miniware_mdp_m01_t::PACK_TYPE_SET_I);
+        EXPECT_EQ(kpacket->size(), 10);
+        
+        // Cast to set_voltage_current type (same as SET_V)
+        auto* vcPacket = static_cast<miniware_mdp_m01_t::set_voltage_current_t*>(kpacket->data());
+        ASSERT_NE(vcPacket, nullptr);
+        EXPECT_EQ(vcPacket->channel(), 1);
+        EXPECT_EQ(vcPacket->voltage_raw(), 5000);
+        EXPECT_EQ(vcPacket->current_raw(), 1000);
+        EXPECT_FLOAT_EQ(vcPacket->voltage(), 5.0f);  // 5000 / 1000.0
+        EXPECT_FLOAT_EQ(vcPacket->current(), 1.0f);  // 1000 / 1000.0
     }
 }
 

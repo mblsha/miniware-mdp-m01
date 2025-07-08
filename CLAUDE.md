@@ -242,6 +242,34 @@ All parser tests include Kaitai validation:
 ./mdp_parser_test --gtest_filter="*PacketTest.*"
 ```
 
+### Generator Packet Validation
+
+All generator packet types now include Kaitai cross-validation to ensure the protocol specification matches the C++ implementation. The validation pattern has been applied to all 13 generator test files:
+
+#### Empty Packet Generators (6 bytes total)
+- `test_heartbeat_generator.cpp` - PACK_HEARTBEAT (0x22)
+- `test_set_ch_generator.cpp` - PACK_SET_CH (0x19)
+- `test_get_addr_generator.cpp` - PACK_GET_ADDR (0x17)
+- `test_get_machine_generator.cpp` - PACK_GET_MACHINE (0x21)
+- `test_reset_to_dfu_generator.cpp` - PACK_RESET_TO_DFU (0x1F)
+- `test_start_auto_match_generator.cpp` - PACK_START_AUTO_MATCH (0x1D)
+- `test_stop_auto_match_generator.cpp` - PACK_STOP_AUTO_MATCH (0x1E)
+
+#### Data Packet Generators
+- `test_set_v_generator.cpp` - PACK_SET_V (0x1A): 10 bytes, voltage/current data
+- `test_set_i_generator.cpp` - PACK_SET_I (0x1B): 10 bytes, same format as SET_V
+- `test_set_addr_generator.cpp` - PACK_SET_ADDR (0x18): 12 bytes, single address
+- `test_set_all_addr_generator.cpp` - PACK_SET_ALL_ADDR (0x1C): 42 bytes, 6 addresses
+- `test_set_isoutput_generator.cpp` - PACK_SET_ISOUTPUT (0x16): 7 bytes, on/off state
+- `test_rgb_generator.cpp` - PACK_RGB (0x20): 7 bytes, RGB on/off control
+
+Each test validates:
+- Packet type matches expected enum value
+- Packet size is correct
+- Data can be cast to appropriate Kaitai type
+- All fields match between C++ generator and Kaitai parser
+- Calculated fields (e.g., `is_output_on()`, `frequency()`) work correctly
+
 ## Important Considerations
 
 - The C++ code references Qt's deprecated features and may need updates for newer Qt versions

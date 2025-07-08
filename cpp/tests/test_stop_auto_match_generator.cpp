@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class StopAutoMatchGeneratorTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper to manually create expected packet for comparison
@@ -95,6 +106,20 @@ TEST_F(StopAutoMatchGeneratorTest, TestStopAutoMatchGeneration) {
         EXPECT_EQ(static_cast<uint8_t>(sentPacket[3]), 6);     // Size
         EXPECT_EQ(static_cast<uint8_t>(sentPacket[4]), 0xEE);  // Channel (default = 0xEE)
         EXPECT_EQ(static_cast<uint8_t>(sentPacket[5]), 0);     // Checksum (0 for empty data)
+        
+        // Kaitai validation
+        auto parsed = parseWithKaitai(sentPacket);
+        ASSERT_NE(parsed, nullptr);
+        ASSERT_EQ(parsed->packets()->size(), 1);
+        
+        auto packet = parsed->packets()->at(0);
+        EXPECT_EQ(packet->pack_type(), miniware_mdp_m01_t::PACK_TYPE_STOP_AUTO_MATCH);
+        EXPECT_EQ(packet->size(), 6);
+        
+        // Cast to empty_packet type
+        auto* emptyPacket = static_cast<miniware_mdp_m01_t::empty_packet_t*>(packet->data());
+        ASSERT_NE(emptyPacket, nullptr);
+        EXPECT_EQ(emptyPacket->channel(), 0xEE);
     }
 }
 

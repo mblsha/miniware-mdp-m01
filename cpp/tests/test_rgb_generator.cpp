@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class RGBGeneratorTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper to manually create expected packet for comparison
@@ -96,6 +107,22 @@ TEST_F(RGBGeneratorTest, TestStartRGBGeneration) {
         EXPECT_EQ(static_cast<uint8_t>(sentPacket[4]), 0xEE);  // Channel (default = 0xEE)
         EXPECT_EQ(static_cast<uint8_t>(sentPacket[5]), 1);     // Checksum (1 for data value 1)
         EXPECT_EQ(static_cast<uint8_t>(sentPacket[6]), 1);     // Data: 1 for start
+        
+        // Kaitai validation
+        auto parsed = parseWithKaitai(sentPacket);
+        ASSERT_NE(parsed, nullptr);
+        ASSERT_EQ(parsed->packets()->size(), 1);
+        
+        auto packet = parsed->packets()->at(0);
+        EXPECT_EQ(packet->pack_type(), miniware_mdp_m01_t::PACK_TYPE_RGB);
+        EXPECT_EQ(packet->size(), 7);
+        
+        // Cast to rgb type
+        auto* rgbPacket = static_cast<miniware_mdp_m01_t::rgb_t*>(packet->data());
+        ASSERT_NE(rgbPacket, nullptr);
+        EXPECT_EQ(rgbPacket->channel(), 0xEE);
+        EXPECT_EQ(rgbPacket->rgb_state(), 1);
+        EXPECT_TRUE(rgbPacket->is_rgb_on());
     }
 }
 

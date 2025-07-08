@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class SetAllAddressGeneratorTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper to manually create expected packet for comparison
@@ -127,6 +138,43 @@ TEST_F(SetAllAddressGeneratorTest, TestSetAllAddressPacket) {
         EXPECT_EQ(static_cast<uint8_t>(packet[36]), 0x51);  // First address byte
         EXPECT_EQ(static_cast<uint8_t>(packet[40]), 0x55);  // Last address byte
         EXPECT_EQ(static_cast<uint8_t>(packet[41]), 50);    // Frequency offset (2450-2400)
+        
+        // Kaitai validation
+        auto parsed = parseWithKaitai(packet);
+        ASSERT_NE(parsed, nullptr);
+        ASSERT_EQ(parsed->packets()->size(), 1);
+        
+        auto kpacket = parsed->packets()->at(0);
+        EXPECT_EQ(kpacket->pack_type(), miniware_mdp_m01_t::PACK_TYPE_SET_ALL_ADDR);
+        EXPECT_EQ(kpacket->size(), 42);
+        
+        // Cast to set_all_addr type
+        auto* allAddrPacket = static_cast<miniware_mdp_m01_t::set_all_addr_t*>(kpacket->data());
+        ASSERT_NE(allAddrPacket, nullptr);
+        EXPECT_EQ(allAddrPacket->channel(), 0xEE);
+        ASSERT_EQ(allAddrPacket->addresses()->size(), 6);
+        
+        // Verify first channel
+        auto* addr0 = allAddrPacket->addresses()->at(0);
+        EXPECT_EQ(addr0->addr_byte0(), 0x01);
+        EXPECT_EQ(addr0->addr_byte1(), 0x02);
+        EXPECT_EQ(addr0->addr_byte2(), 0x03);
+        EXPECT_EQ(addr0->addr_byte3(), 0x04);
+        EXPECT_EQ(addr0->addr_byte4(), 0x05);
+        EXPECT_EQ(addr0->frequency_offset(), 0);
+        EXPECT_EQ(addr0->frequency(), 2400);
+        EXPECT_FALSE(addr0->is_empty());
+        
+        // Verify last channel
+        auto* addr5 = allAddrPacket->addresses()->at(5);
+        EXPECT_EQ(addr5->addr_byte0(), 0x51);
+        EXPECT_EQ(addr5->addr_byte1(), 0x52);
+        EXPECT_EQ(addr5->addr_byte2(), 0x53);
+        EXPECT_EQ(addr5->addr_byte3(), 0x54);
+        EXPECT_EQ(addr5->addr_byte4(), 0x55);
+        EXPECT_EQ(addr5->frequency_offset(), 50);
+        EXPECT_EQ(addr5->frequency(), 2450);
+        EXPECT_FALSE(addr5->is_empty());
     }
 }
 
