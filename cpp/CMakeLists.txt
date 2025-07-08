@@ -53,6 +53,7 @@ qt_add_executable(mdp_parser_test
     tests/test_start_auto_match_generator.cpp
     tests/test_stop_auto_match_generator.cpp
     tests/test_rgb_generator.cpp
+    tests/test_reset_to_dfu_generator.cpp
     processingdata.cpp
     processingdata.h
     machine.h
