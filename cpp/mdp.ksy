@@ -25,6 +25,10 @@ types:
           cases:
             'pack_type::wave': wave
             'pack_type::synthesize': synthesize
+            'pack_type::addr': addr
+            'pack_type::updat_ch': updat_ch
+            'pack_type::machine': machine
+            'pack_type::err_240': empty_packet
     -webide-representation: '{pack_type}'
 
   synthesize:
@@ -148,6 +152,71 @@ types:
         type: group
         repeat: expr
         repeat-expr: 10
+  
+  addr:
+    types:
+      address_entry:
+        instances:
+          frequency:
+            value: 2400 + frequency_offset
+          is_empty:
+            value: (addr_byte0 == 0) and (addr_byte1 == 0) and (addr_byte2 == 0) and (addr_byte3 == 0) and (addr_byte4 == 0)
+        seq:
+          - id: addr_byte4
+            type: u1
+          - id: addr_byte3
+            type: u1
+          - id: addr_byte2
+            type: u1
+          - id: addr_byte1
+            type: u1
+          - id: addr_byte0
+            type: u1
+          - id: frequency_offset
+            type: u1
+        -webide-representation: 'addr:[{addr_byte0:hex}:{addr_byte1:hex}:{addr_byte2:hex}:{addr_byte3:hex}:{addr_byte4:hex}] freq:{frequency}MHz'
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+      - id: addresses
+        type: address_entry
+        repeat: expr
+        repeat-expr: 6
+        
+  updat_ch:
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+      - id: target_channel
+        type: u1
+    -webide-representation: 'target_ch:{target_channel}'
+    
+  machine:
+    instances:
+      has_lcd:
+        value: machine_type_raw == 0x10
+      machine_name:
+        value: 'machine_type_raw == 0x10 ? "M01 (LCD)" : "M02 (No LCD)"'
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+      - id: machine_type_raw
+        type: u1
+    -webide-representation: '{machine_name}'
+    
+  empty_packet:
+    seq:
+      - id: channel
+        type: u1
+      - id: dummy
+        type: u1
+    -webide-representation: 'empty'
 
 enums:
   l1060_type:

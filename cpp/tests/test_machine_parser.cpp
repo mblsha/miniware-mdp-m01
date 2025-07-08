@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class MachinePacketTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper function to create a valid packet with checksum
@@ -96,6 +107,21 @@ TEST_F(MachinePacketTest, TestMachineTypeHaveLcd) {
     
     // Verify signal was emitted
     EXPECT_EQ(machineSpy.count(), 1);
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    ASSERT_EQ(kaitai->packets()->size(), 1);
+    
+    auto* pkt = kaitai->packets()->at(0);
+    EXPECT_EQ(pkt->pack_type(), miniware_mdp_m01_t::PACK_TYPE_MACHINE);
+    EXPECT_EQ(pkt->size(), 7);
+    
+    auto* machine = static_cast<miniware_mdp_m01_t::machine_t*>(pkt->data());
+    EXPECT_EQ(machine->channel(), 0);
+    EXPECT_EQ(machine->machine_type_raw(), processingData::haveLcd);
+    EXPECT_TRUE(machine->has_lcd());
+    EXPECT_EQ(machine->machine_name(), "M01 (LCD)");
 }
 
 // Test PACK_MACHINE parsing with noLcd type (M02)
@@ -114,6 +140,14 @@ TEST_F(MachinePacketTest, TestMachineTypeNoLcd) {
     
     // Verify signal was emitted
     EXPECT_EQ(machineSpy.count(), 1);
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    auto* machine = static_cast<miniware_mdp_m01_t::machine_t*>(kaitai->packets()->at(0)->data());
+    EXPECT_EQ(machine->machine_type_raw(), processingData::noLcd);
+    EXPECT_FALSE(machine->has_lcd());
+    EXPECT_EQ(machine->machine_name(), "M02 (No LCD)");
 }
 
 // Test unknown machine type (should default to noLcd)
@@ -132,6 +166,14 @@ TEST_F(MachinePacketTest, TestUnknownMachineType) {
     
     // Signal should still be emitted
     EXPECT_EQ(machineSpy.count(), 1);
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    auto* machine = static_cast<miniware_mdp_m01_t::machine_t*>(kaitai->packets()->at(0)->data());
+    EXPECT_EQ(machine->machine_type_raw(), 0xFF);
+    EXPECT_FALSE(machine->has_lcd()); // Unknown types are not LCD
+    EXPECT_EQ(machine->machine_name(), "M02 (No LCD)"); // Unknown defaults to M02
 }
 
 // Test invalid checksum handling

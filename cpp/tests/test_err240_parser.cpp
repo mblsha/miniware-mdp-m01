@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class Err240PacketTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper function to create a valid packet with checksum
@@ -89,6 +100,18 @@ TEST_F(Err240PacketTest, TestErr240Packet) {
     
     // Verify signal was emitted
     EXPECT_EQ(errorSpy.count(), 1);
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    ASSERT_EQ(kaitai->packets()->size(), 1);
+    
+    auto* pkt = kaitai->packets()->at(0);
+    EXPECT_EQ(pkt->pack_type(), miniware_mdp_m01_t::PACK_TYPE_ERR_240);
+    EXPECT_EQ(pkt->size(), 6);
+    
+    auto* err = static_cast<miniware_mdp_m01_t::empty_packet_t*>(pkt->data());
+    EXPECT_EQ(err->channel(), 0);
 }
 
 // Test multiple error packets
@@ -104,6 +127,13 @@ TEST_F(Err240PacketTest, TestMultipleErr240Packets) {
     
     // Should have 5 signals
     EXPECT_EQ(errorSpy.count(), 5);
+    
+    // Kaitai validation on last packet
+    QByteArray data = createErr240Data();
+    QByteArray packet = createPacket(processingData::PACK_ERR_240, 0, data);
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    EXPECT_EQ(kaitai->packets()->at(0)->pack_type(), miniware_mdp_m01_t::PACK_TYPE_ERR_240);
 }
 
 // Test error packet with different channels
@@ -119,6 +149,16 @@ TEST_F(Err240PacketTest, TestErr240DifferentChannels) {
     
     // Should have one signal per channel
     EXPECT_EQ(errorSpy.count(), 6);
+    
+    // Kaitai validation for different channels
+    for (int ch = 0; ch < 6; ch++) {
+        QByteArray data = createErr240Data();
+        QByteArray packet = createPacket(processingData::PACK_ERR_240, ch, data);
+        auto kaitai = parseWithKaitai(packet);
+        ASSERT_NE(kaitai, nullptr);
+        auto* err = static_cast<miniware_mdp_m01_t::empty_packet_t*>(kaitai->packets()->at(0)->data());
+        EXPECT_EQ(err->channel(), ch);
+    }
 }
 
 // Test invalid checksum handling

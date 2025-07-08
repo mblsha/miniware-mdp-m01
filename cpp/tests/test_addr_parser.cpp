@@ -3,7 +3,10 @@
 #include <QByteArray>
 #include <QDebug>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class AddressPacketTest : public ::testing::Test {
 protected:
@@ -37,6 +40,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper function to create a valid packet with checksum
@@ -136,6 +147,36 @@ TEST_F(AddressPacketTest, TestValidAddressPacket) {
         // Verify frequency
         EXPECT_EQ(m->freq, 2420 + ch * 5);
     }
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    ASSERT_EQ(kaitai->packets()->size(), 1);
+    
+    auto* pkt = kaitai->packets()->at(0);
+    EXPECT_EQ(pkt->pack_type(), miniware_mdp_m01_t::PACK_TYPE_ADDR);
+    EXPECT_EQ(pkt->size(), 42);
+    
+    auto* addr = static_cast<miniware_mdp_m01_t::addr_t*>(pkt->data());
+    EXPECT_EQ(addr->channel(), 0);
+    EXPECT_EQ(addr->addresses()->size(), 6);
+    
+    // Verify each channel's address in Kaitai
+    for (int ch = 0; ch < 6; ch++) {
+        auto* entry = addr->addresses()->at(ch);
+        
+        // Check address bytes (Kaitai stores as received in packet)
+        EXPECT_EQ(entry->addr_byte0(), 0x01);
+        EXPECT_EQ(entry->addr_byte1(), 0x02);
+        EXPECT_EQ(entry->addr_byte2(), 0x03);
+        EXPECT_EQ(entry->addr_byte3(), 0x04);
+        EXPECT_EQ(entry->addr_byte4(), 0x05 + ch);
+        
+        // Check computed values
+        EXPECT_FALSE(entry->is_empty());
+        EXPECT_EQ(entry->frequency(), 2420 + ch * 5);
+        EXPECT_EQ(entry->frequency_offset(), 20 + ch * 5);
+    }
 }
 
 // Test PACK_ADDR with empty addresses
@@ -164,6 +205,19 @@ TEST_F(AddressPacketTest, TestEmptyAddressPacket) {
         
         // Frequency should still be set
         EXPECT_EQ(m->freq, 2425);
+    }
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    auto* addr = static_cast<miniware_mdp_m01_t::addr_t*>(kaitai->packets()->at(0)->data());
+    
+    // Verify all addresses are empty
+    for (int ch = 0; ch < 6; ch++) {
+        auto* entry = addr->addresses()->at(ch);
+        EXPECT_TRUE(entry->is_empty());
+        EXPECT_EQ(entry->frequency(), 2425);
+        EXPECT_EQ(entry->frequency_offset(), 25);
     }
 }
 
@@ -246,6 +300,29 @@ TEST_F(AddressPacketTest, TestMixedAddresses) {
         }
         
         EXPECT_EQ(m->freq, 2430 + ch);
+    }
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    auto* addr = static_cast<miniware_mdp_m01_t::addr_t*>(kaitai->packets()->at(0)->data());
+    
+    // Verify mixed addresses
+    for (int ch = 0; ch < 6; ch++) {
+        auto* entry = addr->addresses()->at(ch);
+        
+        if (ch % 2 == 0) {
+            EXPECT_TRUE(entry->is_empty());
+        } else {
+            EXPECT_FALSE(entry->is_empty());
+            EXPECT_EQ(entry->addr_byte0(), 0xEE);
+            EXPECT_EQ(entry->addr_byte1(), 0xDD);
+            EXPECT_EQ(entry->addr_byte2(), 0xCC);
+            EXPECT_EQ(entry->addr_byte3(), 0xBB);
+            EXPECT_EQ(entry->addr_byte4(), 0xAA);
+        }
+        
+        EXPECT_EQ(entry->frequency(), 2430 + ch);
     }
 }
 

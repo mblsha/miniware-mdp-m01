@@ -4,7 +4,10 @@
 #include <QDebug>
 #include <QSignalSpy>
 #include <cstring>
+#include <sstream>
 #include "../processingdata.h"
+#include "miniware_mdp_m01.h"
+#include <kaitai/kaitaistream.h>
 
 class UpdateChannelTest : public ::testing::Test {
 protected:
@@ -38,6 +41,14 @@ protected:
     
     void TearDown() override {
         delete processor;
+    }
+    
+    // Helper to parse QByteArray with Kaitai
+    std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        std::string dataStr(data.constData(), data.size());
+        std::istringstream iss(dataStr);
+        auto ks = std::make_unique<kaitai::kstream>(&iss);
+        return std::make_unique<miniware_mdp_m01_t>(ks.get());
     }
     
     // Helper function to create a valid packet with checksum
@@ -94,6 +105,19 @@ TEST_F(UpdateChannelTest, TestUpdateChannelPacket) {
         QList<QVariant> arguments = channelSpy.takeFirst();
         EXPECT_EQ(arguments.at(0).toInt(), 3);
     }
+    
+    // Kaitai cross-validation
+    auto kaitai = parseWithKaitai(packet);
+    ASSERT_NE(kaitai, nullptr);
+    ASSERT_EQ(kaitai->packets()->size(), 1);
+    
+    auto* pkt = kaitai->packets()->at(0);
+    EXPECT_EQ(pkt->pack_type(), miniware_mdp_m01_t::PACK_TYPE_UPDAT_CH);
+    EXPECT_EQ(pkt->size(), 7);
+    
+    auto* updat = static_cast<miniware_mdp_m01_t::updat_ch_t*>(pkt->data());
+    EXPECT_EQ(updat->channel(), 0);
+    EXPECT_EQ(updat->target_channel(), 3);
 }
 
 // Test updating to all valid channels
@@ -114,6 +138,12 @@ TEST_F(UpdateChannelTest, TestAllChannels) {
             QList<QVariant> arguments = channelSpy.at(ch);
             EXPECT_EQ(arguments.at(0).toInt(), ch);
         }
+        
+        // Kaitai cross-validation for each channel
+        auto kaitai = parseWithKaitai(packet);
+        ASSERT_NE(kaitai, nullptr);
+        auto* updat = static_cast<miniware_mdp_m01_t::updat_ch_t*>(kaitai->packets()->at(0)->data());
+        EXPECT_EQ(updat->target_channel(), ch);
     }
 }
 
