@@ -4,13 +4,14 @@ import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { createMachinePacket, createSynthesizePacket } from '../mocks/packet-data.js';
 import { writable } from 'svelte/store';
 
-// Mocks must be declared before vi.mock and component import
+// Create mocks at the top level
 const mockStatus = writable('disconnected');
 const mockError = writable(null);
 const mockDeviceType = writable(null);
 const mockConnect = vi.fn();
 const mockDisconnect = vi.fn();
 
+// Mock serial.js
 vi.mock('../../src/lib/serial.js', () => ({
   serialConnection: {
     status: mockStatus,
@@ -21,7 +22,7 @@ vi.mock('../../src/lib/serial.js', () => ({
   },
   ConnectionStatus: {
     DISCONNECTED: 'disconnected',
-    CONNECTING: 'connecting',
+    CONNECTING: 'connecting', 
     CONNECTED: 'connected',
     ERROR: 'error'
   }

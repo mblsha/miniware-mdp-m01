@@ -3,9 +3,5 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
 export default {
   // Consult https://svelte.dev/docs#compile-time-svelte-preprocess
   // for more information about preprocessors
-  preprocess: vitePreprocess(),
-  compilerOptions: {
-    hydratable: false,
-    generate: 'client'
-  }
+  preprocess: vitePreprocess()
 }

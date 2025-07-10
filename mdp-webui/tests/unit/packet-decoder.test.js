@@ -402,8 +402,8 @@ describe('Packet Decoder', () => {
       const corruptedData = new Uint8Array([0x5A, 0x5A, 0x11, 0x9C, 0x00, 0xFF, 0x00, 0x00]);
       const decoded = decodePacket(corruptedData);
       
-      // Should still decode header
-      expect(decoded).toBeTruthy();
+      // Should return null for corrupted data that can't be parsed
+      expect(decoded).toBeNull();
     });
 
     it('should handle oversized packets', () => {

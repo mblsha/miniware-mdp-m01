@@ -1,9 +1,10 @@
 <script>
   export let channel;
   export let active = false;
+  export let onclick = undefined;
 </script>
 
-<div class="channel-card" class:active class:online={channel.online} on:click>
+<button type="button" class="channel-card" class:active class:online={channel.online} {onclick}>
   <div class="header">
     <h3>Channel {channel.channel + 1}</h3>
     <span class="status" class:online={channel.online}>
@@ -44,7 +45,7 @@
       No device connected
     </div>
   {/if}
-</div>
+</button>
 
 <style>
   .channel-card {
@@ -55,6 +56,11 @@
     cursor: pointer;
     transition: all 0.2s;
     border: 2px solid transparent;
+    text-align: left;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    width: 100%;
   }
   
   .channel-card:hover {

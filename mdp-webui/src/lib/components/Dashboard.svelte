@@ -20,7 +20,7 @@
       <ChannelCard 
         {channel} 
         active={channel.channel === $activeChannel}
-        on:click={() => selectChannel(channel.channel)}
+        onclick={() => selectChannel(channel.channel)}
       />
     {/each}
   </div>

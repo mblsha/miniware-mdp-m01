@@ -39,9 +39,9 @@ describe('Recording Flow Integration Test', () => {
     mockClick.mockClear();
   });
 
-  async function connectDevice(container) {
+  async function connectDevice({ getByText }) {
     // Click connect button
-    const connectButton = container.getByText('Connect');
+    const connectButton = getByText('Connect');
     await fireEvent.click(connectButton);
     
     // Simulate port selection
@@ -49,37 +49,38 @@ describe('Recording Flow Integration Test', () => {
     
     // Wait for connection
     await waitFor(() => {
-      expect(container.getByText('Connected')).toBeInTheDocument();
+      expect(getByText('Connected')).toBeInTheDocument();
     });
   }
 
-  async function navigateToChannel(container, channelNum) {
+  async function navigateToChannel({ getByText }, channelNum) {
     // Wait for dashboard to load
     await waitFor(() => {
-      expect(container.getByText(`Channel ${channelNum}`)).toBeInTheDocument();
+      expect(getByText(`Channel ${channelNum}`)).toBeInTheDocument();
     });
     
     // Click on channel card
-    const channelCard = container.getByText(`Channel ${channelNum}`).closest('.channel-card');
+    const channelCard = getByText(`Channel ${channelNum}`).closest('.channel-card');
     await fireEvent.click(channelCard);
     
     // Wait for detail view
     await waitFor(() => {
-      expect(container.getByText('← Back')).toBeInTheDocument();
+      expect(getByText('← Back')).toBeInTheDocument();
     });
   }
 
   it('should complete full recording workflow', async () => {
-    const { container } = render(App);
+    const renderResult = render(App);
+    const { container, getByText } = renderResult;
     
     // Step 1: Connect to device
-    await connectDevice(container);
+    await connectDevice(renderResult);
     
     // Step 2: Simulate device identification
     mockPort.simulateData(createMachinePacket(0x10)); // M01 device
     
     await waitFor(() => {
-      expect(container.getByText('(M01)')).toBeInTheDocument();
+      expect(getByText('(M01)')).toBeInTheDocument();
     });
     
     // Step 3: Simulate initial channel data
@@ -94,22 +95,22 @@ describe('Recording Flow Integration Test', () => {
     mockPort.simulateData(createSynthesizePacket(channelData));
     
     // Step 4: Navigate to channel 1
-    await navigateToChannel(container, 1);
+    await navigateToChannel(renderResult, 1);
     
     // Verify channel details are displayed
-    expect(container.getByText('5.000 V')).toBeInTheDocument();
-    expect(container.getByText('1.000 A')).toBeInTheDocument();
-    expect(container.getByText('5.000 W')).toBeInTheDocument();
-    expect(container.getByText('25.5 °C')).toBeInTheDocument();
+    expect(getByText('5.000 V')).toBeInTheDocument();
+    expect(getByText('1.000 A')).toBeInTheDocument();
+    expect(getByText('5.000 W')).toBeInTheDocument();
+    expect(getByText('25.5 °C')).toBeInTheDocument();
     
     // Step 5: Start recording
-    const startButton = container.getByText('Start Recording');
+    const startButton = getByText('Start Recording');
     await fireEvent.click(startButton);
     
     // Verify recording started
     await waitFor(() => {
-      expect(container.getByText('Stop Recording')).toBeInTheDocument();
-      expect(container.getByText(/Recording\.\.\./)).toBeInTheDocument();
+      expect(getByText('Stop Recording')).toBeInTheDocument();
+      expect(getByText(/Recording\.\.\./)).toBeInTheDocument();
     });
     
     // Step 6: Simulate wave data packets
@@ -132,20 +133,20 @@ describe('Recording Flow Integration Test', () => {
     mockPort.simulateData(createWavePacket(0, waveData2));
     
     // Step 7: Stop recording
-    const stopButton = container.getByText('Stop Recording');
+    const stopButton = getByText('Stop Recording');
     await fireEvent.click(stopButton);
     
     // Verify recording stopped
     await waitFor(() => {
-      expect(container.getByText('Start Recording')).toBeInTheDocument();
-      expect(container.queryByText(/Recording\.\.\./)).not.toBeInTheDocument();
+      expect(getByText('Start Recording')).toBeInTheDocument();
+      expect(queryByText(/Recording\.\.\./)).not.toBeInTheDocument();
     });
     
     // Verify data points were captured
-    expect(container.getByText(/40 points/)).toBeInTheDocument();
+    expect(getByText(/40 points/)).toBeInTheDocument();
     
     // Step 8: Export data
-    const exportButton = container.getByText('Export Data');
+    const exportButton = getByText('Export Data');
     await fireEvent.click(exportButton);
     
     // Verify export was triggered
@@ -161,9 +162,10 @@ describe('Recording Flow Integration Test', () => {
   });
 
   it('should handle channel switching during recording', async () => {
-    const { container } = render(App);
+    const renderResult = render(App);
+    const { container, getByText, queryByText } = renderResult;
     
-    await connectDevice(container);
+    await connectDevice(renderResult);
     mockPort.simulateData(createMachinePacket(0x10));
     
     // Send synthesize for multiple channels
@@ -175,8 +177,8 @@ describe('Recording Flow Integration Test', () => {
     mockPort.simulateData(createSynthesizePacket(channelData));
     
     // Start recording on channel 1
-    await navigateToChannel(container, 1);
-    await fireEvent.click(container.getByText('Start Recording'));
+    await navigateToChannel(renderResult, 1);
+    await fireEvent.click(getByText('Start Recording'));
     
     // Send wave data for channel 0
     mockPort.simulateData(createWavePacket(0, [
@@ -184,16 +186,16 @@ describe('Recording Flow Integration Test', () => {
     ]));
     
     // Go back to dashboard
-    await fireEvent.click(container.getByText('← Back'));
+    await fireEvent.click(getByText('← Back'));
     
     // Navigate to channel 2
-    await navigateToChannel(container, 2);
+    await navigateToChannel(renderResult, 2);
     
     // Verify channel 2 is not recording
-    expect(container.getByText('Start Recording')).toBeInTheDocument();
+    expect(getByText('Start Recording')).toBeInTheDocument();
     
     // Start recording on channel 2
-    await fireEvent.click(container.getByText('Start Recording'));
+    await fireEvent.click(getByText('Start Recording'));
     
     // Send wave data for channel 1
     mockPort.simulateData(createWavePacket(1, [
@@ -201,14 +203,15 @@ describe('Recording Flow Integration Test', () => {
     ]));
     
     // Verify both channels have independent recording state
-    await fireEvent.click(container.getByText('← Back'));
-    await navigateToChannel(container, 1);
+    await fireEvent.click(getByText('← Back'));
+    await navigateToChannel(renderResult, 1);
     
-    expect(container.getByText('Stop Recording')).toBeInTheDocument();
+    expect(getByText('Stop Recording')).toBeInTheDocument();
   });
 
   it('should handle errors during recording', async () => {
-    const { container } = render(App);
+    const renderResult = render(App);
+    const { container, getByText, queryByText } = renderResult;
     
     await connectDevice(container);
     mockPort.simulateData(createMachinePacket(0x10));
@@ -216,29 +219,30 @@ describe('Recording Flow Integration Test', () => {
       { online: 1, machineType: 0, voltage: 5000, current: 1000 }
     ]));
     
-    await navigateToChannel(container, 1);
-    await fireEvent.click(container.getByText('Start Recording'));
+    await navigateToChannel(renderResult, 1);
+    await fireEvent.click(getByText('Start Recording'));
     
     // Simulate disconnection during recording
     mockPort.simulateDisconnect();
     
     await waitFor(() => {
-      expect(container.getByText('Error:')).toBeInTheDocument();
+      expect(getByText('Error:')).toBeInTheDocument();
     });
     
     // Verify can reconnect and resume
-    await fireEvent.click(container.getByText('Retry'));
+    await fireEvent.click(getByText('Retry'));
     
     const newPort = new MockSerialPort();
     mockSerial.setNextPort(newPort);
     
     await waitFor(() => {
-      expect(container.getByText('Connected')).toBeInTheDocument();
+      expect(getByText('Connected')).toBeInTheDocument();
     });
   });
 
   it('should export valid CSV format', async () => {
-    const { container } = render(App);
+    const renderResult = render(App);
+    const { container, getByText, queryByText } = renderResult;
     
     await connectDevice(container);
     mockPort.simulateData(createMachinePacket(0x10));
@@ -246,8 +250,8 @@ describe('Recording Flow Integration Test', () => {
       { online: 1, machineType: 0, voltage: 5000, current: 1000 }
     ]));
     
-    await navigateToChannel(container, 1);
-    await fireEvent.click(container.getByText('Start Recording'));
+    await navigateToChannel(renderResult, 1);
+    await fireEvent.click(getByText('Start Recording'));
     
     // Send specific wave data
     mockPort.simulateData(createWavePacket(0, [
@@ -255,8 +259,8 @@ describe('Recording Flow Integration Test', () => {
       { voltage: 5100, current: 1050 }
     ]));
     
-    await fireEvent.click(container.getByText('Stop Recording'));
-    await fireEvent.click(container.getByText('Export Data'));
+    await fireEvent.click(getByText('Stop Recording'));
+    await fireEvent.click(getByText('Export Data'));
     
     // Get the blob content
     const blob = global.URL.createObjectURL.mock.calls[0][0];
@@ -270,7 +274,8 @@ describe('Recording Flow Integration Test', () => {
   });
 
   it('should handle empty recording export', async () => {
-    const { container } = render(App);
+    const renderResult = render(App);
+    const { container, getByText, queryByText } = renderResult;
     
     await connectDevice(container);
     mockPort.simulateData(createMachinePacket(0x10));
@@ -278,14 +283,14 @@ describe('Recording Flow Integration Test', () => {
       { online: 1, machineType: 0, voltage: 5000, current: 1000 }
     ]));
     
-    await navigateToChannel(container, 1);
+    await navigateToChannel(renderResult, 1);
     
     // Start and immediately stop recording
-    await fireEvent.click(container.getByText('Start Recording'));
-    await fireEvent.click(container.getByText('Stop Recording'));
+    await fireEvent.click(getByText('Start Recording'));
+    await fireEvent.click(getByText('Stop Recording'));
     
     // Export button should not be visible with 0 points
-    expect(container.queryByText('Export Data')).not.toBeInTheDocument();
+    expect(queryByText('Export Data')).not.toBeInTheDocument();
   });
 
   it('should update active channel from device', async () => {

@@ -75,7 +75,7 @@ describe('ChannelCard Component', () => {
       
       const outputStatus = getByText('Output: ON');
       expect(outputStatus).toBeInTheDocument();
-      expect(outputStatus.parentElement).toHaveClass('on');
+      expect(outputStatus).toHaveClass('on');
     });
 
     it('should handle output off state', () => {
@@ -142,12 +142,14 @@ describe('ChannelCard Component', () => {
 
   describe('Click Handling', () => {
     it('should emit click event when clicked', async () => {
-      const { component, container } = render(ChannelCard, {
-        props: { channel: mockOnlineChannel, active: false }
-      });
-      
       const clickHandler = vi.fn();
-      component.$on('click', clickHandler);
+      const { container } = render(ChannelCard, {
+        props: { 
+          channel: mockOnlineChannel, 
+          active: false,
+          onclick: clickHandler
+        }
+      });
       
       const card = container.querySelector('.channel-card');
       await fireEvent.click(card);
@@ -156,12 +158,14 @@ describe('ChannelCard Component', () => {
     });
 
     it('should emit click event for offline channels', async () => {
-      const { component, container } = render(ChannelCard, {
-        props: { channel: mockOfflineChannel, active: false }
-      });
-      
       const clickHandler = vi.fn();
-      component.$on('click', clickHandler);
+      const { container } = render(ChannelCard, {
+        props: { 
+          channel: mockOfflineChannel, 
+          active: false,
+          onclick: clickHandler
+        }
+      });
       
       const card = container.querySelector('.channel-card');
       await fireEvent.click(card);
@@ -232,12 +236,13 @@ describe('ChannelCard Component', () => {
       
       testCases.forEach(({ machineType, mode }) => {
         const channel = { ...mockOnlineChannel, machineType, mode };
-        const { getByText } = render(ChannelCard, {
+        const { getByText, unmount } = render(ChannelCard, {
           props: { channel, active: false }
         });
         
         expect(getByText(machineType)).toBeInTheDocument();
         expect(getByText(`Mode: ${mode}`)).toBeInTheDocument();
+        unmount();
       });
     });
   });
@@ -264,12 +269,14 @@ describe('ChannelCard Component', () => {
 
   describe('Accessibility', () => {
     it('should be keyboard accessible', async () => {
-      const { component, container } = render(ChannelCard, {
-        props: { channel: mockOnlineChannel, active: false }
-      });
-      
       const clickHandler = vi.fn();
-      component.$on('click', clickHandler);
+      const { container } = render(ChannelCard, {
+        props: { 
+          channel: mockOnlineChannel, 
+          active: false,
+          onclick: clickHandler
+        }
+      });
       
       const card = container.querySelector('.channel-card');
       

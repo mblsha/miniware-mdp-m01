@@ -43,15 +43,9 @@ import ChannelDetail from '../../src/lib/components/ChannelDetail.svelte';
 
 // Mock WaveformChart
 vi.mock('../../src/lib/components/WaveformChart.svelte', () => ({
-  default: {
-    name: 'WaveformChart',
-    props: ['data', 'isRecording'],
-    $$render: (result, props) => {
-      result.push(`
-        <div data-testid="waveform-chart" data-recording="${props.isRecording}">
-          Chart with ${props.data.length} points
-        </div>
-      `);
+  default: class MockWaveformChart {
+    constructor(options) {
+      this.options = options;
     }
   }
 }));
