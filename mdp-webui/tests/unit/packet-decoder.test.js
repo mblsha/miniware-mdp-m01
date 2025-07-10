@@ -180,8 +180,13 @@ vi.mock('../../src/lib/kaitai/MiniwareMdpM01.js', () => {
       }
       
       _readMachine() {
+        const channel = this.stream.readU1();
+        const dummy = this.stream.readU1();
+        const machineTypeRaw = this.stream.readU1();
         return {
-          deviceType: this.stream.readU1()
+          channel,
+          dummy,
+          machineTypeRaw
         };
       }
     }
