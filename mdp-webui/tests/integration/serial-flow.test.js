@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import App from '../../src/App.svelte';
+import { serialConnection } from '../../src/lib/serial';
+import { channelStore } from '../../src/lib/stores/channels';
+import { get } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { 
   createMachinePacket, 
@@ -15,11 +18,17 @@ describe('Serial Communication Flow Integration Test', () => {
   let mockSerial;
   let mockPort;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mockSerial = createMockSerial();
     global.navigator.serial = mockSerial;
+    
+    // Reset state before each test
+    if (get(serialConnection.status) !== 'disconnected') {
+      await serialConnection.disconnect();
+    }
+    channelStore.reset();
   });
 
   afterEach(() => {

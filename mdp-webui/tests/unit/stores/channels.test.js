@@ -241,11 +241,10 @@ describe('Channel Store', () => {
       // First start recording
       channelStore.startRecording(2);
       
-      // Add some data
-      channelStore.channels.update(chs => {
-        chs[2].waveformData.push({ timestamp: 1000, voltage: 3.3, current: 0.5 });
-        return chs;
-      });
+      // Add some wave data
+      const waveHandler = packetHandlers[0x12];
+      const packet = createWavePacket(2, 126);
+      waveHandler(packet);
       
       // Stop recording
       channelStore.stopRecording(2);
@@ -254,20 +253,17 @@ describe('Channel Store', () => {
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
       expect(channels[2].recording).toBe(false);
-      expect(channels[2].waveformData).toHaveLength(1); // Data preserved
+      expect(channels[2].waveformData.length).toBeGreaterThan(0); // Data preserved
       
       unsubscribe();
     });
 
     it('should clear recording data', () => {
-      // Add some data
-      channelStore.channels.update(chs => {
-        chs[3].waveformData = [
-          { timestamp: 1000, voltage: 3.3, current: 0.5 },
-          { timestamp: 2000, voltage: 3.4, current: 0.6 }
-        ];
-        return chs;
-      });
+      // Start recording and add some data via wave packet
+      channelStore.startRecording(3);
+      const waveHandler = packetHandlers[0x12];
+      const packet = createWavePacket(3, 126);
+      waveHandler(packet);
       
       // Clear recording
       channelStore.clearRecording(3);
@@ -275,6 +271,7 @@ describe('Channel Store', () => {
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
+      // Channel 3 should have empty waveform data after clearing
       expect(channels[3].waveformData).toHaveLength(0);
       
       unsubscribe();
@@ -297,16 +294,21 @@ describe('Channel Store', () => {
       unsubscribe();
     });
 
-    it('should provide active channel data', () => {
-      // Set some data for channel 2
-      channelStore.channels.update(chs => {
-        chs[2].online = true;
-        chs[2].voltage = 5.0;
-        return chs;
-      });
-      
+    it('should provide active channel data', async () => {
       // Make channel 2 active
-      channelStore.activeChannel.set(2);
+      await channelStore.setActiveChannel(2);
+      
+      // Send synthesize packet with data for channel 2
+      const synthesizeHandler = packetHandlers[0x11];
+      const packet = createSynthesizePacket([
+        { online: 0 },
+        { online: 0 },
+        { online: 1, voltage: 5000, current: 1000 },
+        { online: 0 },
+        { online: 0 },
+        { online: 0 }
+      ]);
+      synthesizeHandler(packet);
       
       let activeChannelData;
       const unsubscribe = channelStore.activeChannelData.subscribe(value => activeChannelData = value);

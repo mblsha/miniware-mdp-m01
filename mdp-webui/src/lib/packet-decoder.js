@@ -32,14 +32,13 @@ export function processSynthesizePacket(packet) {
     channels.push({
       channel: i,
       online: ch.online !== 0,
-      machineType: getMachineTypeString(ch.machineType),
-      voltage: ch.voltage / 1000, // Convert mV to V
-      current: ch.current / 1000, // Convert mA to A
-      power: (ch.voltage * ch.current) / 1000000, // W
-      temperature: ch.temperature / 10, // Convert to °C
-      isOutput: ch.isOutput !== 0,
-      mode: getOperatingMode(ch),
-      address: ch.address
+      machineType: getMachineTypeString(ch.type),
+      voltage: ch.outVoltage, // Kaitai already converts to V
+      current: ch.outCurrent, // Kaitai already converts to A
+      power: ch.outVoltage * ch.outCurrent, // W
+      temperature: ch.temperature, // Kaitai already converts to °C
+      isOutput: ch.outputOn !== 0,
+      mode: getOperatingMode(ch)
     });
   }
   
@@ -53,17 +52,17 @@ export function processWavePacket(packet) {
   const points = [];
   
   wave.groups.forEach((group, groupIndex) => {
-    group.datas.forEach((data, pointIndex) => {
+    group.items.forEach((item, pointIndex) => {
       points.push({
-        timestamp: group.time + pointIndex * 10, // 10ms between points
-        voltage: data.voltage / 1000, // Convert mV to V
-        current: data.current / 1000  // Convert mA to A
+        timestamp: group.timestamp + pointIndex * 10, // 10ms between points
+        voltage: item.voltage, // Kaitai already converts to V
+        current: item.current  // Kaitai already converts to A
       });
     });
   });
   
   return {
-    channel: packet.channel,
+    channel: packet.data.channel,
     points
   };
 }
@@ -98,23 +97,24 @@ export function processMachinePacket(packet) {
 
 function getMachineTypeString(type) {
   switch(type) {
-    case 0: return 'P905';
-    case 1: return 'P906';
-    case 2: return 'L1060';
+    case 0: return 'Node';
+    case 1: return 'P905';
+    case 2: return 'P906';
+    case 3: return 'L1060';
     default: return 'Unknown';
   }
 }
 
 function getOperatingMode(channel) {
-  if (channel.machineType === 2) { // L1060
-    switch(channel.l1060Type) {
+  if (channel.type === 3) { // L1060
+    switch(channel.statusLoad) {
       case 0: return 'CC';
       case 1: return 'CV';
       case 2: return 'CR';
       case 3: return 'CP';
     }
-  } else if (channel.machineType === 1) { // P906
-    switch(channel.p906Type) {
+  } else if (channel.type === 2) { // P906
+    switch(channel.statusPsu) {
       case 1: return 'CC';
       case 2: return 'CV';
       default: return 'Normal';

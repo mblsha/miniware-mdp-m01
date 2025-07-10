@@ -56,15 +56,14 @@ vi.mock('kaitai-struct/KaitaiStream', () => {
 
 vi.mock('../../src/lib/kaitai/MiniwareMdpM01.js', () => {
   const PackType = {
-    SYNTHESIZE: 0x11,
-    WAVE: 0x12,
-    ADDR: 0x13,
-    UPDAT_CH: 0x14,
-    MACHINE: 0x15
+    SYNTHESIZE: 17,
+    WAVE: 18,
+    ADDR: 19,
+    UPDAT_CH: 20,
+    MACHINE: 21
   };
 
-  return {
-    default: class MiniwareMdpM01 {
+  class MiniwareMdpM01 {
       constructor(stream) {
         this.stream = stream;
         this.packets = [];
@@ -112,20 +111,31 @@ vi.mock('../../src/lib/kaitai/MiniwareMdpM01.js', () => {
       _readSynthesize() {
         const channels = [];
         for (let i = 0; i < 6; i++) {
-          channels.push({
+          const ch = {
+            num: this.stream.readU1(),
+            outVoltageRaw: this.stream.readU2le(),
+            outCurrentRaw: this.stream.readU2le(),
+            inVoltageRaw: this.stream.readU2le(),
+            inCurrentRaw: this.stream.readU2le(),
+            setVoltageRaw: this.stream.readU2le(),
+            setCurrentRaw: this.stream.readU2le(),
+            tempRaw: this.stream.readU2le(),
             online: this.stream.readU1(),
-            machineType: this.stream.readU1(),
-            voltage: this.stream.readU2le(),
-            current: this.stream.readU2le(),
-            power: this.stream.readU4le(),
-            reserved: this.stream.readBytes(2),
-            temperature: this.stream.readU2le(),
-            mode: this.stream.readU1(),
-            isOutput: this.stream.readU1(),
-            address: this.stream.readBytes(5)
-          });
+            type: this.stream.readU1(),
+            lock: this.stream.readU1(),
+            statusLoad: this.stream.readU1(),
+            outputOn: this.stream.readU1(),
+            color: this.stream.readBytes(3),
+            error: this.stream.readU1(),
+            end: this.stream.readBytes(1)
+          };
+          // Add computed properties
+          ch.outVoltage = ch.outVoltageRaw / 1000.0;
+          ch.outCurrent = ch.outCurrentRaw / 1000.0;
+          ch.temperature = ch.tempRaw / 10.0;
+          channels.push(ch);
         }
-        return { channels };
+        return { channels, channel: 0, dummy: 0 };
       }
       
       _readWave() {
@@ -136,14 +146,17 @@ vi.mock('../../src/lib/kaitai/MiniwareMdpM01.js', () => {
         for (let i = 0; i < groupCount; i++) {
           const group = {
             timestamp: this.stream.readU4le(),
-            datas: []
+            items: []
           };
           
           for (let j = 0; j < pointsPerGroup; j++) {
-            group.datas.push({
-              voltage: this.stream.readU2le(),
-              current: this.stream.readU2le()
-            });
+            const item = {
+              voltageRaw: this.stream.readU2le(),
+              currentRaw: this.stream.readU2le()
+            };
+            item.voltage = item.voltageRaw / 1000.0;
+            item.current = item.currentRaw / 1000.0;
+            group.items.push(item);
           }
           
           groups.push(group);
@@ -171,9 +184,14 @@ vi.mock('../../src/lib/kaitai/MiniwareMdpM01.js', () => {
           deviceType: this.stream.readU1()
         };
       }
-    },
-    PackType
-  };
+    }
+    
+    MiniwareMdpM01.PackType = PackType;
+    
+    return {
+      default: MiniwareMdpM01,
+      PackType: PackType
+    };
 });
 
 describe('Packet Decoder', () => {

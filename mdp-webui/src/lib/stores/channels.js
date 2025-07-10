@@ -12,7 +12,7 @@ const PACKET_TYPES = {
 };
 
 export function createChannelStore() {
-  const channels = writable(Array(6).fill(null).map((_, i) => ({
+  const getInitialState = () => Array(6).fill(null).map((_, i) => ({
     channel: i,
     online: false,
     machineType: 'Unknown',
@@ -27,8 +27,9 @@ export function createChannelStore() {
     targetCurrent: 0,
     recording: false,
     waveformData: []
-  })));
+  }));
 
+  const channels = writable(getInitialState());
   const activeChannel = writable(0);
   const waitingSynthesize = writable(true);
 
@@ -145,17 +146,35 @@ export function createChannelStore() {
     });
   }
 
+  function reset() {
+    channels.set(getInitialState());
+    activeChannel.set(0);
+    waitingSynthesize.set(true);
+  }
+
+  const activeChannelData = derived(
+    [channels, activeChannel],
+    ([$channels, $activeChannel]) => $channels[$activeChannel]
+  );
+
+  const recordingChannels = derived(channels, ($channels) =>
+    $channels.filter((ch) => ch.recording)
+  );
+
   return {
-    channels: derived(channels, $channels => $channels),
+    channels,
     activeChannel: derived(activeChannel, $active => $active),
     waitingSynthesize: derived(waitingSynthesize, $waiting => $waiting),
+    activeChannelData,
+    recordingChannels,
     setActiveChannel,
     setVoltage,
     setCurrent,
     setOutput,
     startRecording,
     stopRecording,
-    clearRecording
+    clearRecording,
+    reset
   };
 }
 

@@ -18,38 +18,63 @@ export function createSynthesizePacket(channelData = []) {
     };
     
     // Channel data (25 bytes each)
-    data.push(ch.online);
-    data.push(ch.machineType);
+    // num (channel number)
+    data.push(i);
     
-    // Voltage (little-endian)
-    data.push(ch.voltage & 0xFF);
-    data.push((ch.voltage >> 8) & 0xFF);
+    // outVoltageRaw (little-endian)
+    const outVoltage = ch.voltage || 0;
+    data.push(outVoltage & 0xFF);
+    data.push((outVoltage >> 8) & 0xFF);
     
-    // Current (little-endian)
-    data.push(ch.current & 0xFF);
-    data.push((ch.current >> 8) & 0xFF);
+    // outCurrentRaw (little-endian)
+    const outCurrent = ch.current || 0;
+    data.push(outCurrent & 0xFF);
+    data.push((outCurrent >> 8) & 0xFF);
     
-    // Temperature
-    data.push(ch.temperature & 0xFF);
-    data.push((ch.temperature >> 8) & 0xFF);
+    // inVoltageRaw (little-endian) - same as out for simplicity
+    data.push(outVoltage & 0xFF);
+    data.push((outVoltage >> 8) & 0xFF);
     
-    // Various status bytes
-    data.push(ch.isOutput); // isOutput
-    data.push(0); // p905_type
-    data.push(ch.mode); // p906_type / l1060_type
-    data.push(0); // errorCode
+    // inCurrentRaw (little-endian)
+    data.push(outCurrent & 0xFF);
+    data.push((outCurrent >> 8) & 0xFF);
     
-    // Address (5 bytes)
-    if (ch.address) {
-      data.push(...ch.address);
-    } else {
-      data.push(0x01, 0x02, 0x03, 0x04, 0x05); // Default address
-    }
+    // setVoltageRaw (little-endian)
+    data.push(outVoltage & 0xFF);
+    data.push((outVoltage >> 8) & 0xFF);
     
-    // Padding to reach 25 bytes
-    for (let j = 0; j < 8; j++) {
-      data.push(0);
-    }
+    // setCurrentRaw (little-endian)
+    data.push(outCurrent & 0xFF);
+    data.push((outCurrent >> 8) & 0xFF);
+    
+    // tempRaw (little-endian)
+    const temp = ch.temperature || 255;
+    data.push(temp & 0xFF);
+    data.push((temp >> 8) & 0xFF);
+    
+    // online
+    data.push(ch.online || 0);
+    
+    // type (machine type)
+    data.push(ch.machineType || 2); // Default to P906
+    
+    // lock
+    data.push(0);
+    
+    // statusLoad/statusPsu
+    data.push(ch.mode || 0);
+    
+    // outputOn
+    data.push(ch.isOutput || 0);
+    
+    // color (3 bytes)
+    data.push(0, 0, 0);
+    
+    // error
+    data.push(0);
+    
+    // end
+    data.push(0xFF);
   }
   
   // Calculate checksum

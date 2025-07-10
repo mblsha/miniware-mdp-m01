@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SerialConnection, ConnectionStatus } from '../../src/lib/serial.js';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
-import { createHeartbeatPacket, createMachinePacket, createPacketSequence } from '../mocks/packet-data.js';
+import { createMachinePacket, createPacketSequence } from '../mocks/packet-data.js';
+import { createHeartbeatPacket } from '../../src/lib/packet-encoder.js';
 
 describe('Serial Connection', () => {
   let mockSerial;
@@ -20,7 +21,19 @@ describe('Serial Connection', () => {
     vi.useFakeTimers();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Ensure disconnection and timer cleanup after each test
+    if (serialConnection) {
+      // Force stop heartbeat even if disconnect fails
+      serialConnection.stopHeartbeat();
+      
+      try {
+        await serialConnection.disconnect();
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    }
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -174,7 +187,7 @@ describe('Serial Connection', () => {
       mockPort.simulateData(machinePacket);
       
       // Allow async processing
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       expect(receivedPackets.length).toBe(1);
       expect(receivedPackets[0]).toEqual(Array.from(machinePacket));
@@ -197,13 +210,13 @@ describe('Serial Connection', () => {
       const part2 = machinePacket.slice(4);
       
       mockPort.simulateData(part1);
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       // Should not have processed yet
       expect(receivedPackets.length).toBe(0);
       
       mockPort.simulateData(part2);
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       // Now should have processed
       expect(receivedPackets.length).toBe(1);
@@ -226,7 +239,7 @@ describe('Serial Connection', () => {
       const combined = new Uint8Array([...garbage, ...validPacket]);
       
       mockPort.simulateData(combined);
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       expect(receivedPackets.length).toBe(1);
       expect(receivedPackets[0]).toEqual(Array.from(validPacket));
@@ -255,7 +268,7 @@ describe('Serial Connection', () => {
       const combined = new Uint8Array([...packet1, ...packet2]);
       
       mockPort.simulateData(combined);
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       expect(machinePackets.length).toBe(1);
       expect(heartbeatPackets.length).toBe(1);
@@ -272,7 +285,7 @@ describe('Serial Connection', () => {
       // Simulate disconnection
       mockPort.simulateDisconnect();
       
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       let statusValue;
       const unsubscribe = serialConnection.status.subscribe(value => statusValue = value);
@@ -289,6 +302,9 @@ describe('Serial Connection', () => {
       // Close the writer to simulate error
       await mockPort.writable.writer.close();
       
+      // Make writer null to simulate error condition
+      serialConnection.writer = null;
+      
       // Try to send a packet
       await expect(serialConnection.sendPacket([0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00]))
         .rejects.toThrow('Not connected');
@@ -302,7 +318,7 @@ describe('Serial Connection', () => {
       
       // Simulate error
       mockPort.simulateDisconnect();
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       // Disconnect and reconnect
       await serialConnection.disconnect();
@@ -359,7 +375,7 @@ describe('Serial Connection', () => {
       await serialConnection.connect();
       
       mockPort.simulateData(createMachinePacket(0x10));
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       // At least one handler should receive the packet
       expect(handler1Packets.length + handler2Packets.length).toBeGreaterThan(0);
@@ -383,7 +399,7 @@ describe('Serial Connection', () => {
       
       // Send only header first
       mockPort.simulateData(header);
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       // Should not process yet (waiting for 156 bytes total)
       expect(receivedPackets.length).toBe(0);
@@ -391,7 +407,7 @@ describe('Serial Connection', () => {
       // Send rest of data
       const remainingData = new Uint8Array(150);
       mockPort.simulateData(remainingData);
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       
       // Now should process
       expect(receivedPackets.length).toBe(1);
