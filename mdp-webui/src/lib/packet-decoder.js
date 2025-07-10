@@ -88,10 +88,14 @@ export function processAddressPacket(packet) {
 export function processMachinePacket(packet) {
   if (!packet || !packet.data || packet.packType !== PackType.MACHINE) return null;
   
-  const machineType = packet.data.machineTypeRaw;
+  const machine = packet.data;
+  
+  // Use machineTypeRaw if available, otherwise fall back to deviceType
+  const machineTypeValue = machine.machineTypeRaw || machine.deviceType;
+  
   return {
-    type: machineType === 0x10 ? 'M01' : 'M02',
-    hasLCD: machineType === 0x10
+    type: machineTypeValue === 0x10 ? 'M01' : 'M02',
+    hasLCD: machineTypeValue === 0x10
   };
 }
 

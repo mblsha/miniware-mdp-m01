@@ -10,9 +10,9 @@ import Dashboard from '../../src/lib/components/Dashboard.svelte';
 import { channelStore } from '../../src/lib/stores/channels.js';
 
 // Mock ChannelCard component
-vi.mock('../../src/lib/components/ChannelCard.svelte', () => ({
-  default: vi.importActual('../mocks/components/MockChannelCard.svelte')
-}));
+vi.mock('../../src/lib/components/ChannelCard.svelte', () => {
+  return import('../mocks/components/MockChannelCard.svelte');
+});
 
 describe('Dashboard Component', () => {
   beforeEach(() => {

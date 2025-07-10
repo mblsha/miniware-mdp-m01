@@ -1,13 +1,10 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
-  
   export let channel = {};
   export let active = false;
-  
-  const dispatch = createEventDispatcher();
+  export let onclick = () => {};
   
   function handleClick() {
-    dispatch('click', channel.channel);
+    onclick();
   }
 </script>
 
