@@ -23,12 +23,12 @@
     await serialConnection.disconnect();
   }
   
-  function showChannelDetail(channel) {
+  export function showChannelDetail(channel) {
     selectedChannel = channel;
     currentView = 'detail';
   }
   
-  function showDashboard() {
+  export function showDashboard() {
     currentView = 'dashboard';
   }
 </script>

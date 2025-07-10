@@ -1,0 +1,1 @@
+<div data-testid="mock-channel-detail">Mock Channel Detail</div>
