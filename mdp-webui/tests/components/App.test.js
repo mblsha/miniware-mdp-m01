@@ -26,17 +26,17 @@ vi.mock('../../src/lib/serial.js', () => {
   };
 });
 
+// Mock child components with proper Svelte components BEFORE other imports
+vi.mock('../../src/lib/components/Dashboard.svelte', async () => ({
+  default: (await vi.importActual('../mocks/components/MockDashboard.svelte')).default
+}));
+vi.mock('../../src/lib/components/ChannelDetail.svelte', async () => ({
+  default: (await vi.importActual('../mocks/components/MockChannelDetail.svelte')).default
+}));
+
 vi.mock('../../src/lib/stores/channels.js', () => ({
   channelStore: {}
 }));
-
-// Mock child components with proper Svelte components
-vi.mock('../../src/lib/components/Dashboard.svelte', () => {
-  return import('../mocks/components/MockDashboard.svelte');
-});
-vi.mock('../../src/lib/components/ChannelDetail.svelte', () => {
-  return import('../mocks/components/MockChannelDetail.svelte');
-});
 
 import App from '../../src/App.svelte';
 import { serialConnection } from '../../src/lib/serial.js';

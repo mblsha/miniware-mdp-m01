@@ -23,6 +23,11 @@ document.createElement = vi.fn((tag) => {
   return originalCreateElement(tag);
 });
 
+// Mock WaveformChart BEFORE other imports
+vi.mock('../../src/lib/components/WaveformChart.svelte', async () => ({
+  default: (await vi.importActual('../mocks/components/MockWaveformChart.svelte')).default
+}));
+
 vi.mock('../../src/lib/stores/channels.js', () => ({
   channelStore: {
     channels: writable([]),
@@ -40,11 +45,6 @@ vi.mock('../../src/lib/stores/channels.js', () => ({
 // Import component after mocks
 import { channelStore } from '../../src/lib/stores/channels.js';
 import ChannelDetail from '../../src/lib/components/ChannelDetail.svelte';
-
-// Mock WaveformChart
-vi.mock('../../src/lib/components/WaveformChart.svelte', () => ({
-  default: vi.importActual('../mocks/components/MockWaveformChart.svelte')
-}));
 
 describe('ChannelDetail Component', () => {
   let mockChannelData;
@@ -87,11 +87,9 @@ describe('ChannelDetail Component', () => {
       expect(getByText('← Back')).toBeInTheDocument();
     });
 
-    it('should emit back event when back button clicked', async () => {
-      const { component, getByText } = render(ChannelDetail, { props: { channel: 0 } });
-      
+    it('should call onback prop when back button clicked', async () => {
       const backHandler = vi.fn();
-      component.$on('back', backHandler);
+      const { getByText } = render(ChannelDetail, { props: { channel: 0, onback: backHandler } });
       
       await fireEvent.click(getByText('← Back'));
       
@@ -257,11 +255,11 @@ describe('ChannelDetail Component', () => {
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
       // Advance timer by 65 seconds
-      vi.advanceTimersByTime(65000);
+      await vi.advanceTimersByTimeAsync(65000);
       
       await waitFor(() => {
         expect(getByText('Recording... 1:05')).toBeInTheDocument();
-      });
+      }, { timeout: 1000 });
     });
 
     it('should stop recording when stop clicked', async () => {
@@ -438,11 +436,11 @@ describe('ChannelDetail Component', () => {
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
       // Advance by 1 hour
-      vi.advanceTimersByTime(3600000);
+      await vi.advanceTimersByTimeAsync(3600000);
       
       await waitFor(() => {
         expect(getByText('Recording... 60:00')).toBeInTheDocument();
-      });
+      }, { timeout: 1000 });
     });
 
     it('should handle rapid parameter changes', async () => {
@@ -467,8 +465,9 @@ describe('ChannelDetail Component', () => {
       
       await fireEvent.click(getByText('Set V'));
       
-      // Browser converts invalid input to 0
-      expect(channelStore.setVoltage).toHaveBeenCalledWith(0, 0, 0.5);
+      // When input is invalid, the number input returns null for invalid values
+      // The component passes channel (0), targetVoltage (null), targetCurrent (0.5)
+      expect(channelStore.setVoltage).toHaveBeenCalledWith(0, null, 0.5);
     });
   });
 

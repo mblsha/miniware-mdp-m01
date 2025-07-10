@@ -2,17 +2,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 
+// Mock ChannelCard component BEFORE other imports
+vi.mock('../../src/lib/components/ChannelCard.svelte', async () => ({
+  default: (await vi.importActual('../mocks/components/MockChannelCard.svelte')).default
+}));
+
 vi.mock('../../src/lib/stores/channels.js', () => ({
   channelStore: { channels: writable([]), activeChannel: writable(0) }
 }));
 
 import Dashboard from '../../src/lib/components/Dashboard.svelte';
 import { channelStore } from '../../src/lib/stores/channels.js';
-
-// Mock ChannelCard component
-vi.mock('../../src/lib/components/ChannelCard.svelte', () => {
-  return import('../mocks/components/MockChannelCard.svelte');
-});
 
 describe('Dashboard Component', () => {
   beforeEach(() => {

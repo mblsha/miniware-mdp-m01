@@ -8,11 +8,11 @@ export function createSynthesizePacket(channelData = []) {
   for (let i = 0; i < 6; i++) {
     const ch = channelData[i] || {
       online: i === 0 ? 1 : 0,
-      machineType: 1, // P906
+      type: 2, // P906 (not machineType)
       voltage: 3300, // mV
       current: 500,  // mA
       temperature: 255, // 25.5°C
-      isOutput: 1,
+      outputOn: 1, // not isOutput
       mode: 2, // CV
       address: [0x01, 0x02, 0x03, 0x04, 0x05]
     };
@@ -56,7 +56,7 @@ export function createSynthesizePacket(channelData = []) {
     data.push(ch.online || 0);
     
     // type (machine type)
-    data.push(ch.machineType || 2); // Default to P906
+    data.push(ch.type || 2); // Default to P906
     
     // lock
     data.push(0);
@@ -65,7 +65,7 @@ export function createSynthesizePacket(channelData = []) {
     data.push(ch.mode || 0);
     
     // outputOn
-    data.push(ch.isOutput || 0);
+    data.push(ch.outputOn || 0);
     
     // color (3 bytes)
     data.push(0, 0, 0);
@@ -220,9 +220,9 @@ export const mockScenarios = {
   connection: [
     createMachinePacket(0x10), // M01 device
     createSynthesizePacket([
-      { online: 1, machineType: 0, voltage: 5000, current: 1000 }, // P905
-      { online: 1, machineType: 1, voltage: 3300, current: 500 },  // P906
-      { online: 1, machineType: 2, voltage: 0, current: 2000 },     // L1060
+      { online: 1, type: 1, voltage: 5000, current: 1000 }, // P905
+      { online: 1, type: 2, voltage: 3300, current: 500 },  // P906
+      { online: 1, type: 3, voltage: 0, current: 2000 },     // L1060
     ])
   ],
   
