@@ -1,15 +1,14 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { channelStore } from '../stores/channels.js';
   import ChannelCard from './ChannelCard.svelte';
   
-  const dispatch = createEventDispatcher();
+  export let onselectchannel = undefined;
   
   $: channels = channelStore.channels;
   $: activeChannel = channelStore.activeChannel;
   
   function selectChannel(channel) {
-    dispatch('selectChannel', channel);
+    onselectchannel?.(channel);
   }
 </script>
 

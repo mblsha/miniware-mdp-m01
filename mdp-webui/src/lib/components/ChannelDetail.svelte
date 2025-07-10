@@ -1,11 +1,10 @@
 <script>
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { channelStore } from '../stores/channels.js';
   import WaveformChart from './WaveformChart.svelte';
   
   export let channel = 0;
-  
-  const dispatch = createEventDispatcher();
+  export let onback = undefined;
   
   $: channels = channelStore.channels;
   $: channelData = $channels[channel];
@@ -31,7 +30,7 @@
   });
   
   function goBack() {
-    dispatch('back');
+    onback?.();
   }
   
   async function toggleOutput() {
@@ -88,7 +87,7 @@
 
 <div class="channel-detail">
   <div class="header">
-    <button class="back-button" on:click={goBack}>← Back</button>
+    <button class="back-button" onclick={goBack}>← Back</button>
     <h2>Channel {channel + 1} - {channelData?.machineType || 'Unknown'}</h2>
   </div>
   
@@ -100,7 +99,7 @@
           <button 
             class="output-toggle"
             class:on={channelData.isOutput}
-            on:click={toggleOutput}
+            onclick={toggleOutput}
           >
             Output: {channelData.isOutput ? 'ON' : 'OFF'}
           </button>
@@ -120,7 +119,7 @@
                 data-testid="voltage-input"
               />
             </label>
-            <button on:click={applyVoltage}>Set V</button>
+            <button onclick={applyVoltage}>Set V</button>
           </div>
           <div class="parameter">
             <label>
@@ -133,7 +132,7 @@
                 step="0.001"
               />
             </label>
-            <button on:click={applyCurrent}>Set I</button>
+            <button onclick={applyCurrent}>Set I</button>
           </div>
         </div>
         
@@ -163,11 +162,11 @@
           <h3>Waveform Recording</h3>
           <div class="recording-controls">
             {#if !isRecording}
-              <button class="record-button" on:click={startRecording}>
+              <button class="record-button" onclick={startRecording}>
                 Start Recording
               </button>
             {:else}
-              <button class="stop-button" on:click={stopRecording}>
+              <button class="stop-button" onclick={stopRecording}>
                 Stop Recording
               </button>
               <span class="recording-indicator">
@@ -175,7 +174,7 @@
               </span>
             {/if}
             {#if channelData.waveformData.length > 0}
-              <button on:click={exportData}>Export Data</button>
+              <button onclick={exportData}>Export Data</button>
               <span class="data-points">
                 {channelData.waveformData.length} points
               </span>

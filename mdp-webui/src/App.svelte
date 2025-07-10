@@ -38,7 +38,7 @@
     <h1>MDP-WebUI</h1>
     <div class="connection-status">
       {#if $connectionStatus === ConnectionStatus.DISCONNECTED}
-        <button on:click={handleConnect}>Connect</button>
+        <button onclick={handleConnect}>Connect</button>
       {:else if $connectionStatus === ConnectionStatus.CONNECTING}
         <span class="status connecting">Connecting...</span>
       {:else if $connectionStatus === ConnectionStatus.CONNECTED}
@@ -46,19 +46,19 @@
         {#if $deviceType}
           <span class="device-type">({$deviceType.type})</span>
         {/if}
-        <button on:click={handleDisconnect}>Disconnect</button>
+        <button onclick={handleDisconnect}>Disconnect</button>
       {:else if $connectionStatus === ConnectionStatus.ERROR}
         <span class="status error">Error: {$connectionError}</span>
-        <button on:click={handleConnect}>Retry</button>
+        <button onclick={handleConnect}>Retry</button>
       {/if}
     </div>
   </header>
   
   {#if $connectionStatus === ConnectionStatus.CONNECTED}
     {#if currentView === 'dashboard'}
-      <Dashboard on:selectChannel={(e) => showChannelDetail(e.detail)} />
+      <Dashboard onselectchannel={showChannelDetail} />
     {:else if currentView === 'detail'}
-      <ChannelDetail channel={selectedChannel} on:back={showDashboard} />
+      <ChannelDetail channel={selectedChannel} onback={showDashboard} />
     {/if}
   {:else}
     <div class="placeholder">

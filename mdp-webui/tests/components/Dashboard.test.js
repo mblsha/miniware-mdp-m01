@@ -121,10 +121,10 @@ describe('Dashboard Component', () => {
 
   describe('Channel Selection', () => {
     it('should emit selectChannel event when card is clicked', async () => {
-      const { component, getByTestId } = render(Dashboard);
-      
       const selectHandler = vi.fn();
-      component.$on('selectChannel', (event) => selectHandler(event.detail));
+      const { getByTestId } = render(Dashboard, { 
+        props: { onselectchannel: selectHandler }
+      });
       
       // Click channel 3
       const card = getByTestId('channel-card-3');
@@ -134,10 +134,10 @@ describe('Dashboard Component', () => {
     });
 
     it('should handle multiple channel selections', async () => {
-      const { component, getByTestId } = render(Dashboard);
-      
       const selections = [];
-      component.$on('selectChannel', (event) => selections.push(event.detail));
+      const { getByTestId } = render(Dashboard, {
+        props: { onselectchannel: (channel) => selections.push(channel) }
+      });
       
       // Click multiple channels
       await fireEvent.click(getByTestId('channel-card-1'));
@@ -150,10 +150,10 @@ describe('Dashboard Component', () => {
     it('should allow selecting already active channel', async () => {
       channelStore.activeChannel.set(2);
       
-      const { component, getByTestId } = render(Dashboard);
-      
       const selectHandler = vi.fn();
-      component.$on('selectChannel', (event) => selectHandler(event.detail));
+      const { getByTestId } = render(Dashboard, {
+        props: { onselectchannel: selectHandler }
+      });
       
       // Click the already active channel
       await fireEvent.click(getByTestId('channel-card-2'));
@@ -271,10 +271,10 @@ describe('Dashboard Component', () => {
     });
 
     it('should support keyboard navigation', async () => {
-      const { component, container } = render(Dashboard);
-      
       const selectHandler = vi.fn();
-      component.$on('selectChannel', (event) => selectHandler(event.detail));
+      const { container } = render(Dashboard, {
+        props: { onselectchannel: selectHandler }
+      });
       
       // Get first card and simulate keyboard interaction
       const firstCard = container.querySelector('[data-testid="channel-card-0"]');
