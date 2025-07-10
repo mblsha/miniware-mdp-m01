@@ -23,6 +23,9 @@ This is a mixed C++/Python project for handling Miniware MDP (Multi-channel Digi
 
 ### Protocol Format
 - Binary protocol defined in `cpp/mdp.ksy` (Kaitai Struct format)
+- Links:
+  - [MDP Protocol Overview](/cpp/MDP_PROTOCOL_OVERVIEW.md)
+  - [Kaitai Struct Protocol Definition](/cpp/mdp.ksy)
 - Incoming packet types fully implemented:
   - Synthesize (0x11): Channel status with voltage/current/temperature
   - Wave (0x12): Time-series measurements
