@@ -20,9 +20,11 @@ const mockAnchor = {
   download: '',
   click: mockClick
 };
-document.createElement = vi.fn((tag) => {
+// Save original and mock
+const originalCreateElement = document.createElement;
+document.createElement = vi.fn(tag => {
   if (tag === 'a') return mockAnchor;
-  return document.createElement.call(document, tag);
+  return originalCreateElement.call(document, tag);
 });
 
 describe('Recording Flow Integration Test', () => {

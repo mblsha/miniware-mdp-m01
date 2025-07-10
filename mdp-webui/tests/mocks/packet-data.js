@@ -203,3 +203,17 @@ export const mockScenarios = {
     createMalformedPacket('bad-checksum')
   ]
 };
+
+// Utility function to combine multiple packets
+export function createPacketSequence(packets) {
+  const totalLength = packets.reduce((sum, packet) => sum + packet.length, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  
+  for (const packet of packets) {
+    combined.set(packet, offset);
+    offset += packet.length;
+  }
+  
+  return combined;
+}

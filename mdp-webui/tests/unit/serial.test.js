@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SerialConnection, ConnectionStatus } from '../../src/lib/serial.js';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
-import { createHeartbeatPacket, createMachinePacket } from '../mocks/packet-data.js';
+import { createHeartbeatPacket, createMachinePacket, createPacketSequence } from '../mocks/packet-data.js';
 
 describe('Serial Connection', () => {
   let mockSerial;
@@ -100,7 +100,8 @@ describe('Serial Connection', () => {
   });
 
   describe('Heartbeat Mechanism', () => {
-    it('should start heartbeat on connection', async () => {
+    // This test is tricky because getMachineType is also sent on connect.
+    it('should send heartbeat after connecting', async () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
@@ -111,10 +112,13 @@ describe('Serial Connection', () => {
       
       const writtenData = mockPort.getWrittenData();
       expect(writtenData.length).toBeGreaterThan(0);
-      
+
       // Check if heartbeat packet was sent
       const heartbeat = new Uint8Array([0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00]);
-      expect(writtenData[0]).toEqual(heartbeat);
+      // getMachine packet is sent first, then heartbeat
+      expect(writtenData[1]).toEqual(heartbeat);
+      
+      await serialConnection.disconnect();
     });
 
     it('should send heartbeat every second', async () => {
@@ -130,7 +134,9 @@ describe('Serial Connection', () => {
       vi.advanceTimersByTime(3000);
       
       const writtenData = mockPort.getWrittenData();
-      expect(writtenData.length).toBe(3);
+      expect(writtenData.filter(p => p[2] === 0x22).length).toBe(3);
+      
+      await serialConnection.disconnect();
     });
 
     it('should stop heartbeat on disconnect', async () => {

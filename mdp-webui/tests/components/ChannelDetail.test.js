@@ -23,32 +23,22 @@ document.createElement = vi.fn((tag) => {
   return originalCreateElement(tag);
 });
 
-// Create mocks before module mocking
-const mockChannels = writable([]);
-const mockActiveChannel = writable(0);
-const mockSetActiveChannel = vi.fn();
-const mockSetVoltage = vi.fn();
-const mockSetCurrent = vi.fn();
-const mockSetOutput = vi.fn();
-const mockStartRecording = vi.fn();
-const mockStopRecording = vi.fn();
-const mockClearRecording = vi.fn();
-
 vi.mock('../../src/lib/stores/channels.js', () => ({
   channelStore: {
-    channels: mockChannels,
-    activeChannel: mockActiveChannel,
-    setActiveChannel: mockSetActiveChannel,
-    setVoltage: mockSetVoltage,
-    setCurrent: mockSetCurrent,
-    setOutput: mockSetOutput,
-    startRecording: mockStartRecording,
-    stopRecording: mockStopRecording,
-    clearRecording: mockClearRecording
+    channels: writable([]),
+    activeChannel: writable(0),
+    setActiveChannel: vi.fn(),
+    setVoltage: vi.fn(),
+    setCurrent: vi.fn(),
+    setOutput: vi.fn(),
+    startRecording: vi.fn(),
+    stopRecording: vi.fn(),
+    clearRecording: vi.fn()
   }
 }));
 
 // Import component after mocks
+import { channelStore } from '../../src/lib/stores/channels.js';
 import ChannelDetail from '../../src/lib/components/ChannelDetail.svelte';
 
 // Mock WaveformChart
@@ -68,6 +58,7 @@ vi.mock('../../src/lib/components/WaveformChart.svelte', () => ({
 
 describe('ChannelDetail Component', () => {
   let mockChannelData;
+  const { set: setMockChannels } = channelStore.channels;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -90,8 +81,8 @@ describe('ChannelDetail Component', () => {
       waveformData: []
     }));
     
-    mockChannels.set(mockChannelData);
-    mockActiveChannel.set(0);
+    setMockChannels(mockChannelData);
+    channelStore.activeChannel.set(0);
   });
 
   afterEach(() => {
@@ -119,7 +110,7 @@ describe('ChannelDetail Component', () => {
 
     it('should display offline message for offline channel', () => {
       mockChannelData[2].online = false;
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 2 } });
       
@@ -141,12 +132,12 @@ describe('ChannelDetail Component', () => {
       
       await fireEvent.click(getByText('Output: ON'));
       
-      expect(mockSetOutput).toHaveBeenCalledWith(0, false);
+      expect(channelStore.setOutput).toHaveBeenCalledWith(0, false);
     });
 
     it('should handle output off state', () => {
       mockChannelData[0].isOutput = false;
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -174,7 +165,7 @@ describe('ChannelDetail Component', () => {
       
       await fireEvent.click(getByText('Set V'));
       
-      expect(mockSetVoltage).toHaveBeenCalledWith(0, 5, 0.5);
+      expect(channelStore.setVoltage).toHaveBeenCalledWith(0, 5, 0.5);
     });
 
     it('should set current when Set I clicked', async () => {
@@ -185,7 +176,7 @@ describe('ChannelDetail Component', () => {
       
       await fireEvent.click(getByText('Set I'));
       
-      expect(mockSetCurrent).toHaveBeenCalledWith(0, 3.3, 1.5);
+      expect(channelStore.setCurrent).toHaveBeenCalledWith(0, 3.3, 1.5);
     });
 
     it('should validate input ranges', () => {
@@ -211,7 +202,7 @@ describe('ChannelDetail Component', () => {
       
       await fireEvent.click(getByText('Set V'));
       
-      expect(mockSetVoltage).toHaveBeenCalledWith(0, 12.345, 0.5);
+      expect(channelStore.setVoltage).toHaveBeenCalledWith(0, 12.345, 0.5);
     });
   });
 
@@ -233,7 +224,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].current = 1.234;
       mockChannelData[0].power = 6.322;
       mockChannelData[0].temperature = 30.7;
-      mockChannels.set([...mockChannelData]);
+      setMockChannels([...mockChannelData]);
       
       await rerender({ channel: 0 });
       
@@ -256,12 +247,12 @@ describe('ChannelDetail Component', () => {
       
       await fireEvent.click(getByText('Start Recording'));
       
-      expect(mockStartRecording).toHaveBeenCalledWith(0);
+      expect(channelStore.startRecording).toHaveBeenCalledWith(0);
     });
 
     it('should show stop button and timer when recording', async () => {
       mockChannelData[0].recording = true;
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -271,7 +262,7 @@ describe('ChannelDetail Component', () => {
 
     it('should update timer during recording', async () => {
       mockChannelData[0].recording = true;
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -285,13 +276,13 @@ describe('ChannelDetail Component', () => {
 
     it('should stop recording when stop clicked', async () => {
       mockChannelData[0].recording = true;
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
       await fireEvent.click(getByText('Stop Recording'));
       
-      expect(mockStopRecording).toHaveBeenCalledWith(0);
+      expect(channelStore.stopRecording).toHaveBeenCalledWith(0);
     });
 
     it('should show export button when data available', () => {
@@ -299,7 +290,7 @@ describe('ChannelDetail Component', () => {
         { timestamp: 0, voltage: 3.3, current: 0.5 },
         { timestamp: 10, voltage: 3.4, current: 0.6 }
       ];
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -315,7 +306,7 @@ describe('ChannelDetail Component', () => {
         { timestamp: 10, voltage: 3.4, current: 0.6 },
         { timestamp: 20, voltage: 3.5, current: 0.7 }
       ];
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -351,7 +342,7 @@ describe('ChannelDetail Component', () => {
       }));
       
       mockChannelData[0].waveformData = largeData;
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -368,7 +359,7 @@ describe('ChannelDetail Component', () => {
     it('should set active channel on mount', () => {
       render(ChannelDetail, { props: { channel: 3 } });
       
-      expect(mockSetActiveChannel).toHaveBeenCalledWith(3);
+      expect(channelStore.setActiveChannel).toHaveBeenCalledWith(3);
     });
 
     it('should initialize target values from channel data', () => {
@@ -380,7 +371,7 @@ describe('ChannelDetail Component', () => {
         targetVoltage: 0,
         targetCurrent: 0
       };
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByLabelText } = render(ChannelDetail, { props: { channel: 2 } });
       
@@ -391,7 +382,7 @@ describe('ChannelDetail Component', () => {
 
     it('should clean up timer on unmount', async () => {
       mockChannelData[0].recording = true;
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { unmount } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -409,7 +400,7 @@ describe('ChannelDetail Component', () => {
   describe('Machine Type Specific Features', () => {
     it('should handle P905 machine type', () => {
       mockChannelData[0].machineType = 'P905';
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -419,7 +410,7 @@ describe('ChannelDetail Component', () => {
     it('should handle L1060 machine type', () => {
       mockChannelData[0].machineType = 'L1060';
       mockChannelData[0].mode = 'CC';
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -429,7 +420,7 @@ describe('ChannelDetail Component', () => {
 
     it('should handle unknown machine type', () => {
       mockChannelData[0].machineType = 'Unknown';
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -452,7 +443,7 @@ describe('ChannelDetail Component', () => {
 
     it('should handle very long recording sessions', async () => {
       mockChannelData[0].recording = true;
-      mockChannels.set(mockChannelData);
+      setMockChannels(mockChannelData);
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
@@ -475,7 +466,7 @@ describe('ChannelDetail Component', () => {
         await fireEvent.click(getByText('Set V'));
       }
       
-      expect(mockSetVoltage).toHaveBeenCalledTimes(10);
+      expect(channelStore.setVoltage).toHaveBeenCalledTimes(10);
     });
 
     it('should handle NaN or invalid inputs gracefully', async () => {
@@ -487,7 +478,7 @@ describe('ChannelDetail Component', () => {
       await fireEvent.click(getByText('Set V'));
       
       // Browser converts invalid input to 0
-      expect(mockSetVoltage).toHaveBeenCalledWith(0, 0, 0.5);
+      expect(channelStore.setVoltage).toHaveBeenCalledWith(0, 0, 0.5);
     });
   });
 

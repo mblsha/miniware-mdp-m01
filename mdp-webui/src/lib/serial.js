@@ -98,7 +98,7 @@ export class SerialConnection {
   async readLoop() {
     const buffer = [];
     
-    while (this.reader) {
+    while (this.port && this.reader) {
       try {
         const { value, done } = await this.reader.read();
         if (done) break;
@@ -111,6 +111,9 @@ export class SerialConnection {
         
       } catch (error) {
         console.error('Read error:', error);
+        if (this.statusStore.get() === ConnectionStatus.DISCONNECTED) {
+          break;
+        }
         this.statusStore.set(ConnectionStatus.ERROR);
         this.errorStore.set(error.message);
         break;

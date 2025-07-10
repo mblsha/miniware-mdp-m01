@@ -2,19 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 
-// Create mocks before imports
-const mockChannels = writable([]);
-const mockActiveChannel = writable(0);
-
 vi.mock('../../src/lib/stores/channels.js', () => ({
-  channelStore: {
-    channels: mockChannels,
-    activeChannel: mockActiveChannel
-  }
+  channelStore: { channels: writable([]), activeChannel: writable(0) }
 }));
 
-// Import component after mocks
 import Dashboard from '../../src/lib/components/Dashboard.svelte';
+import { channelStore } from '../../src/lib/stores/channels.js';
 
 // Mock ChannelCard component
 vi.mock('../../src/lib/components/ChannelCard.svelte', () => ({
@@ -37,8 +30,7 @@ vi.mock('../../src/lib/components/ChannelCard.svelte', () => ({
 
 describe('Dashboard Component', () => {
   beforeEach(() => {
-    // Reset stores to default state
-    mockChannels.set(Array(6).fill(null).map((_, i) => ({
+    channelStore.channels.set(Array(6).fill(null).map((_, i) => ({
       channel: i,
       online: false,
       machineType: 'Unknown',
@@ -51,7 +43,7 @@ describe('Dashboard Component', () => {
       recording: false,
       waveformData: []
     })));
-    mockActiveChannel.set(0);
+    channelStore.activeChannel.set(0);
   });
 
   describe('Rendering', () => {
@@ -77,7 +69,7 @@ describe('Dashboard Component', () => {
       const { getByTestId } = render(Dashboard);
       
       // Set channel 2 as active
-      mockActiveChannel.set(2);
+      channelStore.activeChannel.set(2);
       
       await waitFor(() => {
         const activeCard = getByTestId('channel-card-2');
@@ -97,7 +89,7 @@ describe('Dashboard Component', () => {
       const { rerender } = render(Dashboard);
       
       // Update channels with online status
-      mockChannels.set(Array(6).fill(null).map((_, i) => ({
+      channelStore.channels.set(Array(6).fill(null).map((_, i) => ({
         channel: i,
         online: i < 3, // First 3 channels online
         machineType: i < 3 ? 'P906' : 'Unknown',
@@ -170,7 +162,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should allow selecting already active channel', async () => {
-      mockActiveChannel.set(2);
+      channelStore.activeChannel.set(2);
       
       const { component, getByTestId } = render(Dashboard);
       
@@ -193,7 +185,7 @@ describe('Dashboard Component', () => {
       expect(cards).toHaveLength(6);
       
       // Update store with different data
-      mockChannels.set(Array(6).fill(null).map((_, i) => ({
+      channelStore.channels.set(Array(6).fill(null).map((_, i) => ({
         channel: i,
         online: true,
         machineType: 'L1060',
@@ -215,7 +207,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should handle empty channel array', async () => {
-      mockChannels.set([]);
+      channelStore.channels.set([]);
       
       const { container } = render(Dashboard);
       
@@ -224,7 +216,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should handle partial channel data', async () => {
-      mockChannels.set([
+      channelStore.channels.set([
         { channel: 0, online: true },
         { channel: 1, online: false },
         { channel: 2, online: true }
@@ -243,7 +235,7 @@ describe('Dashboard Component', () => {
       
       // Rapidly change active channel
       for (let i = 0; i < 20; i++) {
-        mockActiveChannel.set(i % 6);
+        channelStore.activeChannel.set(i % 6);
         await new Promise(resolve => setTimeout(resolve, 10));
       }
       
@@ -264,13 +256,13 @@ describe('Dashboard Component', () => {
         current: 0
       }));
       
-      mockChannels.set(initialChannels);
+      channelStore.channels.set(initialChannels);
       
       // Update only one channel
       const updatedChannels = [...initialChannels];
       updatedChannels[3] = { ...updatedChannels[3], online: true, voltage: 5 };
       
-      mockChannels.set(updatedChannels);
+      channelStore.channels.set(updatedChannels);
       await rerender({});
       
       // Component should handle update efficiently
@@ -311,7 +303,7 @@ describe('Dashboard Component', () => {
 
   describe('Edge Cases', () => {
     it('should handle channel with missing properties', async () => {
-      mockChannels.set([
+      channelStore.channels.set([
         { channel: 0 }, // Minimal data
         { channel: 1, online: true }, // Partial data
         { // Full data
@@ -334,7 +326,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should handle very large channel numbers', async () => {
-      mockChannels.set([
+      channelStore.channels.set([
         { channel: 999, online: true }
       ]);
       
@@ -345,7 +337,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should handle negative channel numbers gracefully', async () => {
-      mockChannels.set([
+      channelStore.channels.set([
         { channel: -1, online: true }
       ]);
       
@@ -370,8 +362,8 @@ describe('Dashboard Component', () => {
       unmount();
       
       // Update stores after unmount
-      mockChannels.set([]);
-      mockActiveChannel.set(5);
+      channelStore.channels.set([]);
+      channelStore.activeChannel.set(5);
       
       // Should not cause errors (component is unmounted)
       await new Promise(resolve => setTimeout(resolve, 10));

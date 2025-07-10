@@ -1,8 +1,12 @@
 import KaitaiStream from 'kaitai-struct/KaitaiStream';
 import MiniwareMdpM01 from './kaitai/MiniwareMdpM01.js';
 
+export const PackType = MiniwareMdpM01.PackType;
+
 export function decodePacket(data) {
   try {
+    if (!data || data.length < 6) return null;
+
     const buffer = new ArrayBuffer(data.length);
     const view = new Uint8Array(buffer);
     data.forEach((byte, i) => view[i] = byte);
@@ -18,9 +22,9 @@ export function decodePacket(data) {
 }
 
 export function processSynthesizePacket(packet) {
-  if (!packet || !packet.body || !packet.body.synthesize) return null;
+  if (!packet || !packet.data || packet.packType !== PackType.SYNTHESIZE) return null;
   
-  const synthesize = packet.body.synthesize;
+  const synthesize = packet.data;
   const channels = [];
   
   for (let i = 0; i < 6; i++) {
@@ -43,9 +47,9 @@ export function processSynthesizePacket(packet) {
 }
 
 export function processWavePacket(packet) {
-  if (!packet || !packet.body || !packet.body.wave) return null;
+  if (!packet || !packet.data || packet.packType !== PackType.WAVE) return null;
   
-  const wave = packet.body.wave;
+  const wave = packet.data;
   const points = [];
   
   wave.groups.forEach((group, groupIndex) => {
@@ -65,9 +69,9 @@ export function processWavePacket(packet) {
 }
 
 export function processAddressPacket(packet) {
-  if (!packet || !packet.body || !packet.body.addr) return null;
+  if (!packet || !packet.data || packet.packType !== PackType.ADDR) return null;
   
-  const addr = packet.body.addr;
+  const addr = packet.data;
   const addresses = [];
   
   for (let i = 0; i < 6; i++) {
@@ -83,9 +87,9 @@ export function processAddressPacket(packet) {
 }
 
 export function processMachinePacket(packet) {
-  if (!packet || !packet.body || packet.body.machine === undefined) return null;
+  if (!packet || !packet.data || packet.packType !== PackType.MACHINE) return null;
   
-  const machineType = packet.body.machine;
+  const machineType = packet.data.deviceType;
   return {
     type: machineType === 0x10 ? 'M01' : 'M02',
     hasLCD: machineType === 0x10

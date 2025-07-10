@@ -1,7 +1,7 @@
 import { writable, derived } from 'svelte/store';
-import { serialConnection } from '../serial.js';
-import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket } from '../packet-decoder.js';
-import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder.js';
+import { serialConnection } from '../serial';
+import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket } from '../packet-decoder';
+import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder';
 
 const PACKET_TYPES = {
   SYNTHESIZE: 0x11,
@@ -11,7 +11,7 @@ const PACKET_TYPES = {
   MACHINE: 0x15
 };
 
-function createChannelStore() {
+export function createChannelStore() {
   const channels = writable(Array(6).fill(null).map((_, i) => ({
     channel: i,
     online: false,
@@ -33,10 +33,12 @@ function createChannelStore() {
   const waitingSynthesize = writable(true);
 
   // Register packet handlers
-  serialConnection.registerPacketHandler(PACKET_TYPES.SYNTHESIZE, (packet) => {
+  function synthesizeHandler(packet) {
     const decoded = decodePacket(packet);
-    const processed = processSynthesizePacket(decoded);
-    
+    if (!decoded || !decoded.packets[0]) return;
+
+    const processed = processSynthesizePacket(decoded.packets[0]);
+
     if (processed) {
       channels.update(chs => {
         processed.forEach((data, i) => {
@@ -46,11 +48,13 @@ function createChannelStore() {
       });
       waitingSynthesize.set(false);
     }
-  });
+  }
 
-  serialConnection.registerPacketHandler(PACKET_TYPES.WAVE, (packet) => {
+  function waveHandler(packet) {
     const decoded = decodePacket(packet);
-    const processed = processWavePacket(decoded);
+    if (!decoded || !decoded.packets[0]) return;
+
+    const processed = processWavePacket(decoded.packets[0]);
     
     if (processed) {
       channels.update(chs => {
@@ -61,23 +65,30 @@ function createChannelStore() {
         return chs;
       });
     }
-  });
+  }
 
-  serialConnection.registerPacketHandler(PACKET_TYPES.UPDATE_CH, (packet) => {
+  function updateChannelHandler(packet) {
     if (packet.length >= 7) {
       const channel = packet[6];
       activeChannel.set(channel);
     }
-  });
+  }
 
-  serialConnection.registerPacketHandler(PACKET_TYPES.MACHINE, (packet) => {
+  function machineHandler(packet) {
     const decoded = decodePacket(packet);
-    const processed = processMachinePacket(decoded);
+    if (!decoded || !decoded.packets[0]) return;
+    
+    const processed = processMachinePacket(decoded.packets[0]);
     
     if (processed) {
       serialConnection.deviceTypeStore.set(processed);
     }
-  });
+  }
+
+  serialConnection.registerPacketHandler(PACKET_TYPES.SYNTHESIZE, synthesizeHandler);
+  serialConnection.registerPacketHandler(PACKET_TYPES.WAVE, waveHandler);
+  serialConnection.registerPacketHandler(PACKET_TYPES.UPDATE_CH, updateChannelHandler);
+  serialConnection.registerPacketHandler(PACKET_TYPES.MACHINE, machineHandler);
 
   async function setActiveChannel(channel) {
     const packet = createSetChannelPacket(channel);

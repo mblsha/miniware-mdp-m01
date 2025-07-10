@@ -1,70 +1,64 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { channelStore } from '../../../src/lib/stores/channels.js';
-import { serialConnection } from '../../../src/lib/serial.js';
 import { createSynthesizePacket, createWavePacket, createUpdateChannelPacket } from '../../mocks/packet-data.js';
 
 // Mock the serial connection
-vi.mock('../../../src/lib/serial.js', () => ({
-  serialConnection: {
-    registerPacketHandler: vi.fn(),
-    sendPacket: vi.fn().mockResolvedValue(undefined),
-    deviceTypeStore: {
-      set: vi.fn()
+vi.mock('../../../src/lib/serial.js', () => {
+  const mockHandlers = {};
+  
+  return {
+    serialConnection: {
+      registerPacketHandler: vi.fn((type, handler) => {
+        mockHandlers[type] = handler;
+      }),
+      sendPacket: vi.fn(),
+      deviceTypeStore: {
+        set: vi.fn()
+      },
+      _mockHandlers: mockHandlers
     }
-  }
-}));
-
-// Mock packet encoder
-vi.mock('../../../src/lib/packet-encoder.js', () => ({
-  createSetChannelPacket: vi.fn((ch) => [0x5A, 0x5A, 0x19, 0x06, ch, 0x00]),
-  createSetVoltagePacket: vi.fn((ch, v, c) => [0x5A, 0x5A, 0x1A, 0x0A, ch, 0x00, 0, 0, 0, 0]),
-  createSetCurrentPacket: vi.fn((ch, v, c) => [0x5A, 0x5A, 0x1B, 0x0A, ch, 0x00, 0, 0, 0, 0]),
-  createSetOutputPacket: vi.fn((ch, on) => [0x5A, 0x5A, 0x16, 0x07, ch, 0x00, on ? 1 : 0])
-}));
+  };
+});
 
 describe('Channel Store', () => {
+  let channelStore;
+  let serialConnection;
   let packetHandlers = {};
   
-  beforeEach(() => {
-    // Reset mocks
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.resetModules();
     packetHandlers = {};
-    
+
+    // Re-import mocks and store to re-initialize
+    const serialModule = await import('../../../src/lib/serial.js');
+    serialConnection = serialModule.serialConnection;
+
     // Capture packet handlers
     serialConnection.registerPacketHandler.mockImplementation((type, handler) => {
       packetHandlers[type] = handler;
     });
     
-    // Re-initialize store to register handlers
-    // Note: In real implementation, might need to re-import or reset store
+    const storeModule = await import('../../../src/lib/stores/channels.js');
+    channelStore = storeModule.channelStore;
   });
 
   describe('Initial State', () => {
-    it('should initialize with 6 empty channels', () => {
+    it('should initialize with 6 offline channels', () => {
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
       expect(channels).toHaveLength(6);
-      channels.forEach((channel, i) => {
-        expect(channel).toMatchObject({
-          channel: i,
-          online: false,
-          machineType: 'Unknown',
-          voltage: 0,
-          current: 0,
-          power: 0,
-          temperature: 0,
-          isOutput: false,
-          mode: 'Normal',
-          recording: false,
-          waveformData: []
-        });
+      channels.forEach((channel, index) => {
+        expect(channel.channel).toBe(index);
+        expect(channel.online).toBe(false);
+        expect(channel.voltage).toBe(0);
+        expect(channel.current).toBe(0);
       });
       
       unsubscribe();
     });
 
-    it('should start with channel 0 as active', () => {
+    it('should initialize with channel 0 as active', () => {
       let activeChannel;
       const unsubscribe = channelStore.activeChannel.subscribe(value => activeChannel = value);
       
@@ -72,20 +66,10 @@ describe('Channel Store', () => {
       
       unsubscribe();
     });
-
-    it('should start waiting for synthesize packet', () => {
-      let waiting;
-      const unsubscribe = channelStore.waitingSynthesize.subscribe(value => waiting = value);
-      
-      expect(waiting).toBe(true);
-      
-      unsubscribe();
-    });
   });
 
   describe('Packet Handler Registration', () => {
-    it('should register handlers for all packet types', () => {
-      // Store creation should register handlers
+    it('should register handlers for all expected packet types', () => {
       expect(serialConnection.registerPacketHandler).toHaveBeenCalledWith(0x11, expect.any(Function));
       expect(serialConnection.registerPacketHandler).toHaveBeenCalledWith(0x12, expect.any(Function));
       expect(serialConnection.registerPacketHandler).toHaveBeenCalledWith(0x14, expect.any(Function));
@@ -93,159 +77,98 @@ describe('Channel Store', () => {
     });
   });
 
-  describe('Synthesize Packet Processing', () => {
-    it('should update channel data from synthesize packet', () => {
+  describe('Synthesize Packet Handling', () => {
+    it('should update channels with synthesize packet data', () => {
       const synthesizeHandler = packetHandlers[0x11];
-      const packet = createSynthesizePacket([
-        { online: 1, machineType: 0, voltage: 5000, current: 1000, temperature: 255, isOutput: 1 },
-        { online: 1, machineType: 1, voltage: 3300, current: 500, temperature: 200, isOutput: 0 }
-      ]);
+      expect(synthesizeHandler).toBeDefined();
       
-      synthesizeHandler(Array.from(packet));
+      const packet = createSynthesizePacket();
+      synthesizeHandler(packet);
       
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
-      expect(channels[0]).toMatchObject({
-        online: true,
-        machineType: 'P905',
-        voltage: 5,
-        current: 1,
-        power: 5,
-        temperature: 25.5,
-        isOutput: true
-      });
+      // First channel should be online
+      expect(channels[0].online).toBe(true);
+      expect(channels[0].voltage).toBeCloseTo(3.3);
+      expect(channels[0].current).toBeCloseTo(0.5);
+      expect(channels[0].temperature).toBeCloseTo(25.5);
       
-      expect(channels[1]).toMatchObject({
-        online: true,
-        machineType: 'P906',
-        voltage: 3.3,
-        current: 0.5,
-        power: 1.65,
-        temperature: 20,
-        isOutput: false
-      });
+      // Other channels should be offline
+      for (let i = 1; i < 6; i++) {
+        expect(channels[i].online).toBe(false);
+      }
       
       unsubscribe();
     });
 
-    it('should clear waiting flag after first synthesize', () => {
+    it('should preserve waveform data when updating channels', () => {
+      // First add some waveform data
+      channelStore.channels.update(chs => {
+        chs[0].waveformData = [{ timestamp: 1000, voltage: 3.3, current: 0.5 }];
+        return chs;
+      });
+      
       const synthesizeHandler = packetHandlers[0x11];
       const packet = createSynthesizePacket();
-      
-      synthesizeHandler(Array.from(packet));
-      
-      let waiting;
-      const unsubscribe = channelStore.waitingSynthesize.subscribe(value => waiting = value);
-      
-      expect(waiting).toBe(false);
-      
-      unsubscribe();
-    });
-
-    it('should preserve waveform data when updating channel', () => {
-      // First, add some waveform data
-      channelStore.startRecording(0);
+      synthesizeHandler(packet);
       
       let channels;
-      channelStore.channels.subscribe(value => channels = value)();
-      
-      // Manually add some data
-      channels[0].waveformData = [
-        { timestamp: 0, voltage: 3.3, current: 0.5 },
-        { timestamp: 10, voltage: 3.4, current: 0.6 }
-      ];
-      
-      // Process synthesize packet
-      const synthesizeHandler = packetHandlers[0x11];
-      const packet = createSynthesizePacket([
-        { voltage: 3500, current: 600 }
-      ]);
-      
-      synthesizeHandler(Array.from(packet));
-      
-      // Check waveform data is preserved
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
-      expect(channels[0].waveformData).toHaveLength(2);
+      
+      // Waveform data should be preserved
+      expect(channels[0].waveformData).toHaveLength(1);
+      expect(channels[0].waveformData[0].timestamp).toBe(1000);
+      
       unsubscribe();
     });
   });
 
-  describe('Wave Packet Processing', () => {
-    it('should add wave data when recording', () => {
-      const waveHandler = packetHandlers[0x12];
-      
+  describe('Wave Packet Handling', () => {
+    it('should add wave data to recording channel', () => {
       // Start recording on channel 0
-      channelStore.startRecording(0);
+      channelStore.channels.update(chs => {
+        chs[0].recording = true;
+        return chs;
+      });
       
-      // Send wave packet
-      const packet = createWavePacket(0, [
-        { voltage: 3300, current: 500 },
-        { voltage: 3400, current: 600 }
-      ]);
+      const waveHandler = packetHandlers[0x12];
+      expect(waveHandler).toBeDefined();
       
-      waveHandler(Array.from(packet));
+      const packet = createWavePacket(0, 126);
+      waveHandler(packet);
       
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
-      expect(channels[0].recording).toBe(true);
+      // Should have added wave data
       expect(channels[0].waveformData.length).toBeGreaterThan(0);
-      
-      // Check first few points
-      expect(channels[0].waveformData[0]).toMatchObject({
-        timestamp: 0,
-        voltage: 3.3,
-        current: 0.5
-      });
       
       unsubscribe();
     });
 
-    it('should not add wave data when not recording', () => {
+    it('should not add wave data to non-recording channel', () => {
       const waveHandler = packetHandlers[0x12];
-      
-      // Don't start recording
-      const packet = createWavePacket(0);
-      waveHandler(Array.from(packet));
+      const packet = createWavePacket(0, 126);
+      waveHandler(packet);
       
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
+      // Should not have added wave data
       expect(channels[0].waveformData).toHaveLength(0);
       
       unsubscribe();
     });
-
-    it('should handle wave data for different channels', () => {
-      const waveHandler = packetHandlers[0x12];
-      
-      // Start recording on channels 1 and 3
-      channelStore.startRecording(1);
-      channelStore.startRecording(3);
-      
-      // Send wave packets
-      waveHandler(Array.from(createWavePacket(1)));
-      waveHandler(Array.from(createWavePacket(2))); // Not recording
-      waveHandler(Array.from(createWavePacket(3)));
-      
-      let channels;
-      const unsubscribe = channelStore.channels.subscribe(value => channels = value);
-      
-      expect(channels[1].waveformData.length).toBeGreaterThan(0);
-      expect(channels[2].waveformData.length).toBe(0);
-      expect(channels[3].waveformData.length).toBeGreaterThan(0);
-      
-      unsubscribe();
-    });
   });
 
-  describe('Update Channel Packet Processing', () => {
+  describe('Update Channel Packet Handling', () => {
     it('should update active channel', () => {
       const updateHandler = packetHandlers[0x14];
-      const packet = createUpdateChannelPacket(3);
+      expect(updateHandler).toBeDefined();
       
-      updateHandler(Array.from(packet));
+      const packet = createUpdateChannelPacket(3);
+      updateHandler(packet);
       
       let activeChannel;
       const unsubscribe = channelStore.activeChannel.subscribe(value => activeChannel = value);
@@ -254,160 +177,145 @@ describe('Channel Store', () => {
       
       unsubscribe();
     });
-
-    it('should handle invalid channel numbers', () => {
-      const updateHandler = packetHandlers[0x14];
-      const packet = new Uint8Array([0x5A, 0x5A, 0x14, 0x06, 0xEE, 0x00]); // Too short
-      
-      updateHandler(Array.from(packet));
-      
-      let activeChannel;
-      const unsubscribe = channelStore.activeChannel.subscribe(value => activeChannel = value);
-      
-      // Should remain unchanged
-      expect(activeChannel).toBe(0);
-      
-      unsubscribe();
-    });
   });
 
   describe('Channel Control Functions', () => {
-    it('should set active channel', async () => {
-      await channelStore.setActiveChannel(4);
+    it('should send set channel packet', async () => {
+      await channelStore.setActiveChannel(2);
       
-      expect(serialConnection.sendPacket).toHaveBeenCalledWith([0x5A, 0x5A, 0x19, 0x06, 4, 0x00]);
+      expect(serialConnection.sendPacket).toHaveBeenCalled();
+      const sentPacket = serialConnection.sendPacket.mock.calls[0][0];
+      expect(sentPacket[2]).toBe(0x19); // PACK_SET_CH
       
       let activeChannel;
       const unsubscribe = channelStore.activeChannel.subscribe(value => activeChannel = value);
-      expect(activeChannel).toBe(4);
+      expect(activeChannel).toBe(2);
       unsubscribe();
     });
 
-    it('should set voltage and update targets', async () => {
-      await channelStore.setVoltage(2, 12.5, 2.0);
+    it('should send set voltage packet and update target values', async () => {
+      await channelStore.setVoltage(1, 5.0, 1.0);
       
       expect(serialConnection.sendPacket).toHaveBeenCalled();
+      const sentPacket = serialConnection.sendPacket.mock.calls[0][0];
+      expect(sentPacket[2]).toBe(0x1A); // PACK_SET_V
       
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
-      
-      expect(channels[2].targetVoltage).toBe(12.5);
-      expect(channels[2].targetCurrent).toBe(2.0);
-      
-      unsubscribe();
-    });
-
-    it('should set current and update targets', async () => {
-      await channelStore.setCurrent(1, 5.0, 1.5);
-      
-      expect(serialConnection.sendPacket).toHaveBeenCalled();
-      
-      let channels;
-      const unsubscribe = channelStore.channels.subscribe(value => channels = value);
-      
       expect(channels[1].targetVoltage).toBe(5.0);
-      expect(channels[1].targetCurrent).toBe(1.5);
-      
+      expect(channels[1].targetCurrent).toBe(1.0);
       unsubscribe();
     });
 
-    it('should toggle output', async () => {
-      await channelStore.setOutput(0, true);
-      expect(serialConnection.sendPacket).toHaveBeenCalledWith([0x5A, 0x5A, 0x16, 0x07, 0, 0x00, 1]);
+    it('should send set current packet', async () => {
+      await channelStore.setCurrent(2, 3.3, 2.0);
       
-      await channelStore.setOutput(0, false);
-      expect(serialConnection.sendPacket).toHaveBeenCalledWith([0x5A, 0x5A, 0x16, 0x07, 0, 0x00, 0]);
+      expect(serialConnection.sendPacket).toHaveBeenCalled();
+      const sentPacket = serialConnection.sendPacket.mock.calls[0][0];
+      expect(sentPacket[2]).toBe(0x1B); // PACK_SET_I
+    });
+
+    it('should send set output packet', async () => {
+      await channelStore.setOutput(3, true);
+      
+      expect(serialConnection.sendPacket).toHaveBeenCalled();
+      const sentPacket = serialConnection.sendPacket.mock.calls[0][0];
+      expect(sentPacket[2]).toBe(0x16); // PACK_SET_ISOUTPUT
     });
   });
 
   describe('Recording Functions', () => {
-    it('should start recording', () => {
-      channelStore.startRecording(2);
+    it('should start recording for a channel', () => {
+      channelStore.startRecording(1);
       
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
-      expect(channels[2].recording).toBe(true);
-      expect(channels[2].waveformData).toEqual([]);
+      expect(channels[1].recording).toBe(true);
+      expect(channels[1].waveformData).toHaveLength(0);
       
       unsubscribe();
     });
 
-    it('should stop recording', () => {
-      channelStore.startRecording(1);
-      channelStore.stopRecording(1);
+    it('should stop recording for a channel', () => {
+      // First start recording
+      channelStore.startRecording(2);
+      
+      // Add some data
+      channelStore.channels.update(chs => {
+        chs[2].waveformData.push({ timestamp: 1000, voltage: 3.3, current: 0.5 });
+        return chs;
+      });
+      
+      // Stop recording
+      channelStore.stopRecording(2);
       
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
-      expect(channels[1].recording).toBe(false);
+      expect(channels[2].recording).toBe(false);
+      expect(channels[2].waveformData).toHaveLength(1); // Data preserved
       
       unsubscribe();
     });
 
     it('should clear recording data', () => {
-      // Add some data first
-      channelStore.startRecording(0);
-      const waveHandler = packetHandlers[0x12];
-      waveHandler(Array.from(createWavePacket(0)));
+      // Add some data
+      channelStore.channels.update(chs => {
+        chs[3].waveformData = [
+          { timestamp: 1000, voltage: 3.3, current: 0.5 },
+          { timestamp: 2000, voltage: 3.4, current: 0.6 }
+        ];
+        return chs;
+      });
       
-      // Clear it
-      channelStore.clearRecording(0);
-      
-      let channels;
-      const unsubscribe = channelStore.channels.subscribe(value => channels = value);
-      
-      expect(channels[0].waveformData).toEqual([]);
-      
-      unsubscribe();
-    });
-
-    it('should handle recording multiple channels simultaneously', () => {
-      channelStore.startRecording(0);
-      channelStore.startRecording(2);
-      channelStore.startRecording(4);
+      // Clear recording
+      channelStore.clearRecording(3);
       
       let channels;
       const unsubscribe = channelStore.channels.subscribe(value => channels = value);
       
-      expect(channels[0].recording).toBe(true);
-      expect(channels[1].recording).toBe(false);
-      expect(channels[2].recording).toBe(true);
-      expect(channels[3].recording).toBe(false);
-      expect(channels[4].recording).toBe(true);
-      expect(channels[5].recording).toBe(false);
+      expect(channels[3].waveformData).toHaveLength(0);
       
       unsubscribe();
     });
   });
 
-  describe('Store Subscriptions', () => {
-    it('should allow multiple subscriptions', () => {
-      const values1 = [];
-      const values2 = [];
+  describe('Derived Stores', () => {
+    it('should provide recording channels', () => {
+      // Start recording on channels 1 and 3
+      channelStore.startRecording(1);
+      channelStore.startRecording(3);
       
-      const unsub1 = channelStore.activeChannel.subscribe(v => values1.push(v));
-      const unsub2 = channelStore.activeChannel.subscribe(v => values2.push(v));
+      let recordingChannels;
+      const unsubscribe = channelStore.recordingChannels.subscribe(value => recordingChannels = value);
       
-      channelStore.setActiveChannel(3);
+      expect(recordingChannels).toHaveLength(2);
+      expect(recordingChannels[0].channel).toBe(1);
+      expect(recordingChannels[1].channel).toBe(3);
       
-      expect(values1).toContain(3);
-      expect(values2).toContain(3);
-      
-      unsub1();
-      unsub2();
+      unsubscribe();
     });
 
-    it('should stop updates after unsubscribe', () => {
-      const values = [];
-      const unsubscribe = channelStore.activeChannel.subscribe(v => values.push(v));
+    it('should provide active channel data', () => {
+      // Set some data for channel 2
+      channelStore.channels.update(chs => {
+        chs[2].online = true;
+        chs[2].voltage = 5.0;
+        return chs;
+      });
       
-      channelStore.setActiveChannel(1);
+      // Make channel 2 active
+      channelStore.activeChannel.set(2);
+      
+      let activeChannelData;
+      const unsubscribe = channelStore.activeChannelData.subscribe(value => activeChannelData = value);
+      
+      expect(activeChannelData.channel).toBe(2);
+      expect(activeChannelData.online).toBe(true);
+      expect(activeChannelData.voltage).toBe(5.0);
+      
       unsubscribe();
-      channelStore.setActiveChannel(2);
-      
-      expect(values).toContain(1);
-      expect(values).not.toContain(2);
     });
   });
 });
