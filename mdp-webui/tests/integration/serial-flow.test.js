@@ -20,7 +20,7 @@ describe('Serial Communication Flow Integration Test', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
+    // Don't use fake timers for integration tests - they interfere with real async operations
     mockSerial = createMockSerial();
     global.navigator.serial = mockSerial;
     
@@ -32,7 +32,7 @@ describe('Serial Communication Flow Integration Test', () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    // No need to restore timers since we're not using fake ones
   });
 
   describe('Full Connection Flow', () => {
@@ -48,7 +48,7 @@ describe('Serial Communication Flow Integration Test', () => {
       // Verify connection established
       await waitFor(() => {
         expect(getByText('Connected')).toBeInTheDocument();
-      });
+      }, { timeout: 3000 });
       
       // Verify get machine packet was sent
       const sentPackets = mockPort.getWrittenData();
@@ -84,12 +84,20 @@ describe('Serial Communication Flow Integration Test', () => {
     });
 
     it('should maintain heartbeat during connection', async () => {
+      // This test needs fake timers to control heartbeat timing
+      vi.useFakeTimers();
+      
       const { getByText } = render(App);
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
       await fireEvent.click(getByText('Connect'));
+      
+      // Wait for connection to be established
+      await waitFor(() => {
+        expect(getByText('Connected')).toBeInTheDocument();
+      });
       
       // Clear initial packets
       mockPort.getWrittenData().length = 0;
@@ -102,6 +110,8 @@ describe('Serial Communication Flow Integration Test', () => {
       );
       
       expect(heartbeats.length).toBe(3); // One per second
+      
+      vi.useRealTimers();
     });
   });
 

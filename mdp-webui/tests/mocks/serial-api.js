@@ -43,6 +43,7 @@ export class MockReader {
     this.stream = stream;
     this.dataQueue = [];
     this.closed = false;
+    this.readCount = 0;
   }
 
   async read() {
@@ -54,7 +55,15 @@ export class MockReader {
       return { value: this.dataQueue.shift(), done: false };
     }
     
-    // Wait for data
+    // For the first few reads, return empty data to allow connection to complete
+    // This prevents the readLoop from blocking the connection process
+    this.readCount++;
+    if (this.readCount <= 3) {
+      // Return empty data immediately (no timer since tests use fake timers)
+      return Promise.resolve({ value: new Uint8Array([]), done: false });
+    }
+    
+    // After initial reads, wait for data to be pushed
     return new Promise((resolve) => {
       this.pendingRead = resolve;
     });
@@ -114,6 +123,8 @@ export class MockSerialPort {
     await this.openPromise;
     this.opened = true;
     this.config = config;
+    // Add a small delay to simulate real opening
+    await new Promise(resolve => setTimeout(resolve, 0));
     return Promise.resolve();
   }
 

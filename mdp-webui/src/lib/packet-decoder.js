@@ -88,7 +88,7 @@ export function processAddressPacket(packet) {
 export function processMachinePacket(packet) {
   if (!packet || !packet.data || packet.packType !== PackType.MACHINE) return null;
   
-  const machineType = packet.data.deviceType;
+  const machineType = packet.data.machineTypeRaw;
   return {
     type: machineType === 0x10 ? 'M01' : 'M02',
     hasLCD: machineType === 0x10

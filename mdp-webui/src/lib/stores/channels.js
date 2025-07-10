@@ -4,11 +4,11 @@ import { decodePacket, processSynthesizePacket, processWavePacket, processMachin
 import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder';
 
 const PACKET_TYPES = {
-  SYNTHESIZE: 0x11,
-  WAVE: 0x12,
-  ADDR: 0x13,
-  UPDATE_CH: 0x14,
-  MACHINE: 0x15
+  SYNTHESIZE: 17,  // 0x11
+  WAVE: 18,        // 0x12
+  ADDR: 19,        // 0x13
+  UPDATE_CH: 20,   // 0x14
+  MACHINE: 21      // 0x15
 };
 
 export function createChannelStore() {

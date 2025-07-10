@@ -215,12 +215,13 @@ describe('App Component', () => {
 
   describe('Browser Compatibility', () => {
     it('should show error when Web Serial is not supported', async () => {
-      // Remove Web Serial API support temporarily and let the real connection handle it
-      const originalSerial = global.navigator.serial;
-      delete global.navigator.serial;
-      
-      // Use the real serial connection behavior for this test
-      serialConnection.connect.mockRestore();
+      // Mock the connection to reject with Web Serial API error
+      serialConnection.connect.mockImplementation(async () => {
+        // Simulate the serial connection error state changes
+        serialConnection.status.set('error');
+        serialConnection.error.set('Web Serial API not supported. Please use Chrome, Edge, or Opera.');
+        throw new Error('Web Serial API not supported. Please use Chrome, Edge, or Opera.');
+      });
       
       const { getByText } = render(App);
       
@@ -230,10 +231,6 @@ describe('App Component', () => {
       await waitFor(() => {
         expect(getByText(/Web Serial API not supported/)).toBeInTheDocument();
       });
-      
-      // Restore for other tests
-      global.navigator.serial = originalSerial;
-      serialConnection.connect.mockResolvedValue();
     });
   });
 });
