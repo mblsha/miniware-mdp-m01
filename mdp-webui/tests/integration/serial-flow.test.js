@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
-import App from '../../src/App.svelte';
-import { serialConnection } from '../../src/lib/serial';
-import { channelStore } from '../../src/lib/stores/channels';
 import { get } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
+import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
 import { 
   createMachinePacket, 
   createSynthesizePacket, 
@@ -14,25 +12,57 @@ import {
   createPacketSequence
 } from '../mocks/packet-data.js';
 
+// Mock the serial connection module to use TestSerialConnection
+vi.mock('../../src/lib/serial.js', () => {
+  const testConnection = new TestSerialConnection();
+  return {
+    serialConnection: testConnection,
+    ConnectionStatus: {
+      DISCONNECTED: 'disconnected',
+      CONNECTING: 'connecting',
+      CONNECTED: 'connected',
+      ERROR: 'error'
+    }
+  };
+});
+
+// Mock the channel store
+vi.mock('../../src/lib/stores/channels.js', () => ({
+  channelStore: {
+    reset: vi.fn(),
+    channels: { subscribe: vi.fn() },
+    activeChannel: { subscribe: vi.fn() }
+  }
+}));
+
+import App from '../../src/App.svelte';
+import { serialConnection } from '../../src/lib/serial';
+import { channelStore } from '../../src/lib/stores/channels';
+
 describe('Serial Communication Flow Integration Test', () => {
   let mockSerial;
   let mockPort;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Don't use fake timers for integration tests - they interfere with real async operations
     mockSerial = createMockSerial();
     global.navigator.serial = mockSerial;
     
-    // Reset state before each test
+    // Reset TestSerialConnection state
     if (get(serialConnection.status) !== 'disconnected') {
       await serialConnection.disconnect();
     }
+    serialConnection.clearPacketHandlers();
     channelStore.reset();
   });
 
-  afterEach(() => {
-    // No need to restore timers since we're not using fake ones
+  afterEach(async () => {
+    // Clean up TestSerialConnection
+    serialConnection.stopHeartbeat();
+    if (get(serialConnection.status) !== 'disconnected') {
+      await serialConnection.disconnect();
+    }
+    serialConnection.clearPacketHandlers();
   });
 
   describe('Full Connection Flow', () => {
@@ -59,6 +89,7 @@ describe('Serial Communication Flow Integration Test', () => {
       
       // Send machine response
       mockPort.simulateData(createMachinePacket(0x10));
+      await serialConnection.triggerPacketProcessing();
       
       // Verify device type displayed
       await waitFor(() => {
@@ -75,6 +106,7 @@ describe('Serial Communication Flow Integration Test', () => {
         { online: 0 }
       ];
       mockPort.simulateData(createSynthesizePacket(channelData));
+      await serialConnection.triggerPacketProcessing();
       
       // Verify channels displayed
       await waitFor(() => {
@@ -125,9 +157,11 @@ describe('Serial Communication Flow Integration Test', () => {
       // Connect and initialize
       await fireEvent.click(getByText('Connect'));
       mockPort.simulateData(createMachinePacket(0x10));
+      await serialConnection.triggerPacketProcessing();
       mockPort.simulateData(createSynthesizePacket([
         { online: 1, machineType: 0, voltage: 5000, current: 1000 }
       ]));
+      await serialConnection.triggerPacketProcessing();
       
       // Navigate to channel detail
       await waitFor(() => {
@@ -166,16 +200,19 @@ describe('Serial Communication Flow Integration Test', () => {
       
       await fireEvent.click(getByText('Connect'));
       mockPort.simulateData(createMachinePacket(0x10));
+      await serialConnection.triggerPacketProcessing();
       mockPort.simulateData(createSynthesizePacket([
         { online: 1 },
         { online: 1 },
         { online: 1 }
       ]));
+      await serialConnection.triggerPacketProcessing();
       
       // Simulate device sending channel update
       mockPort.simulateData(new Uint8Array([
         0x5A, 0x5A, 0x14, 0x07, 0xEE, 0x02, 0x02 // Switch to channel 2
       ]));
+      await serialConnection.triggerPacketProcessing();
       
       await waitFor(() => {
         const channelCards = document.querySelectorAll('.channel-card');

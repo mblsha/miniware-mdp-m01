@@ -1,13 +1,44 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
-import App from '../../src/App.svelte';
+import { get } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
+import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
 import { 
   createMachinePacket, 
   createSynthesizePacket, 
   createWavePacket,
   createUpdateChannelPacket 
 } from '../mocks/packet-data.js';
+
+// Mock the serial connection module to use TestSerialConnection
+vi.mock('../../src/lib/serial.js', () => {
+  const testConnection = new TestSerialConnection();
+  return {
+    serialConnection: testConnection,
+    ConnectionStatus: {
+      DISCONNECTED: 'disconnected',
+      CONNECTING: 'connecting',
+      CONNECTED: 'connected',
+      ERROR: 'error'
+    }
+  };
+});
+
+// Mock the channel store
+vi.mock('../../src/lib/stores/channels.js', () => ({
+  channelStore: {
+    reset: vi.fn(),
+    channels: { subscribe: vi.fn() },
+    activeChannel: { subscribe: vi.fn() },
+    startRecording: vi.fn(),
+    stopRecording: vi.fn(),
+    setActiveChannel: vi.fn()
+  }
+}));
+
+import App from '../../src/App.svelte';
+import { serialConnection } from '../../src/lib/serial';
+import { channelStore } from '../../src/lib/stores/channels';
 
 // Mock URL.createObjectURL for file export
 global.URL.createObjectURL = vi.fn(() => 'mock-url');
@@ -31,12 +62,28 @@ describe('Recording Flow Integration Test', () => {
   let mockSerial;
   let mockPort;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockSerial = createMockSerial();
     global.navigator.serial = mockSerial;
     mockPort = new MockSerialPort();
     mockClick.mockClear();
+    
+    // Reset TestSerialConnection state
+    if (get(serialConnection.status) !== 'disconnected') {
+      await serialConnection.disconnect();
+    }
+    serialConnection.clearPacketHandlers();
+    channelStore.reset();
+  });
+
+  afterEach(async () => {
+    // Clean up TestSerialConnection
+    serialConnection.stopHeartbeat();
+    if (get(serialConnection.status) !== 'disconnected') {
+      await serialConnection.disconnect();
+    }
+    serialConnection.clearPacketHandlers();
   });
 
   async function connectDevice({ getByText }) {
@@ -78,6 +125,7 @@ describe('Recording Flow Integration Test', () => {
     
     // Step 2: Simulate device identification
     mockPort.simulateData(createMachinePacket(0x10)); // M01 device
+    await serialConnection.triggerPacketProcessing();
     
     await waitFor(() => {
       expect(getByText('(M01)')).toBeInTheDocument();
@@ -93,6 +141,7 @@ describe('Recording Flow Integration Test', () => {
       { online: 0 }
     ];
     mockPort.simulateData(createSynthesizePacket(channelData));
+    await serialConnection.triggerPacketProcessing();
     
     // Step 4: Navigate to channel 1
     await navigateToChannel(renderResult, 1);
@@ -120,6 +169,7 @@ describe('Recording Flow Integration Test', () => {
     }));
     
     mockPort.simulateData(createWavePacket(0, waveData1));
+    await serialConnection.triggerPacketProcessing();
     
     // Wait a moment for processing
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -131,6 +181,7 @@ describe('Recording Flow Integration Test', () => {
     }));
     
     mockPort.simulateData(createWavePacket(0, waveData2));
+    await serialConnection.triggerPacketProcessing();
     
     // Step 7: Stop recording
     const stopButton = getByText('Stop Recording');

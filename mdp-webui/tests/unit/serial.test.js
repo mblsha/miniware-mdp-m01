@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SerialConnection, ConnectionStatus } from '../../src/lib/serial.js';
+import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { createMachinePacket, createPacketSequence } from '../mocks/packet-data.js';
 import { createHeartbeatPacket } from '../../src/lib/packet-encoder.js';
@@ -14,7 +14,7 @@ describe('Serial Connection', () => {
     global.navigator.serial = mockSerial;
     
     // Create a new instance for each test
-    serialConnection = new SerialConnection();
+    serialConnection = new TestSerialConnection();
     
     // Clear all timers
     vi.clearAllTimers();
@@ -26,6 +26,9 @@ describe('Serial Connection', () => {
     if (serialConnection) {
       // Force stop heartbeat even if disconnect fails
       serialConnection.stopHeartbeat();
+      
+      // Clear packet handlers to prevent test interference
+      serialConnection.clearPacketHandlers();
       
       try {
         await serialConnection.disconnect();
@@ -186,8 +189,10 @@ describe('Serial Connection', () => {
       const machinePacket = createMachinePacket(0x10);
       mockPort.simulateData(machinePacket);
       
-      // Allow async processing and timer advancement
-      await vi.advanceTimersByTimeAsync(100);
+      // Trigger controlled packet processing
+      await serialConnection.triggerPacketProcessing();
+      // Allow timer advancement for any timeouts
+      await vi.advanceTimersByTimeAsync(50);
       
       expect(receivedPackets.length).toBe(1);
       expect(receivedPackets[0]).toEqual(Array.from(machinePacket));

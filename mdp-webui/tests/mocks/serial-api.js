@@ -55,25 +55,9 @@ export class MockReader {
       return { value: this.dataQueue.shift(), done: false };
     }
     
-    // For the first few reads, return empty data to allow connection to complete
-    // This prevents the readLoop from blocking the connection process
-    this.readCount++;
-    if (this.readCount <= 3) {
-      // Return empty data immediately (no timer since tests use fake timers)
-      return Promise.resolve({ value: new Uint8Array([]), done: false });
-    }
-    
-    // After initial reads, wait for data to be pushed or timeout
-    return new Promise((resolve) => {
-      this.pendingRead = resolve;
-      // Auto-resolve with empty data after a short timeout to prevent infinite hanging
-      setTimeout(() => {
-        if (this.pendingRead === resolve) {
-          this.pendingRead = null;
-          resolve({ value: new Uint8Array([]), done: false });
-        }
-      }, 100);
-    });
+    // Always return empty data immediately for test environment
+    // This prevents any hanging and allows controlled packet processing
+    return Promise.resolve({ value: new Uint8Array([]), done: false });
   }
 
   async cancel() {
@@ -84,12 +68,7 @@ export class MockReader {
 
   // Helper method to push data for testing
   pushData(data) {
-    if (this.pendingRead) {
-      this.pendingRead({ value: data, done: false });
-      this.pendingRead = null;
-    } else {
-      this.dataQueue.push(data);
-    }
+    this.dataQueue.push(data);
   }
 }
 
@@ -130,8 +109,8 @@ export class MockSerialPort {
     await this.openPromise;
     this.opened = true;
     this.config = config;
-    // Add a small delay to simulate real opening
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Immediate completion for test environment (no delays needed)
+    // await new Promise(resolve => setTimeout(resolve, 0));
     return Promise.resolve();
   }
 
