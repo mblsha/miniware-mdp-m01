@@ -57,14 +57,14 @@ export class SerialConnection {
 
       this.statusStore.set(ConnectionStatus.CONNECTED);
       
-      // Start reading data
-      this.readLoop();
+      // Start reading data (but don't await it)
+      this.readPromise = this.readLoop();
       
       // Start heartbeat
       this.startHeartbeat();
       
-      // Get device info
-      await this.getMachineType();
+      // Get device info (don't wait for response)
+      this.getMachineType().catch(console.error);
 
     } catch (error) {
       this.statusStore.set(ConnectionStatus.ERROR);

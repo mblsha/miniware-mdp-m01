@@ -63,9 +63,16 @@ export class MockReader {
       return Promise.resolve({ value: new Uint8Array([]), done: false });
     }
     
-    // After initial reads, wait for data to be pushed
+    // After initial reads, wait for data to be pushed or timeout
     return new Promise((resolve) => {
       this.pendingRead = resolve;
+      // Auto-resolve with empty data after a short timeout to prevent infinite hanging
+      setTimeout(() => {
+        if (this.pendingRead === resolve) {
+          this.pendingRead = null;
+          resolve({ value: new Uint8Array([]), done: false });
+        }
+      }, 100);
     });
   }
 
