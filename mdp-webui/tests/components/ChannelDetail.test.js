@@ -76,6 +76,7 @@ describe('ChannelDetail Component', () => {
   });
 
   afterEach(() => {
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -249,17 +250,21 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should update timer during recording', async () => {
-      mockChannelData[0].recording = true;
-      setMockChannels(mockChannelData);
-      
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      
+      // Start recording by clicking the button
+      await fireEvent.click(getByText('Start Recording'));
+      
+      // Update the store to reflect recording state
+      mockChannelData[0].recording = true;
+      setMockChannels([...mockChannelData]);
       
       // Advance timer by 65 seconds
       await vi.advanceTimersByTimeAsync(65000);
       
       await waitFor(() => {
         expect(getByText('Recording... 1:05')).toBeInTheDocument();
-      }, { timeout: 1000 });
+      });
     });
 
     it('should stop recording when stop clicked', async () => {
@@ -430,17 +435,23 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should handle very long recording sessions', async () => {
-      mockChannelData[0].recording = true;
-      setMockChannels(mockChannelData);
-      
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
-      // Advance by 1 hour
-      await vi.advanceTimersByTimeAsync(3600000);
+      // Start recording by clicking the button
+      await fireEvent.click(getByText('Start Recording'));
+      
+      // Update the store to reflect recording state
+      mockChannelData[0].recording = true;
+      setMockChannels([...mockChannelData]);
+      
+      // Advance by 1 hour in smaller chunks to avoid timeout
+      for (let i = 0; i < 60; i++) {
+        await vi.advanceTimersByTimeAsync(60000); // 1 minute at a time
+      }
       
       await waitFor(() => {
         expect(getByText('Recording... 60:00')).toBeInTheDocument();
-      }, { timeout: 1000 });
+      });
     });
 
     it('should handle rapid parameter changes', async () => {
