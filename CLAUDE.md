@@ -273,6 +273,240 @@ Each test validates:
 - All fields match between C++ generator and Kaitai parser
 - Calculated fields (e.g., `is_output_on()`, `frequency()`) work correctly
 
+## Web UI Development
+
+### Key Commands
+```bash
+# Navigate to web UI directory
+cd mdp-webui
+
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Run tests
+npm test
+
+# Run specific test file
+npm test -- tests/unit/stores/channels.test.js
+
+# Check code coverage
+npm run coverage
+```
+
+### Critical Testing Insights
+
+#### State Management Anti-Patterns
+**Problem**: Singleton stores (like `serialConnection` and `channelStore`) maintain state between tests, causing failures when tests expect clean initial state.
+
+**Solution**: Always implement and call `reset()` methods in test setup:
+```javascript
+// In store implementation
+function reset() {
+  channels.set(getInitialState());
+  activeChannel.set(0);
+  waitingSynthesize.set(true);
+}
+
+// In test beforeEach
+beforeEach(async () => {
+  if (get(serialConnection.status) !== 'disconnected') {
+    await serialConnection.disconnect();
+  }
+  channelStore.reset();
+});
+```
+
+#### Kaitai-JS Integration Challenges
+**Critical Property Mapping**: The Kaitai-generated JavaScript parser uses different property names than the original C++ implementation:
+
+```javascript
+// WRONG (old decoder assumptions)
+voltage: ch.voltage / 1000
+current: ch.current / 1000
+temperature: ch.temperature / 10
+isOutput: ch.isOutput
+machineType: ch.machineType
+
+// CORRECT (Kaitai JS properties)
+voltage: ch.outVoltage        // Already converted to V
+current: ch.outCurrent        // Already converted to A  
+temperature: ch.temperature   // Already converted to °C
+isOutput: ch.outputOn !== 0
+machineType: ch.type
+```
+
+**Key Differences**:
+- Kaitai performs unit conversions automatically (mV→V, mA→A, raw→°C)
+- Field names follow Kaitai naming conventions vs C++ style
+- Nested structures use `items` not `datas` for wave packet groups
+- Enum values must match exactly between implementations
+
+#### Timer Management in Tests
+**Problem**: `setInterval` heartbeat timers cause infinite loops in Vitest with `vi.runAllTimersAsync()`.
+
+**Solution**: Use bounded timer advancement and proper cleanup:
+```javascript
+// Replace infinite timer runners
+await vi.advanceTimersByTimeAsync(10);  // Not runAllTimersAsync()
+
+// Ensure cleanup
+afterEach(async () => {
+  serialConnection.stopHeartbeat();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+```
+
+#### Mock Data Structural Accuracy
+**Critical**: Test mocks must exactly match real protocol structure. The Synthesize packet structure is 25 bytes per channel:
+```javascript
+// Correct Kaitai structure (25 bytes per channel)
+data.push(i);                    // num (channel)
+data.push(outVoltage & 0xFF);    // outVoltageRaw (LE)
+data.push((outVoltage >> 8));
+data.push(outCurrent & 0xFF);    // outCurrentRaw (LE)
+data.push((outCurrent >> 8));
+// ... inVoltage, inCurrent, setVoltage, setCurrent, tempRaw
+data.push(ch.online || 0);       // online
+data.push(ch.machineType || 2);  // type (P906=2, L1060=3)
+data.push(0);                    // lock
+data.push(ch.mode || 0);         // statusLoad/statusPsu
+data.push(ch.isOutput || 0);     // outputOn
+data.push(0, 0, 0);             // color (3 bytes)
+data.push(0);                    // error
+data.push(0xFF);                 // end marker
+```
+
+#### Store API Design Patterns
+**Best Practice**: Export both writable stores for internal use and derived stores for components:
+```javascript
+return {
+  channels,                    // Writable for internal updates
+  activeChannel: derived(...), // Read-only for components
+  activeChannelData,          // Computed properties
+  recordingChannels,          // Filtered views
+  reset                       // Test utility
+};
+```
+
+### Test Categories and Status
+- **Integration Tests**: 12 tests fixed (state bleeding resolved)
+- **Unit Tests**: 41 tests fixed (decoder properties, timer management)
+- **Component Tests**: 78 remaining failures (similar property mapping issues)
+
+The component tests likely need similar attention to property name mapping and mock data accuracy.
+
+### Critical Test Suite Debugging Methodology
+
+#### Root Cause Analysis Framework
+When facing widespread test failures (78+ failing tests), use this systematic approach:
+
+1. **Environment Issues First** (High Impact, Easy Fix)
+   - Missing browser APIs (Canvas, Web Serial, etc.)
+   - Incorrect mock setups causing crashes
+   - Build system configuration problems
+
+2. **Application Logic Bugs** (Medium Impact, Medium Fix)  
+   - Packet parsing logic errors
+   - State management inconsistencies
+   - Serial communication buffer handling
+
+3. **Test Logic Bugs** (Lower Impact, Harder to Diagnose)
+   - Async/timing issues and race conditions
+   - Incorrect test assertions and setup
+   - Helper function argument mismatches
+
+#### Environmental Fixes with High ROI
+
+**Canvas API Error**: The most critical fix was installing the `canvas` package as a dev dependency. This single change resolved crashes in all chart-related components and tests.
+
+```bash
+npm install -D canvas --legacy-peer-deps
+```
+
+**Component Mocking Strategy**: Create actual minimal Svelte components instead of trying to mock with objects or classes:
+
+```javascript
+// ❌ WRONG - Complex mock objects that break
+vi.mock('../../src/lib/components/WaveformChart.svelte', () => ({
+  default: class MockWaveformChart { constructor(options) { this.options = options; } }
+}));
+
+// ✅ CORRECT - Simple mock Svelte component  
+vi.mock('../../src/lib/components/WaveformChart.svelte', () => ({
+  default: vi.importActual('../mocks/components/MockWaveformChart.svelte')
+}));
+```
+
+#### Vi.Mock Hoisting Anti-Patterns
+
+**Problem**: Variable access before initialization in mock factories.
+
+**Solution**: Use `vi.hoisted()` for variables needed in mocks:
+
+```javascript
+// ❌ WRONG - Variables accessed before initialization
+const mockConnect = vi.fn();
+vi.mock('../../src/lib/serial.js', () => ({
+  serialConnection: { connect: mockConnect } // ReferenceError!
+}));
+
+// ✅ CORRECT - Hoisted variables
+const mockConnect = vi.hoisted(() => vi.fn());
+vi.mock('../../src/lib/serial.js', () => ({
+  serialConnection: { connect: mockConnect }
+}));
+```
+
+#### Packet Processing Debug Patterns
+
+**Critical Insight**: Mock packet structure must exactly match the real Kaitai parser output, including property names and data types.
+
+```javascript
+// Common failure pattern: Mock structure mismatch
+// Test expects: packet.data.groups[0].items[0].voltage
+// Mock provides: packet.data.datas[0].points[0].voltage_raw
+
+// Fix: Match exact Kaitai property names and conversions
+const mockParser = {
+  groups: [{
+    timestamp: 100,  // Not 0 - tests expect > 0
+    items: [{        // Not "points" 
+      voltage: 3.3,  // Already converted, not voltage_raw
+      current: 0.5   // Already converted, not current_raw
+    }]
+  }]
+};
+```
+
+#### Test Failure Triage Priority
+
+1. **Crashes/Cannot Run** (Priority 1): Fix environment and mocking first
+2. **Logic Errors** (Priority 2): Fix packet processing and state management  
+3. **Assertion Failures** (Priority 3): Fix test expectations and timing
+4. **Edge Cases** (Priority 4): Handle boundary conditions and error states
+
+#### Debugging Output Analysis
+
+**Key Pattern**: Look for the most frequent error types first:
+- `HTMLCanvasElement.prototype.getContext` → Canvas package needed
+- `vi.mock factory` errors → Hoisting issues
+- `Cannot read properties of undefined` → Mock structure mismatch
+- `Test timed out` → Async/await issues or infinite loops
+- `Unable to find element` → Component not rendering due to earlier crashes
+
+#### Success Metrics
+
+After systematic fixes:
+- **Before**: Majority failing, many crashes preventing test execution
+- **After**: 137 passing / 78 failing (64% success rate) 
+- **Foundation**: Stable test infrastructure ready for remaining issues
+
+The key insight is that fixing environmental issues first creates a stable foundation where individual test logic can be debugged effectively.
+
 ## Important Considerations
 
 - The C++ code references Qt's deprecated features and may need updates for newer Qt versions
