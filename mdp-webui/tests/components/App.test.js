@@ -4,6 +4,9 @@ import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { createMachinePacket, createSynthesizePacket } from '../mocks/packet-data.js';
 
 // Mock serial.js with simplified store mocking
+const mockConnect = vi.hoisted(() => vi.fn());
+const mockDisconnect = vi.hoisted(() => vi.fn());
+
 vi.mock('../../src/lib/serial.js', () => {
   const { writable } = require('svelte/store');
   return {
@@ -11,8 +14,8 @@ vi.mock('../../src/lib/serial.js', () => {
       status: writable('disconnected'),
       error: writable(null),
       deviceType: writable(null),
-      connect: vi.fn(),
-      disconnect: vi.fn(),
+      connect: mockConnect,
+      disconnect: mockDisconnect,
     },
     ConnectionStatus: {
       DISCONNECTED: 'disconnected',
@@ -47,7 +50,7 @@ describe('App Component', () => {
     serialConnection.status.set('disconnected');
     serialConnection.error.set(null);
     serialConnection.deviceType.set(null);
-    serialConnection.connect.mockResolvedValue();
+    mockConnect.mockResolvedValue();
     mockSerial = createMockSerial();
     global.navigator.serial = mockSerial;
   });
@@ -67,7 +70,7 @@ describe('App Component', () => {
       const { getByText, queryByText } = render(App);
 
       const connectButton = getByText('Connect');
-      serialConnection.connect.mockImplementation(async () => {
+      mockConnect.mockImplementation(async () => {
         serialConnection.status.set('connecting');
         await new Promise(resolve => setTimeout(resolve, 10));
         serialConnection.status.set('connected');
@@ -95,7 +98,7 @@ describe('App Component', () => {
 
     it('should handle connection errors', async () => {
       const { getByText } = render(App);
-      serialConnection.connect.mockRejectedValue(new Error('Port not available'));
+      mockConnect.mockRejectedValue(new Error('Port not available'));
       await fireEvent.click(getByText('Connect'));
       serialConnection.status.set('error');
       serialConnection.error.set('Port not available');
@@ -116,7 +119,7 @@ describe('App Component', () => {
       });
       
       // Then disconnect
-      serialConnection.disconnect.mockImplementation(() => {
+      mockDisconnect.mockImplementation(() => {
         serialConnection.status.set('disconnected');
       });
       
@@ -216,7 +219,7 @@ describe('App Component', () => {
   describe('Browser Compatibility', () => {
     it('should show error when Web Serial is not supported', async () => {
       // Mock the connection to reject with Web Serial API error
-      serialConnection.connect.mockImplementation(async () => {
+      mockConnect.mockImplementation(async () => {
         // Simulate the serial connection error state changes
         serialConnection.status.set('error');
         serialConnection.error.set('Web Serial API not supported. Please use Chrome, Edge, or Opera.');
