@@ -213,7 +213,7 @@ describe('Recording Flow Integration Test', () => {
     const renderResult = render(App);
     const { container, getByText, queryByText } = renderResult;
     
-    await connectDevice(container);
+    await connectDevice(renderResult);
     mockPort.simulateData(createMachinePacket(0x10));
     mockPort.simulateData(createSynthesizePacket([
       { online: 1, machineType: 0, voltage: 5000, current: 1000 }
@@ -244,7 +244,7 @@ describe('Recording Flow Integration Test', () => {
     const renderResult = render(App);
     const { container, getByText, queryByText } = renderResult;
     
-    await connectDevice(container);
+    await connectDevice(renderResult);
     mockPort.simulateData(createMachinePacket(0x10));
     mockPort.simulateData(createSynthesizePacket([
       { online: 1, machineType: 0, voltage: 5000, current: 1000 }
@@ -277,7 +277,7 @@ describe('Recording Flow Integration Test', () => {
     const renderResult = render(App);
     const { container, getByText, queryByText } = renderResult;
     
-    await connectDevice(container);
+    await connectDevice(renderResult);
     mockPort.simulateData(createMachinePacket(0x10));
     mockPort.simulateData(createSynthesizePacket([
       { online: 1, machineType: 0, voltage: 5000, current: 1000 }
@@ -296,7 +296,7 @@ describe('Recording Flow Integration Test', () => {
   it('should update active channel from device', async () => {
     const { container } = render(App);
     
-    await connectDevice(container);
+    await connectDevice(renderResult);
     mockPort.simulateData(createMachinePacket(0x10));
     mockPort.simulateData(createSynthesizePacket([
       { online: 1, machineType: 0 },

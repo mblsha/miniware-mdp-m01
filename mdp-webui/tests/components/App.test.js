@@ -2,16 +2,24 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { createMachinePacket, createSynthesizePacket } from '../mocks/packet-data.js';
-import { writable } from 'svelte/store';
 
-// Create mocks at the top level
-const mockStatus = writable('disconnected');
-const mockError = writable(null);
-const mockDeviceType = writable(null);
-const mockConnect = vi.fn();
-const mockDisconnect = vi.fn();
+// Create hoisted mock variables - accessing imported modules after they're available  
+const mockStatus = vi.hoisted(() => {
+  const { writable } = require('svelte/store');
+  return writable('disconnected');
+});
+const mockError = vi.hoisted(() => {
+  const { writable } = require('svelte/store');
+  return writable(null);
+}); 
+const mockDeviceType = vi.hoisted(() => {
+  const { writable } = require('svelte/store');
+  return writable(null);
+});
+const mockConnect = vi.hoisted(() => vi.fn());
+const mockDisconnect = vi.hoisted(() => vi.fn());
 
-// Mock serial.js
+// Mock serial.js with hoisted variables
 vi.mock('../../src/lib/serial.js', () => ({
   serialConnection: {
     status: mockStatus,

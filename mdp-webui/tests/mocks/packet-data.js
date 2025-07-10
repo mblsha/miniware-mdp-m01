@@ -88,22 +88,30 @@ export function createSynthesizePacket(channelData = []) {
   return new Uint8Array(packet);
 }
 
-export function createWavePacket(channel = 0, points = []) {
-  const packet = [0x5A, 0x5A, 0x12, 0x7E, channel];
+export function createWavePacket(channel = 0, sizeOrPoints = []) {
+  // If second parameter is a number, it's the packet size
+  const isSize = typeof sizeOrPoints === 'number';
+  const size = isSize ? sizeOrPoints : 126;
+  const points = isSize ? [] : sizeOrPoints;
+  
+  const packet = [0x5A, 0x5A, 0x12, size, channel];
   const data = [];
+  
+  // Determine points per group based on size
+  const pointsPerGroup = size === 126 ? 2 : 4;
   
   // Create 10 groups
   for (let i = 0; i < 10; i++) {
-    // Timestamp (4 bytes, little-endian)
-    const timestamp = i * 100;
+    // Timestamp (4 bytes, little-endian) - start from 100ms to make it > 0
+    const timestamp = (i + 1) * 100;
     data.push(timestamp & 0xFF);
     data.push((timestamp >> 8) & 0xFF);
     data.push((timestamp >> 16) & 0xFF);
     data.push((timestamp >> 24) & 0xFF);
     
-    // 2 data points per group
-    for (let j = 0; j < 2; j++) {
-      const point = points[i * 2 + j] || { voltage: 3300, current: 500 };
+    // Variable number of data points per group
+    for (let j = 0; j < pointsPerGroup; j++) {
+      const point = points[i * pointsPerGroup + j] || { voltage: 3300, current: 500 };
       
       // Voltage (little-endian)
       data.push(point.voltage & 0xFF);
@@ -142,10 +150,13 @@ export function createAddressPacket(addresses = []) {
   
   // 6 channels × 6 bytes each
   for (let i = 0; i < 6; i++) {
-    const addr = addresses[i] || {
-      address: [0x00, 0x00, 0x00, 0x00, 0x00],
+    const addr = addresses[i] || (i === 0 ? {
+      address: [0x01, 0x02, 0x03, 0x04, 0x05], // Default test data only for first channel
+      frequencyOffset: 40  // 2400 + 40 = 2440 MHz
+    } : {
+      address: [0x00, 0x00, 0x00, 0x00, 0x00], // Empty for other channels
       frequencyOffset: 0
-    };
+    });
     
     data.push(...addr.address);
     data.push(addr.frequencyOffset);

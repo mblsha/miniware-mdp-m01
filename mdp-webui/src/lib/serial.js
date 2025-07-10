@@ -111,20 +111,29 @@ export class SerialConnection {
         
       } catch (error) {
         console.error('Read error:', error);
-        if (this.statusStore.get() === ConnectionStatus.DISCONNECTED) {
-          break;
+        // Don't break immediately if not a disconnect error
+        if (this.port && this.port.readable) {
+          this.statusStore.set(ConnectionStatus.ERROR);
+          this.errorStore.set(error.message);
         }
-        this.statusStore.set(ConnectionStatus.ERROR);
-        this.errorStore.set(error.message);
-        break;
+        break; // Always break the loop on error
       }
     }
   }
 
   processBuffer(buffer) {
     while (buffer.length >= 6) {
-      // Check for packet header
+      // Find the start of a packet
+      while (buffer.length > 0 && buffer[0] !== 0x5A) {
+        buffer.shift();
+      }
+      
+      // If not enough data for a header, break
+      if (buffer.length < 2) break;
+
+      // Check for full packet header
       if (buffer[0] !== 0x5A || buffer[1] !== 0x5A) {
+        // This case should be rare now, but as a safeguard:
         buffer.shift();
         continue;
       }

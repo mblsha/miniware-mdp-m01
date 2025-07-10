@@ -77,14 +77,14 @@ vi.mock('../../src/lib/kaitai/MiniwareMdpM01.js', () => {
         this.header2 = this.stream.readU1();
         const packetType = this.stream.readU1();
         this.size = this.stream.readU1();
-        const channel = this.stream.readU1();
+        this.channel = this.stream.readU1();
         this.checksum = this.stream.readU1();
         
         // Create packet structure matching real Kaitai output
         const packet = {
           packType: packetType,
           size: this.size,
-          channel: channel,
+          channel: this.channel,
           checksum: this.checksum,
           data: null
         };
@@ -164,7 +164,7 @@ vi.mock('../../src/lib/kaitai/MiniwareMdpM01.js', () => {
         
         return { 
           groups,
-          channel: this.channel || 0
+          channel: this.channel
         };
       }
       
@@ -173,10 +173,10 @@ vi.mock('../../src/lib/kaitai/MiniwareMdpM01.js', () => {
         for (let i = 0; i < 6; i++) {
           channels.push({
             address: this.stream.readBytes(5),
-            frequency: this.stream.readU1()
+            frequencyOffset: this.stream.readU1()
           });
         }
-        return { channels };
+        return { addresses: channels };
       }
       
       _readMachine() {

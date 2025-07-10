@@ -74,10 +74,10 @@ export function processAddressPacket(packet) {
   const addresses = [];
   
   for (let i = 0; i < 6; i++) {
-    const ch = addr.channels[i];
+    const ch = addr.addresses[i];
     addresses.push({
       channel: i,
-      address: Array.from(ch.address),
+      address: Array.from(ch.address), // Keep as is for tests
       frequency: 2400 + ch.frequencyOffset // MHz
     });
   }

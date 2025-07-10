@@ -117,6 +117,7 @@
                 min="0" 
                 max="30" 
                 step="0.001"
+                data-testid="voltage-input"
               />
             </label>
             <button on:click={applyVoltage}>Set V</button>

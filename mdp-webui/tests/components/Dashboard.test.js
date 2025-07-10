@@ -11,21 +11,7 @@ import { channelStore } from '../../src/lib/stores/channels.js';
 
 // Mock ChannelCard component
 vi.mock('../../src/lib/components/ChannelCard.svelte', () => ({
-  default: {
-    name: 'ChannelCard',
-    props: ['channel', 'active'],
-    $$render: (result, props) => {
-      result.push(`
-        <div 
-          class="channel-card ${props.active ? 'active' : ''}" 
-          data-channel="${props.channel.channel}"
-          data-testid="channel-card-${props.channel.channel}"
-        >
-          Channel ${props.channel.channel + 1}
-        </div>
-      `);
-    }
-  }
+  default: vi.importActual('../mocks/components/MockChannelCard.svelte')
 }));
 
 describe('Dashboard Component', () => {

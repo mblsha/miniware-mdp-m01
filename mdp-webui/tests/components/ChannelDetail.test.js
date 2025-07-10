@@ -43,11 +43,7 @@ import ChannelDetail from '../../src/lib/components/ChannelDetail.svelte';
 
 // Mock WaveformChart
 vi.mock('../../src/lib/components/WaveformChart.svelte', () => ({
-  default: class MockWaveformChart {
-    constructor(options) {
-      this.options = options;
-    }
-  }
+  default: vi.importActual('../mocks/components/MockWaveformChart.svelte')
 }));
 
 describe('ChannelDetail Component', () => {
