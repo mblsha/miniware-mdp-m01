@@ -27,6 +27,9 @@ export class SerialConnection {
     this.deviceTypeStore = writable(null);
     this.packetHandlers = new Map();
     
+    // Buffer for incomplete packets
+    this.receiveBuffer = new Uint8Array(0);
+    
     // Create derived stores once
     this.status = derived(this.statusStore, $status => $status);
     this.error = derived(this.errorStore, $error => $error);
@@ -84,23 +87,29 @@ export class SerialConnection {
       this.port = null;
     }
     
+    // Clear receive buffer
+    this.receiveBuffer = new Uint8Array(0);
+    
     this.statusStore.set(ConnectionStatus.DISCONNECTED);
     this.deviceTypeStore.set(null);
   }
 
   async readLoop() {
-    const buffer = [];
-    
     while (this.port && this.reader) {
       try {
         const { value, done } = await this.reader.read();
         if (done) break;
         
-        // value is a Uint8Array
-        buffer.push(...value);
-        
-        // Process complete packets
-        this.processBuffer(buffer);
+        // Append new data to buffer
+        if (value && value.length > 0) {
+          const combined = new Uint8Array(this.receiveBuffer.length + value.length);
+          combined.set(this.receiveBuffer);
+          combined.set(value, this.receiveBuffer.length);
+          this.receiveBuffer = combined;
+          
+          // Process complete packets
+          this.processIncomingData();
+        }
         
       } catch (error) {
         console.error('Read error:', error);
@@ -114,33 +123,47 @@ export class SerialConnection {
     }
   }
 
-  processBuffer(buffer) {
-    while (buffer.length >= 6) {
-      // Find the start of a packet
-      while (buffer.length > 0 && buffer[0] !== 0x5A) {
-        buffer.shift();
+  processIncomingData() {
+    while (this.receiveBuffer.length >= 6) {
+      // Find packet header (0x5A 0x5A)
+      let headerIndex = -1;
+      for (let i = 0; i <= this.receiveBuffer.length - 2; i++) {
+        if (this.receiveBuffer[i] === 0x5A && this.receiveBuffer[i + 1] === 0x5A) {
+          headerIndex = i;
+          break;
+        }
       }
-      
-      
-      // If not enough data for a header, break
-      if (buffer.length < 2) break;
 
-      // Check for full packet header
-      if (buffer[0] !== 0x5A || buffer[1] !== 0x5A) {
-        // This case should be rare now, but as a safeguard:
-        buffer.shift();
-        continue;
+      // No valid header found
+      if (headerIndex === -1) {
+        // If we have more than 256 bytes without a header, clear buffer to prevent memory issues
+        if (this.receiveBuffer.length > 256) {
+          console.warn('Clearing receive buffer - no valid header found');
+          this.receiveBuffer = new Uint8Array(0);
+        }
+        break;
       }
+
+      // Remove any garbage before header
+      if (headerIndex > 0) {
+        this.receiveBuffer = this.receiveBuffer.slice(headerIndex);
+      }
+
+      // Check if we have enough data for the complete packet
+      if (this.receiveBuffer.length < 4) break; // Need at least 4 bytes to read size
       
-      const packetSize = buffer[3];
-      if (buffer.length < packetSize) {
-        // Not enough data yet
+      const packetSize = this.receiveBuffer[3];
+      if (this.receiveBuffer.length < packetSize) {
+        // Not enough data yet for complete packet
         break;
       }
       
       // Extract complete packet
-      const packet = buffer.splice(0, packetSize);
-      this.handlePacket(packet);
+      const packet = this.receiveBuffer.slice(0, packetSize);
+      this.handlePacket(Array.from(packet)); // Convert to array for compatibility
+      
+      // Remove processed packet from buffer
+      this.receiveBuffer = this.receiveBuffer.slice(packetSize);
     }
   }
 
