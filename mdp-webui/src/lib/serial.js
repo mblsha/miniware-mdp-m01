@@ -26,18 +26,11 @@ export class SerialConnection {
     this.errorStore = writable(null);
     this.deviceTypeStore = writable(null);
     this.packetHandlers = new Map();
-  }
-
-  get status() {
-    return derived(this.statusStore, $status => $status);
-  }
-
-  get error() {
-    return derived(this.errorStore, $error => $error);
-  }
-
-  get deviceType() {
-    return derived(this.deviceTypeStore, $device => $device);
+    
+    // Create derived stores once
+    this.status = derived(this.statusStore, $status => $status);
+    this.error = derived(this.errorStore, $error => $error);
+    this.deviceType = derived(this.deviceTypeStore, $device => $device);
   }
 
   async connect() {

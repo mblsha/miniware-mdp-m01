@@ -36,9 +36,9 @@ export function createChannelStore() {
   // Register packet handlers
   function synthesizeHandler(packet) {
     const decoded = decodePacket(packet);
-    if (!decoded || !decoded.packets[0]) return;
+    if (!decoded) return;
 
-    const processed = processSynthesizePacket(decoded.packets[0]);
+    const processed = processSynthesizePacket(decoded);
 
     if (processed) {
       channels.update(chs => {
@@ -53,9 +53,9 @@ export function createChannelStore() {
 
   function waveHandler(packet) {
     const decoded = decodePacket(packet);
-    if (!decoded || !decoded.packets[0]) return;
+    if (!decoded) return;
 
-    const processed = processWavePacket(decoded.packets[0]);
+    const processed = processWavePacket(decoded);
     
     if (processed) {
       channels.update(chs => {
@@ -77,9 +77,9 @@ export function createChannelStore() {
 
   function machineHandler(packet) {
     const decoded = decodePacket(packet);
-    if (!decoded || !decoded.packets[0]) return;
+    if (!decoded) return;
     
-    const processed = processMachinePacket(decoded.packets[0]);
+    const processed = processMachinePacket(decoded);
     
     if (processed) {
       serialConnection.deviceTypeStore.set(processed);

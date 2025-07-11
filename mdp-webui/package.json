@@ -21,6 +21,7 @@
     "canvas": "^3.1.2",
     "happy-dom": "^18.0.1",
     "jsdom": "^26.1.0",
+    "playwright": "^1.54.0",
     "svelte": "^5.35.2",
     "vite": "^7.0.3",
     "vitest": "^3.2.4"

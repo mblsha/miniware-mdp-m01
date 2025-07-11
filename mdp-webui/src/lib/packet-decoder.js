@@ -1,11 +1,23 @@
-import KaitaiStream from 'kaitai-struct/KaitaiStream';
-import MiniwareMdpM01 from './kaitai/MiniwareMdpM01.js';
+import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper.js';
 
 export const PackType = MiniwareMdpM01.PackType;
 
 export function decodePacket(data) {
   try {
     if (!data || data.length < 6) return null;
+    
+    // Validate packet header
+    if (data[0] !== 0x5A || data[1] !== 0x5A) {
+      console.warn('Invalid packet header');
+      return null;
+    }
+    
+    // Validate packet size
+    const expectedSize = data[3];
+    if (data.length !== expectedSize) {
+      console.warn(`Packet size mismatch: expected ${expectedSize}, got ${data.length}`);
+      return null;
+    }
 
     const buffer = new ArrayBuffer(data.length);
     const view = new Uint8Array(buffer);
