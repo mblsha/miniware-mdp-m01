@@ -97,7 +97,6 @@ export class SerialConnection {
         if (done) break;
         
         // value is a Uint8Array
-        console.log(`Serial data received: ${value.length} bytes`);
         buffer.push(...value);
         
         // Process complete packets
@@ -122,10 +121,6 @@ export class SerialConnection {
         buffer.shift();
       }
       
-      // Log when we find a packet header
-      if (buffer.length >= 2 && buffer[0] === 0x5A && buffer[1] === 0x5A) {
-        console.log('Found packet header at buffer position 0');
-      }
       
       // If not enough data for a header, break
       if (buffer.length < 2) break;
@@ -150,14 +145,15 @@ export class SerialConnection {
   }
 
   handlePacket(packet) {
+    if (!packet || packet.length < 3) {
+      console.error('Invalid packet:', packet);
+      return;
+    }
     const packetType = packet[2];
-    console.log(`Handling packet type: 0x${packetType.toString(16)} (${packetType}), size: ${packet.length}`);
     const handler = this.packetHandlers.get(packetType);
     
     if (handler) {
       handler(packet);
-    } else {
-      console.log(`No handler for packet type: 0x${packetType.toString(16)}`);
     }
   }
 
@@ -171,7 +167,6 @@ export class SerialConnection {
     }
     
     const uint8Array = new Uint8Array(packet);
-    console.log(`Sending packet: type=0x${packet[2].toString(16)}, size=${packet.length}, data=[${packet.map(b => '0x' + b.toString(16)).join(', ')}]`);
     await this.writer.write(uint8Array);
   }
 

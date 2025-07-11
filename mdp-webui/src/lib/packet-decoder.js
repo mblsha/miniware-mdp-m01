@@ -26,7 +26,12 @@ export function decodePacket(data) {
     const stream = new KaitaiStream(buffer);
     const parsed = new MiniwareMdpM01(stream);
     
-    return parsed;
+    // The parser creates a packets array, get the first (and only) packet
+    if (parsed.packets && parsed.packets.length > 0) {
+      return parsed.packets[0];
+    }
+    
+    return null;
   } catch (error) {
     console.error('Failed to decode packet:', error);
     return null;
