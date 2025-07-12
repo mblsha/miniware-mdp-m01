@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { createMachinePacket, createSynthesizePacket } from '../mocks/packet-data.js';
 
@@ -34,9 +35,28 @@ vi.mock('../../src/lib/components/ChannelDetail.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockChannelDetail.svelte')).default
 }));
 
-vi.mock('../../src/lib/stores/channels.js', () => ({
-  channelStore: {}
-}));
+vi.mock('../../src/lib/stores/channels.js', () => {
+  const { writable } = require('svelte/store');
+  const mockChannels = writable([
+    { channel: 0, online: true, voltage: 3.3, current: 0.5, power: 1.65, temperature: 25, isOutput: false, machineType: 'P906', recording: false, waveformData: [] },
+    { channel: 1, online: true, voltage: 5.0, current: 1.0, power: 5.0, temperature: 30, isOutput: true, machineType: 'P906', recording: false, waveformData: [] },
+    { channel: 2, online: true, voltage: 12.0, current: 0.2, power: 2.4, temperature: 28, isOutput: false, machineType: 'L1060', recording: false, waveformData: [] },
+    { channel: 3, online: true, voltage: 0, current: 0, power: 0, temperature: 22, isOutput: false, machineType: 'P906', recording: false, waveformData: [] },
+    { channel: 4, online: false, voltage: 0, current: 0, power: 0, temperature: 0, isOutput: false, machineType: '', recording: false, waveformData: [] },
+    { channel: 5, online: false, voltage: 0, current: 0, power: 0, temperature: 0, isOutput: false, machineType: '', recording: false, waveformData: [] }
+  ]);
+  
+  return {
+    channelStore: {
+      channels: mockChannels,
+      setOutput: vi.fn(),
+      setVoltage: vi.fn(),
+      setCurrent: vi.fn(),
+      startRecording: vi.fn(),
+      stopRecording: vi.fn()
+    }
+  };
+});
 
 import App from '../../src/App.svelte';
 import { serialConnection } from '../../src/lib/serial.js';
@@ -135,6 +155,7 @@ describe('App Component', () => {
     it('should show dashboard when connected', async () => {
       const { getByTestId } = render(App);
       serialConnection.status.set('connected');
+      await tick();
       
       await waitFor(() => {
         expect(getByTestId('mock-dashboard')).toBeInTheDocument();
@@ -144,6 +165,7 @@ describe('App Component', () => {
     it('should switch to channel detail view', async () => {
       const { component, getByTestId } = render(App);
       serialConnection.status.set('connected');
+      await tick();
       
       await waitFor(() => {
         expect(getByTestId('mock-dashboard')).toBeInTheDocument();
@@ -151,6 +173,7 @@ describe('App Component', () => {
       
       // Simulate channel selection by calling the component function directly
       component.showChannelDetail(2);
+      await tick();
       
       await waitFor(() => {
         expect(getByTestId('mock-channel-detail')).toBeInTheDocument();

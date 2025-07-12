@@ -45,9 +45,16 @@ export class MockReader {
     this.closed = false;
     this.readCount = 0;
     this.pendingRead = null;
+    this.simulateError = null;
   }
 
   async read() {
+    if (this.simulateError) {
+      const error = this.simulateError;
+      this.simulateError = null;
+      throw error;
+    }
+    
     if (this.closed) {
       return { done: true };
     }
@@ -138,8 +145,8 @@ export class MockSerialPort {
   simulateData(data) {
     const reader = this.readable.reader;
     if (reader) {
-      // Add data to the reader's dataQueue for our test-optimized readLoop
-      reader.dataQueue.push(new Uint8Array(data));
+      // Use pushData to properly trigger pending reads
+      reader.pushData(new Uint8Array(data));
     }
   }
 
@@ -149,9 +156,11 @@ export class MockSerialPort {
 
   simulateDisconnect() {
     if (this.readable.reader) {
-      this.readable.reader.closed = true;
+      // Set error for next read
+      this.readable.reader.simulateError = new Error('Device disconnected');
+      // If there's a pending read, don't resolve it - let the next read() call throw the error
       if (this.readable.reader.pendingRead) {
-        this.readable.reader.pendingRead({ done: true });
+        this.readable.reader.pendingRead = null;
       }
     }
   }

@@ -7,9 +7,8 @@
   let currentView = 'dashboard';
   let selectedChannel = 0;
   
-  $: connectionStatus = serialConnection.status;
-  $: connectionError = serialConnection.error;
-  $: deviceType = serialConnection.deviceType;
+  // Extract stores from serialConnection object
+  const { status, error, deviceType } = serialConnection;
   
   async function handleConnect() {
     try {
@@ -37,24 +36,24 @@
   <header>
     <h1>MDP-WebUI</h1>
     <div class="connection-status">
-      {#if $connectionStatus === ConnectionStatus.DISCONNECTED}
+      {#if $status === ConnectionStatus.DISCONNECTED}
         <button onclick={handleConnect}>Connect</button>
-      {:else if $connectionStatus === ConnectionStatus.CONNECTING}
+      {:else if $status === ConnectionStatus.CONNECTING}
         <span class="status connecting">Connecting...</span>
-      {:else if $connectionStatus === ConnectionStatus.CONNECTED}
+      {:else if $status === ConnectionStatus.CONNECTED}
         <span class="status connected">Connected</span>
         {#if $deviceType}
           <span class="device-type">({$deviceType.type})</span>
         {/if}
         <button onclick={handleDisconnect}>Disconnect</button>
-      {:else if $connectionStatus === ConnectionStatus.ERROR}
-        <span class="status error">Error: {$connectionError}</span>
+      {:else if $status === ConnectionStatus.ERROR}
+        <span class="status error">Error: {$error}</span>
         <button onclick={handleConnect}>Retry</button>
       {/if}
     </div>
   </header>
   
-  {#if $connectionStatus === ConnectionStatus.CONNECTED}
+  {#if $status === ConnectionStatus.CONNECTED}
     {#if currentView === 'dashboard'}
       <Dashboard onselectchannel={showChannelDetail} />
     {:else if currentView === 'detail'}

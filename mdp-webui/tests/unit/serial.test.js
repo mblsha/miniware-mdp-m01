@@ -189,8 +189,8 @@ describe('Serial Connection', () => {
       const machinePacket = createMachinePacket(0x10);
       mockPort.simulateData(machinePacket);
       
-      // Allow timer advancement for any timeouts
-      await vi.advanceTimersByTimeAsync(50);
+      // Trigger packet processing
+      await serialConnection.triggerPacketProcessing();
       
       expect(receivedPackets.length).toBe(1);
       expect(receivedPackets[0]).toEqual(Array.from(machinePacket));
@@ -213,13 +213,13 @@ describe('Serial Connection', () => {
       const part2 = machinePacket.slice(4);
       
       mockPort.simulateData(part1);
-      await vi.advanceTimersByTimeAsync(10);
+      await serialConnection.triggerPacketProcessing();
       
       // Should not have processed yet
       expect(receivedPackets.length).toBe(0);
       
       mockPort.simulateData(part2);
-      await vi.advanceTimersByTimeAsync(10);
+      await serialConnection.triggerPacketProcessing();
       
       // Now should have processed
       expect(receivedPackets.length).toBe(1);
@@ -242,7 +242,7 @@ describe('Serial Connection', () => {
       const combined = new Uint8Array([...garbage, ...validPacket]);
       
       mockPort.simulateData(combined);
-      await vi.advanceTimersByTimeAsync(10);
+      await serialConnection.triggerPacketProcessing();
       
       expect(receivedPackets.length).toBe(1);
       expect(receivedPackets[0]).toEqual(Array.from(validPacket));
@@ -271,7 +271,7 @@ describe('Serial Connection', () => {
       const combined = new Uint8Array([...packet1, ...packet2]);
       
       mockPort.simulateData(combined);
-      await vi.advanceTimersByTimeAsync(10);
+      await serialConnection.triggerPacketProcessing();
       
       expect(machinePackets.length).toBe(1);
       expect(heartbeatPackets.length).toBe(1);
@@ -288,8 +288,10 @@ describe('Serial Connection', () => {
       // Simulate disconnection
       mockPort.simulateDisconnect();
       
-      await vi.advanceTimersByTimeAsync(10);
+      // Trigger processing to hit the error
+      await serialConnection.triggerPacketProcessing();
       
+      // Check status
       let statusValue;
       const unsubscribe = serialConnection.status.subscribe(value => statusValue = value);
       expect(statusValue).toBe(ConnectionStatus.ERROR);
@@ -378,7 +380,7 @@ describe('Serial Connection', () => {
       await serialConnection.connect();
       
       mockPort.simulateData(createMachinePacket(0x10));
-      await vi.advanceTimersByTimeAsync(10);
+      await serialConnection.triggerPacketProcessing();
       
       // Only the second handler should receive the packet
       expect(handler1Packets.length).toBe(0);
@@ -403,7 +405,7 @@ describe('Serial Connection', () => {
       
       // Send only header first
       mockPort.simulateData(header);
-      await vi.advanceTimersByTimeAsync(10);
+      await serialConnection.triggerPacketProcessing();
       
       // Should not process yet (waiting for 156 bytes total)
       expect(receivedPackets.length).toBe(0);
@@ -411,7 +413,7 @@ describe('Serial Connection', () => {
       // Send rest of data
       const remainingData = new Uint8Array(150);
       mockPort.simulateData(remainingData);
-      await vi.advanceTimersByTimeAsync(10);
+      await serialConnection.triggerPacketProcessing();
       
       // Now should process
       expect(receivedPackets.length).toBe(1);

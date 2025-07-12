@@ -62,8 +62,8 @@ export class TestSerialConnection {
 
       this.statusStore.set(ConnectionStatus.CONNECTED);
       
-      // Start reading data (but don't await it)
-      this.readPromise = this.readLoop();
+      // For tests, don't start the blocking readLoop
+      // Data will be processed via triggerPacketProcessing
       
       // Start heartbeat
       this.startHeartbeat();
@@ -102,21 +102,17 @@ export class TestSerialConnection {
   }
 
   async readLoop() {
-    // Test-optimized readLoop that doesn't block
+    // Test-optimized readLoop that properly handles errors
     try {
       while (this.port && this.reader) {
-        // Check for available data without blocking
-        const availableData = this.reader.dataQueue;
-        if (availableData && availableData.length > 0) {
-          const data = availableData.shift();
-          if (data && data.length > 0) {
-            this.receiveBuffer.push(...data);
-            this.processBuffer();
-          }
-        }
+        // Use the actual read() method to properly catch errors
+        const { value, done } = await this.reader.read();
+        if (done) break;
         
-        // Small delay to prevent tight loop
-        await new Promise(resolve => setTimeout(resolve, 10));
+        if (value && value.length > 0) {
+          this.receiveBuffer.push(...value);
+          this.processBuffer();
+        }
       }
     } catch (error) {
       console.error('Read loop error:', error);
@@ -202,11 +198,24 @@ export class TestSerialConnection {
 
   // Test-specific method to trigger packet processing without waiting for readLoop
   async triggerPacketProcessing() {
-    // Force processing of any buffered data
-    this.processBuffer();
+    // Directly process data from the reader's queue without using read()
+    if (this.reader && this.reader.dataQueue && this.reader.dataQueue.length > 0) {
+      while (this.reader.dataQueue.length > 0) {
+        const data = this.reader.dataQueue.shift();
+        if (data && data.length > 0) {
+          this.receiveBuffer.push(...data);
+        }
+      }
+      this.processBuffer();
+    }
     
-    // Short delay to allow for async updates
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // Process any simulated errors
+    if (this.reader && this.reader.simulateError) {
+      const error = this.reader.simulateError;
+      this.reader.simulateError = null;
+      this.statusStore.set(ConnectionStatus.ERROR);
+      this.errorStore.set(error.message);
+    }
   }
 
   async sendPacket(packet) {

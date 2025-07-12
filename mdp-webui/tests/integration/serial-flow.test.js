@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { get, writable, derived } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
@@ -224,12 +225,24 @@ describe('Serial Communication Flow Integration Test', () => {
       
       // Connect and initialize
       await fireEvent.click(getByText('Connect'));
+      await tick();
+      
+      // Wait for connection to complete
+      await waitFor(() => {
+        expect(getByText('Connected')).toBeInTheDocument();
+      });
+      
+      // Send machine packet to identify device
       mockPort.simulateData(createMachinePacket(0x10));
       await serialConnection.triggerPacketProcessing();
+      await tick();
+      
+      // Send synthesize packet with channel data
       mockPort.simulateData(createSynthesizePacket([
         { online: 1, machineType: 0, voltage: 5000, current: 1000 }
       ]));
       await serialConnection.triggerPacketProcessing();
+      await tick();
       
       // Navigate to channel detail
       await waitFor(() => {
@@ -238,6 +251,7 @@ describe('Serial Communication Flow Integration Test', () => {
       
       const channelCard = getByText('Channel 1').closest('.channel-card');
       await fireEvent.click(channelCard);
+      await tick();
       
       // Set voltage
       await waitFor(() => {
@@ -256,8 +270,10 @@ describe('Serial Communication Flow Integration Test', () => {
       expect(setVPacket).toBeTruthy();
       
       // Verify voltage value in packet (12V = 12000mV)
-      const voltage = setVPacket[6] | (setVPacket[7] << 8);
-      expect(voltage).toBe(12000);
+      if (setVPacket) {
+        const voltage = setVPacket[6] | (setVPacket[7] << 8);
+        expect(voltage).toBe(12000);
+      }
     });
 
     it('should handle channel switching via device', async () => {

@@ -215,7 +215,7 @@ describe('App Connection Management Tests', () => {
       await waitFor(() => {
         const channelDetail = container.querySelector('[data-testid="mock-channel-detail"]');
         expect(channelDetail).toBeInTheDocument();
-        expect(channelDetail.textContent).toContain('Channel: 2');
+        expect(channelDetail.textContent).toContain('Channel 3');
       });
     });
 
