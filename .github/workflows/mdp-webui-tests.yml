@@ -20,18 +20,14 @@ jobs:
       run:
         working-directory: mdp-webui
 
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x]
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup Node.js ${{ matrix.node-version }}
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ matrix.node-version }}
+        node-version: 20
         cache: 'npm'
         cache-dependency-path: mdp-webui/package-lock.json
 
@@ -42,14 +38,13 @@ jobs:
       run: npm run lint --if-present
 
     - name: Run unit tests
-      run: npm test -- --run --reporter=verbose
+      run: npm run test:run
       
     - name: Generate test coverage
-      run: npm run coverage --if-present || npm test -- --run --coverage
+      run: npm run test:coverage
       
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
-      if: matrix.node-version == '20.x'
       with:
         file: ./mdp-webui/coverage/lcov.info
         flags: unittests
@@ -60,7 +55,7 @@ jobs:
       uses: actions/upload-artifact@v3
       if: always()
       with:
-        name: test-results-${{ matrix.node-version }}
+        name: test-results
         path: |
           mdp-webui/test-results/
           mdp-webui/coverage/
