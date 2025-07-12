@@ -28,8 +28,6 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: 20
-        cache: 'npm'
-        cache-dependency-path: mdp-webui/package-lock.json
 
     - name: Install dependencies
       run: npm ci --legacy-peer-deps
@@ -52,7 +50,7 @@ jobs:
         fail_ci_if_error: false
 
     - name: Upload test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results
@@ -78,8 +76,6 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: 20
-        cache: 'npm'
-        cache-dependency-path: mdp-webui/package-lock.json
 
     - name: Install dependencies
       run: npm ci --legacy-peer-deps
@@ -94,7 +90,7 @@ jobs:
       run: npm run test:e2e || npx playwright test
 
     - name: Upload Playwright report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: playwright-report
