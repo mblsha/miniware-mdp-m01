@@ -1,5 +1,7 @@
 # MDP-WebUI
 
+[![MDP WebUI Tests](https://github.com/miniware-mdp-m01/miniware-mdp-m01/actions/workflows/mdp-webui-tests.yml/badge.svg)](https://github.com/miniware-mdp-m01/miniware-mdp-m01/actions/workflows/mdp-webui-tests.yml)
+
 A web-based interface for the Miniware MDP (M01/M02) multi-channel power supply system. This application provides real-time monitoring, control, and data logging capabilities directly from your web browser.
 
 ## Features
