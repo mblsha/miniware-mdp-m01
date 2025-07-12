@@ -1,6 +1,127 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createSynthesizePacket, createWavePacket, createUpdateChannelPacket } from '../../mocks/packet-data.js';
 
+// Mock the kaitai-wrapper first (before any imports that use it)
+vi.mock('../../../src/lib/kaitai-wrapper.js', () => {
+  const PackType = {
+    SYNTHESIZE: 0x11,
+    WAVE: 0x12,
+    ADDR: 0x13,
+    UPDAT_CH: 0x14,
+    MACHINE: 0x15
+  };
+
+  class KaitaiStream {
+    constructor(buffer) {
+      this.buffer = buffer.buffer instanceof ArrayBuffer ? buffer.buffer : buffer;
+      this.pos = 0;
+      this.view = new DataView(this.buffer);
+    }
+    
+    readU1() {
+      return this.view.getUint8(this.pos++);
+    }
+    
+    readU2le() {
+      if (this.pos + 2 > this.buffer.byteLength) throw new RangeError("Offset is outside the bounds of the DataView");
+      const val = this.view.getUint16(this.pos, true);
+      this.pos += 2;
+      return val;
+    }
+    
+    readU4le() {
+      if (this.pos + 4 > this.buffer.byteLength) throw new RangeError("Offset is outside the bounds of the DataView");
+      const val = this.view.getUint32(this.pos, true);
+      this.pos += 4;
+      return val;
+    }
+    
+    readBytes(n) {
+      if (this.pos + n > this.buffer.byteLength) throw new RangeError("Offset is outside the bounds of the DataView");
+      const bytes = new Uint8Array(this.buffer.slice(this.pos, this.pos + n));
+      this.pos += n;
+      return bytes;
+    }
+  }
+
+  class MiniwareMdpM01 {
+    constructor(stream) {
+      this.stream = stream;
+      this.packets = [];
+      this._read();
+    }
+    
+    _read() {
+      if (this.stream.buffer.byteLength < 6) return;
+      this.stream.readU1(); // header1
+      this.stream.readU1(); // header2
+      const packetType = this.stream.readU1();
+      this.size = this.stream.readU1();
+      this.channel = this.stream.readU1();
+      this.checksum = this.stream.readU1();
+      
+      const packet = {
+        packType: packetType,
+        size: this.size,
+        channel: this.channel,
+        checksum: this.checksum,
+        data: null
+      };
+      
+      // Parse data based on packet type
+      if (packetType === PackType.SYNTHESIZE) {
+        packet.data = { channels: [] };
+        // Read actual synthesize data from stream
+        for (let i = 0; i < 6; i++) {
+          const ch = {
+            num: this.stream.readU1(),
+            outVoltageRaw: this.stream.readU2le(),
+            outCurrentRaw: this.stream.readU2le(),
+            inVoltageRaw: this.stream.readU2le(),
+            inCurrentRaw: this.stream.readU2le(),
+            setVoltageRaw: this.stream.readU2le(),
+            setCurrentRaw: this.stream.readU2le(),
+            tempRaw: this.stream.readU2le(),
+            online: this.stream.readU1(),
+            type: this.stream.readU1(),
+            lock: this.stream.readU1(),
+            statusLoad: this.stream.readU1(),
+            outputOn: this.stream.readU1(),
+            color: this.stream.readBytes(3),
+            error: this.stream.readU1(),
+            end: this.stream.readBytes(1)
+          };
+          // Add computed properties
+          ch.outVoltage = ch.outVoltageRaw / 1000.0;
+          ch.outCurrent = ch.outCurrentRaw / 1000.0;
+          ch.temperature = ch.tempRaw / 10.0;
+          packet.data.channels.push(ch);
+        }
+      } else if (packetType === PackType.WAVE) {
+        packet.data = {
+          channel: this.channel,
+          groups: [{
+            timestamp: 1000,
+            items: [
+              { voltage: 3.3, current: 0.5 },
+              { voltage: 3.3, current: 0.5 }
+            ]
+          }]
+        };
+      }
+      
+      this.packets.push(packet);
+    }
+  }
+  
+  MiniwareMdpM01.PackType = PackType;
+  
+  return {
+    KaitaiStream,
+    MiniwareMdpM01
+  };
+});
+
 // Mock the serial connection
 vi.mock('../../../src/lib/serial.js', () => {
   const mockHandlers = {};

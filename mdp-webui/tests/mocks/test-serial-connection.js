@@ -29,8 +29,8 @@ export class TestSerialConnection {
     this.errorStore = writable(null);
     this.deviceTypeStore = writable(null);
     this.packetHandlers = new Map();
-    this.isProcessing = false;
-    this.processingPromise = null;
+    this.receiveBuffer = []; // Persistent buffer for partial packets
+    this.readPromise = null;
   }
 
   get status() {
@@ -62,8 +62,8 @@ export class TestSerialConnection {
 
       this.statusStore.set(ConnectionStatus.CONNECTED);
       
-      // Start controlled packet processing
-      this.startPacketProcessing();
+      // Start reading data (but don't await it)
+      this.readPromise = this.readLoop();
       
       // Start heartbeat
       this.startHeartbeat();
@@ -80,7 +80,6 @@ export class TestSerialConnection {
 
   async disconnect() {
     this.stopHeartbeat();
-    this.stopPacketProcessing();
     
     if (this.reader) {
       await this.reader.cancel();
@@ -99,107 +98,115 @@ export class TestSerialConnection {
     
     this.statusStore.set(ConnectionStatus.DISCONNECTED);
     this.deviceTypeStore.set(null);
+    this.receiveBuffer = []; // Clear buffer on disconnect
   }
 
-  /**
-   * Controlled packet processing that doesn't use infinite loops or timers
-   * Only processes data when explicitly triggered
-   */
-  startPacketProcessing() {
-    this.isProcessing = true;
-    // Don't start any automatic processing - wait for explicit triggers
-  }
-
-  stopPacketProcessing() {
-    this.isProcessing = false;
-  }
-
-  async processAvailableData() {
-    if (!this.isProcessing || !this.reader) return;
-
+  async readLoop() {
+    // Test-optimized readLoop that doesn't block
     try {
-      const buffer = [];
-      
-      // Read ALL available data in one go (no loops or timers)
-      let readAttempts = 0;
-      let totalBytesRead = 0;
-      while (readAttempts < 10) { // Limit attempts to prevent hanging
-        const { value, done } = await this.reader.read();
-        
-        if (done) break;
-        
-        if (value && value.length > 0) {
-          buffer.push(...value);
-          totalBytesRead += value.length;
-        } else {
-          // No data available, stop reading
-          break;
+      while (this.port && this.reader) {
+        // Check for available data without blocking
+        const availableData = this.reader.dataQueue;
+        if (availableData && availableData.length > 0) {
+          const data = availableData.shift();
+          if (data && data.length > 0) {
+            this.receiveBuffer.push(...data);
+            this.processBuffer();
+          }
         }
         
-        readAttempts++;
+        // Small delay to prevent tight loop
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
-
-      // Process all collected data
-      if (buffer.length > 0) {
-        this.processBuffer(buffer);
-      }
-
     } catch (error) {
-      console.error('Read error:', error);
-      if (this.port && this.port.readable) {
-        this.statusStore.set(ConnectionStatus.ERROR);
-        this.errorStore.set(error.message);
-      }
+      console.error('Read loop error:', error);
+      this.statusStore.set(ConnectionStatus.ERROR);
+      this.errorStore.set(error.message);
     }
   }
 
-  processBuffer(buffer) {
-    while (buffer.length >= 6) {
-      // Find the start of a packet
-      while (buffer.length > 0 && buffer[0] !== 0x5A) {
-        buffer.shift();
+  processBuffer() {
+    while (this.receiveBuffer.length >= 6) {
+      // Find packet header (0x5A 0x5A) - search for the pattern, not just the first byte
+      let headerIndex = -1;
+      for (let i = 0; i <= this.receiveBuffer.length - 2; i++) {
+        if (this.receiveBuffer[i] === 0x5A && this.receiveBuffer[i + 1] === 0x5A) {
+          // Validate that this is a real header by checking the packet structure
+          if (i + 3 < this.receiveBuffer.length) {
+            const packetType = this.receiveBuffer[i + 2];
+            const packetSize = this.receiveBuffer[i + 3];
+            // Basic validation: packet type should be reasonable and size should be >= 6
+            if (packetType !== 0x5A && packetSize >= 6 && packetSize <= 256) {
+              headerIndex = i;
+              break;
+            }
+          } else {
+            // Not enough data to validate, but assume it's a valid header
+            headerIndex = i;
+            break;
+          }
+        }
       }
-      
-      // If not enough data for a header, break
-      if (buffer.length < 4) break;
 
-      // Check for full packet header
-      if (buffer[0] !== 0x5A || buffer[1] !== 0x5A) {
-        buffer.shift();
-        continue;
+      // No valid header found
+      if (headerIndex === -1) {
+        // If we have more than 256 bytes without a header, clear buffer to prevent memory issues
+        if (this.receiveBuffer.length > 256) {
+          console.warn('Clearing receive buffer - no valid header found');
+          this.receiveBuffer = [];
+        }
+        break;
       }
+
+      // Remove any garbage before header
+      if (headerIndex > 0) {
+        this.receiveBuffer.splice(0, headerIndex);
+      }
+
+      // Check if we have enough data for the complete packet
+      if (this.receiveBuffer.length < 4) break; // Need at least 4 bytes to read size
       
-      const packetSize = buffer[3];
-      if (buffer.length < packetSize) {
-        // Not enough data yet
+      const packetSize = this.receiveBuffer[3];
+      if (this.receiveBuffer.length < packetSize) {
+        // Not enough data yet for complete packet
         break;
       }
       
       // Extract complete packet
-      const packet = buffer.splice(0, packetSize);
+      const packet = this.receiveBuffer.splice(0, packetSize);
       this.handlePacket(packet);
     }
   }
 
   handlePacket(packet) {
     const packetType = packet[2];
-    const handlers = this.packetHandlers.get(packetType);
+    const handler = this.packetHandlers.get(packetType);
     
-    if (handlers && Array.isArray(handlers)) {
-      handlers.forEach(handler => handler(packet));
+    if (handler) {
+      handler(packet);
     }
   }
 
   registerPacketHandler(packetType, handler) {
-    // Support multiple handlers by storing an array
-    if (!this.packetHandlers.has(packetType)) {
-      this.packetHandlers.set(packetType, []);
-    }
-    this.packetHandlers.get(packetType).push(handler);
+    // Match the real implementation - single handler per type
+    this.packetHandlers.set(packetType, handler);
   }
 
   clearPacketHandlers() {
     this.packetHandlers.clear();
+  }
+
+  clearReceiveBuffer() {
+    this.receiveBuffer = [];
+  }
+
+  // Test-specific method to trigger packet processing without waiting for readLoop
+  async triggerPacketProcessing() {
+    // Force processing of any buffered data
+    this.processBuffer();
+    
+    // Short delay to allow for async updates
+    await new Promise(resolve => setTimeout(resolve, 10));
   }
 
   async sendPacket(packet) {
@@ -232,15 +239,5 @@ export class TestSerialConnection {
   async getMachineType() {
     const packet = [0x5A, 0x5A, 0x21, 0x06, 0xEE, 0x00];
     await this.sendPacket(packet);
-  }
-
-  /**
-   * Test helper: trigger packet processing cycle
-   * Use this in tests after simulating data to ensure processing
-   */
-  async triggerPacketProcessing() {
-    if (this.isProcessing) {
-      await this.processAvailableData();
-    }
   }
 }

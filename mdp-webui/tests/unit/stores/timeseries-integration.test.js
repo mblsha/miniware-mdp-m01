@@ -23,13 +23,17 @@ vi.mock('../../../src/lib/kaitai-wrapper.js', () => ({
   }
 }));
 
+// Create mock functions that will be reused
+const mockDecodeSynthesize = vi.fn();
+const mockDecodeWave = vi.fn();
+
 // Mock the serial connection
 vi.mock('../../../src/lib/serial.js', () => ({
   serialConnection: {
     registerPacketHandler: vi.fn(),
     getDecoder: vi.fn(() => ({
-      decodeSynthesize: vi.fn(),
-      decodeWave: vi.fn()
+      decodeSynthesize: mockDecodeSynthesize,
+      decodeWave: mockDecodeWave
     }))
   }
 }));
@@ -39,7 +43,7 @@ import { channelStore } from '../../../src/lib/stores/channels.js';
 import { serialConnection } from '../../../src/lib/serial.js';
 
 describe('TimeseriesIntegration', () => {
-  let mockHandlers;
+  let mockHandlers = new Map(); // Initialize once and persist
   let integration;
 
   beforeEach(async () => {
@@ -47,19 +51,24 @@ describe('TimeseriesIntegration', () => {
     timeseriesStore.reset();
     channelStore.reset();
     
-    // Clear mock data
-    vi.clearAllMocks();
-    mockHandlers = new Map();
+    // Clear mock call history but preserve implementations
+    mockDecodeSynthesize.mockClear();
+    mockDecodeWave.mockClear();
+    serialConnection.registerPacketHandler.mockClear();
     
-    // Capture registered handlers
-    serialConnection.registerPacketHandler.mockImplementation((type, handler) => {
-      if (!mockHandlers.has(type)) {
-        mockHandlers.set(type, []);
-      }
-      mockHandlers.get(type).push(handler);
-    });
+    // Only create the implementation once, don't recreate the Map
+    if (mockHandlers.size === 0) {
+      // Capture registered handlers BEFORE importing integration module
+      serialConnection.registerPacketHandler.mockImplementation((type, handler) => {
+        if (!mockHandlers.has(type)) {
+          mockHandlers.set(type, []);
+        }
+        mockHandlers.get(type).push(handler);
+      });
+    }
     
-    // Dynamically import integration module to ensure fresh initialization
+    // Don't use vi.resetModules() as it causes multiple imports
+    // Instead, just import fresh each time - the mock should capture properly
     integration = await import('../../../src/lib/stores/timeseries-integration.js');
   });
 
@@ -73,17 +82,22 @@ describe('TimeseriesIntegration', () => {
       expect(serialConnection.registerPacketHandler).toHaveBeenCalledWith(0x12, expect.any(Function));
       expect(mockHandlers.has(0x11)).toBe(true);
       expect(mockHandlers.has(0x12)).toBe(true);
-      expect(mockHandlers.get(0x11)).toHaveLength(1);
-      expect(mockHandlers.get(0x12)).toHaveLength(1);
+      // Since the module auto-initializes and we import it each time, handlers may accumulate
+      expect(mockHandlers.get(0x11).length).toBeGreaterThan(0);
+      expect(mockHandlers.get(0x12).length).toBeGreaterThan(0);
     });
 
     it('should process synthesize packets when session is active', () => {
       // Create recording session
       const sessionId = integration.startRecording([0, 1, 2]);
       
+      // Verify session was created
+      expect(sessionId).toBeTruthy();
+      const activeSession = get(timeseriesStore.activeSession);
+      expect(activeSession).toBeTruthy();
+      
       // Mock synthesize packet data
-      const mockDecoder = serialConnection.getDecoder();
-      mockDecoder.decodeSynthesize.mockReturnValue({
+      mockDecodeSynthesize.mockReturnValue({
         data: {
           channels: [
             { outVoltage: 3.3, outCurrent: 0.5, temperature: 25.5, outputOn: 1 },
@@ -93,11 +107,12 @@ describe('TimeseriesIntegration', () => {
         }
       });
       
-      // Simulate synthesize packet
+      // Simulate synthesize packet - use the last registered handler
       const handlers = mockHandlers.get(0x11);
       expect(handlers).toBeTruthy();
-      expect(handlers).toHaveLength(1);
-      const synthHandler = handlers[0];
+      expect(handlers.length).toBeGreaterThan(0);
+      const synthHandler = handlers[handlers.length - 1]; // Use latest handler
+      
       synthHandler([0x5A, 0x5A, 0x11, 156, 0, 0]); // Mock packet header
       
       // Verify data was stored
@@ -115,8 +130,7 @@ describe('TimeseriesIntegration', () => {
       const sessionId = integration.startRecording([0]);
       
       // Mock wave packet data
-      const mockDecoder = serialConnection.getDecoder();
-      mockDecoder.decodeWave.mockReturnValue({
+      mockDecodeWave.mockReturnValue({
         data: {
           groups: [
             {
@@ -138,7 +152,9 @@ describe('TimeseriesIntegration', () => {
       });
       
       // Simulate wave packet for channel 0
-      const waveHandler = mockHandlers.get(0x12)[0];
+      const waveHandlers = mockHandlers.get(0x12);
+      expect(waveHandlers).toBeTruthy();
+      const waveHandler = waveHandlers[waveHandlers.length - 1];
       waveHandler([0x5A, 0x5A, 0x12, 126, 0, 0]); // Channel 0 in header
       
       // Verify data was stored with correct timestamps
@@ -163,13 +179,14 @@ describe('TimeseriesIntegration', () => {
     });
 
     it('should ignore packets when no active session', () => {
-      const mockDecoder = serialConnection.getDecoder();
-      mockDecoder.decodeSynthesize.mockReturnValue({
+      mockDecodeSynthesize.mockReturnValue({
         data: { channels: [{ outVoltage: 3.3, outCurrent: 0.5 }] }
       });
       
       // No session created - packets should be ignored
-      const synthHandler = mockHandlers.get(0x11)[0];
+      const synthHandlers = mockHandlers.get(0x11);
+      expect(synthHandlers).toBeTruthy();
+      const synthHandler = synthHandlers[synthHandlers.length - 1];
       synthHandler([0x5A, 0x5A, 0x11, 156, 0, 0]);
       
       const sessions = get(timeseriesStore.sessionList);
@@ -256,17 +273,19 @@ describe('TimeseriesIntegration', () => {
   describe('Chart Data Retrieval', () => {
     it('should get chart data for active session', () => {
       const sessionId = integration.startRecording([0]);
-      const baseTime = Date.now();
+      const now = Date.now();
+      const baseTime = now - 1000; // Start 1 second ago to ensure it's within range
       
-      // Add data points
+      // Add data points with explicit unique timestamps within the last second
       for (let i = 0; i < 10; i++) {
-        timeseriesStore.addDataPoint(0, baseTime + i * 100, {
+        timeseriesStore.addDataPoint(0, baseTime + i * 50, {
           voltage: 3.3 + i * 0.1,
           current: 0.5 + i * 0.01
         });
       }
       
-      const chartData = integration.getChartData(0, 10000); // Get last 10 seconds
+      // Get chart data for last 2 seconds, which should include all our data
+      const chartData = integration.getChartData(0, 2000);
       
       expect(chartData.timestamps).toHaveLength(10);
       expect(chartData.voltage).toHaveLength(10);

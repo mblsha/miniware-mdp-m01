@@ -124,7 +124,8 @@
     window.removeEventListener('resize', resizeChart);
   });
   
-  $: if (chart && !isRecording) {
+  // Update chart when data changes and not recording
+  $: if (chart && !isRecording && data.length >= 0) {
     updateChart();
   }
 </script>

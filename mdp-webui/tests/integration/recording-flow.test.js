@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
-import { get } from 'svelte/store';
+import { get, writable, derived } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
 import { 
@@ -9,10 +9,17 @@ import {
   createWavePacket,
   createUpdateChannelPacket 
 } from '../mocks/packet-data.js';
+import { setupTestPacketHandlers } from '../helpers/setup-packet-handlers.js';
+
+// Create hoisted test connection
+const createTestConnection = vi.hoisted(() => {
+  const { TestSerialConnection, ConnectionStatus } = require('../mocks/test-serial-connection.js');
+  return () => new TestSerialConnection();
+});
 
 // Mock the serial connection module to use TestSerialConnection
 vi.mock('../../src/lib/serial.js', () => {
-  const testConnection = new TestSerialConnection();
+  const testConnection = createTestConnection();
   return {
     serialConnection: testConnection,
     ConnectionStatus: {
@@ -24,17 +31,83 @@ vi.mock('../../src/lib/serial.js', () => {
   };
 });
 
+// Create factory functions for mock stores
+const createMockStores = vi.hoisted(() => {
+  return () => {
+    const { writable, derived } = require('svelte/store');
+    const channels = writable(Array(6).fill(null).map((_, i) => ({
+      channel: i,
+      online: false,
+      machineType: 'Unknown',
+      voltage: 0,
+      current: 0,
+      power: 0,
+      temperature: 0,
+      isOutput: false,
+      mode: 'Normal',
+      address: [0, 0, 0, 0, 0],
+      targetVoltage: 0,
+      targetCurrent: 0,
+      recording: false,
+      waveformData: []
+    })));
+    const activeChannel = writable(0);
+    const waitingSynthesize = writable(true);
+    return { channels, activeChannel, waitingSynthesize };
+  };
+});
+
 // Mock the channel store
-vi.mock('../../src/lib/stores/channels.js', () => ({
-  channelStore: {
-    reset: vi.fn(),
-    channels: { subscribe: vi.fn() },
-    activeChannel: { subscribe: vi.fn() },
-    startRecording: vi.fn(),
-    stopRecording: vi.fn(),
-    setActiveChannel: vi.fn()
-  }
-}));
+vi.mock('../../src/lib/stores/channels.js', () => {
+  const { writable, derived } = require('svelte/store');
+  const { channels, activeChannel, waitingSynthesize } = createMockStores();
+  
+  return {
+    channelStore: {
+      channels,
+      activeChannel: derived(activeChannel, $active => $active),
+      waitingSynthesize, // Make this writable for tests
+      reset: vi.fn(() => {
+        channels.set(Array(6).fill(null).map((_, i) => ({
+          channel: i,
+          online: false,
+          machineType: 'Unknown',
+          voltage: 0,
+          current: 0,
+          power: 0,
+          temperature: 0,
+          isOutput: false,
+          mode: 'Normal',
+          address: [0, 0, 0, 0, 0],
+          targetVoltage: 0,
+          targetCurrent: 0,
+          recording: false,
+          waveformData: []
+        })));
+        activeChannel.set(0);
+        waitingSynthesize.set(true);
+      }),
+      setActiveChannel: vi.fn((ch) => activeChannel.set(ch)),
+      setVoltage: vi.fn(),
+      setCurrent: vi.fn(),
+      setOutput: vi.fn(),
+      startRecording: vi.fn((ch) => {
+        channels.update(chs => {
+          chs[ch].recording = true;
+          chs[ch].waveformData = [];
+          return chs;
+        });
+      }),
+      stopRecording: vi.fn((ch) => {
+        channels.update(chs => {
+          chs[ch].recording = false;
+          return chs;
+        });
+      }),
+      clearRecording: vi.fn()
+    }
+  };
+});
 
 import App from '../../src/App.svelte';
 import { serialConnection } from '../../src/lib/serial';
@@ -75,6 +148,9 @@ describe('Recording Flow Integration Test', () => {
     }
     serialConnection.clearPacketHandlers();
     channelStore.reset();
+    
+    // Set up packet handlers for test
+    setupTestPacketHandlers(serialConnection, channelStore);
   });
 
   afterEach(async () => {
@@ -87,12 +163,12 @@ describe('Recording Flow Integration Test', () => {
   });
 
   async function connectDevice({ getByText }) {
+    // Simulate port selection
+    mockSerial.setNextPort(mockPort);
+    
     // Click connect button
     const connectButton = getByText('Connect');
     await fireEvent.click(connectButton);
-    
-    // Simulate port selection
-    mockSerial.setNextPort(mockPort);
     
     // Wait for connection
     await waitFor(() => {
@@ -118,7 +194,7 @@ describe('Recording Flow Integration Test', () => {
 
   it('should complete full recording workflow', async () => {
     const renderResult = render(App);
-    const { container, getByText } = renderResult;
+    const { container, getByText, queryByText } = renderResult;
     
     // Step 1: Connect to device
     await connectDevice(renderResult);
@@ -345,7 +421,8 @@ describe('Recording Flow Integration Test', () => {
   });
 
   it('should update active channel from device', async () => {
-    const { container } = render(App);
+    const renderResult = render(App);
+    const { container } = renderResult;
     
     await connectDevice(renderResult);
     mockPort.simulateData(createMachinePacket(0x10));

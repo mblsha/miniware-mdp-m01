@@ -135,7 +135,7 @@ export function createWavePacket(channel = 0, sizeOrPoints = []) {
 }
 
 export function createMachinePacket(type = 0x10) {
-  const packet = [0x5A, 0x5A, 0x15, 0x09, 0xEE]; // header: magic, type, size, channel
+  const packet = [0x5A, 0x5A, 0x15, 0x09, 0xEE]; // header: magic, type=0x15, size=9, channel
   const data = [0xEE, 0x00, type]; // data: channel, dummy, machineTypeRaw
   
   // Calculate checksum on data bytes only

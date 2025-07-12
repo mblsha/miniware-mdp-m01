@@ -7,8 +7,24 @@ vi.mock('../../src/lib/components/ChannelCard.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockChannelCard.svelte')).default
 }));
 
+// Create proper mock stores that behave like the real ones
+const mockChannelStore = vi.hoisted(() => {
+  const { writable } = require('svelte/store');
+  const channels = writable([]);
+  const activeChannel = writable(0);
+  
+  return {
+    channels,
+    activeChannel,
+    reset: () => {
+      channels.set([]);
+      activeChannel.set(0);
+    }
+  };
+});
+
 vi.mock('../../src/lib/stores/channels.js', () => ({
-  channelStore: { channels: writable([]), activeChannel: writable(0) }
+  channelStore: mockChannelStore
 }));
 
 import Dashboard from '../../src/lib/components/Dashboard.svelte';
@@ -16,6 +32,10 @@ import { channelStore } from '../../src/lib/stores/channels.js';
 
 describe('Dashboard Component', () => {
   beforeEach(() => {
+    // Reset mock store to clean state
+    mockChannelStore.reset();
+    
+    // Set up test data
     channelStore.channels.set(Array(6).fill(null).map((_, i) => ({
       channel: i,
       online: false,
@@ -226,9 +246,10 @@ describe('Dashboard Component', () => {
       }
       
       // Should not crash and last state should be correct
+      // i goes from 0 to 19, so last value is 19 % 6 = 1
       await waitFor(() => {
         const activeCard = container.querySelector('.channel-card.active');
-        expect(activeCard).toHaveAttribute('data-channel', '2'); // 20 % 6 = 2
+        expect(activeCard).toHaveAttribute('data-channel', '1'); // 19 % 6 = 1
       });
     });
 

@@ -189,8 +189,6 @@ describe('Serial Connection', () => {
       const machinePacket = createMachinePacket(0x10);
       mockPort.simulateData(machinePacket);
       
-      // Trigger controlled packet processing
-      await serialConnection.triggerPacketProcessing();
       // Allow timer advancement for any timeouts
       await vi.advanceTimersByTimeAsync(50);
       
@@ -215,13 +213,13 @@ describe('Serial Connection', () => {
       const part2 = machinePacket.slice(4);
       
       mockPort.simulateData(part1);
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
       // Should not have processed yet
       expect(receivedPackets.length).toBe(0);
       
       mockPort.simulateData(part2);
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
       // Now should have processed
       expect(receivedPackets.length).toBe(1);
@@ -244,7 +242,7 @@ describe('Serial Connection', () => {
       const combined = new Uint8Array([...garbage, ...validPacket]);
       
       mockPort.simulateData(combined);
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
       expect(receivedPackets.length).toBe(1);
       expect(receivedPackets[0]).toEqual(Array.from(validPacket));
@@ -273,7 +271,7 @@ describe('Serial Connection', () => {
       const combined = new Uint8Array([...packet1, ...packet2]);
       
       mockPort.simulateData(combined);
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
       expect(machinePackets.length).toBe(1);
       expect(heartbeatPackets.length).toBe(1);
@@ -290,7 +288,7 @@ describe('Serial Connection', () => {
       // Simulate disconnection
       mockPort.simulateDisconnect();
       
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
       let statusValue;
       const unsubscribe = serialConnection.status.subscribe(value => statusValue = value);
@@ -323,7 +321,7 @@ describe('Serial Connection', () => {
       
       // Simulate error
       mockPort.simulateDisconnect();
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
       // Disconnect and reconnect
       await serialConnection.disconnect();
@@ -361,7 +359,7 @@ describe('Serial Connection', () => {
   });
 
   describe('Multiple Handlers', () => {
-    it('should support multiple handlers for same packet type', async () => {
+    it('should support single handler per packet type (overrides previous)', async () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
@@ -372,7 +370,7 @@ describe('Serial Connection', () => {
         handler1Packets.push(packet);
       });
       
-      // Note: Current implementation might override, but ideally should support multiple
+      // Second handler should override the first (matching real implementation)
       serialConnection.registerPacketHandler(0x15, (packet) => {
         handler2Packets.push(packet);
       });
@@ -380,10 +378,11 @@ describe('Serial Connection', () => {
       await serialConnection.connect();
       
       mockPort.simulateData(createMachinePacket(0x10));
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
-      // At least one handler should receive the packet
-      expect(handler1Packets.length + handler2Packets.length).toBeGreaterThan(0);
+      // Only the second handler should receive the packet
+      expect(handler1Packets.length).toBe(0);
+      expect(handler2Packets.length).toBe(1);
     });
   });
 
@@ -404,7 +403,7 @@ describe('Serial Connection', () => {
       
       // Send only header first
       mockPort.simulateData(header);
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
       // Should not process yet (waiting for 156 bytes total)
       expect(receivedPackets.length).toBe(0);
@@ -412,7 +411,7 @@ describe('Serial Connection', () => {
       // Send rest of data
       const remainingData = new Uint8Array(150);
       mockPort.simulateData(remainingData);
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(10);
       
       // Now should process
       expect(receivedPackets.length).toBe(1);

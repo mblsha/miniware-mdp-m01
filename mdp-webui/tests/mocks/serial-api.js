@@ -44,6 +44,7 @@ export class MockReader {
     this.dataQueue = [];
     this.closed = false;
     this.readCount = 0;
+    this.pendingRead = null;
   }
 
   async read() {
@@ -55,20 +56,30 @@ export class MockReader {
       return { value: this.dataQueue.shift(), done: false };
     }
     
-    // Always return empty data immediately for test environment
-    // This prevents any hanging and allows controlled packet processing
-    return Promise.resolve({ value: new Uint8Array([]), done: false });
+    // Store the promise resolver so we can trigger it when data arrives
+    return new Promise((resolve) => {
+      this.pendingRead = resolve;
+    });
   }
 
   async cancel() {
     this.closed = true;
     this.stream.locked = false;
+    if (this.pendingRead) {
+      this.pendingRead({ done: true });
+      this.pendingRead = null;
+    }
     return Promise.resolve();
   }
 
   // Helper method to push data for testing
   pushData(data) {
     this.dataQueue.push(data);
+    // If there's a pending read, resolve it immediately
+    if (this.pendingRead) {
+      this.pendingRead({ value: this.dataQueue.shift(), done: false });
+      this.pendingRead = null;
+    }
   }
 }
 
@@ -127,7 +138,8 @@ export class MockSerialPort {
   simulateData(data) {
     const reader = this.readable.reader;
     if (reader) {
-      reader.pushData(new Uint8Array(data));
+      // Add data to the reader's dataQueue for our test-optimized readLoop
+      reader.dataQueue.push(new Uint8Array(data));
     }
   }
 

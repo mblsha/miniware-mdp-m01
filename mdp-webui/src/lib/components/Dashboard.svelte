@@ -4,8 +4,7 @@
   
   export let onselectchannel = undefined;
   
-  $: channels = channelStore.channels;
-  $: activeChannel = channelStore.activeChannel;
+  const { channels, activeChannel } = channelStore;
   
   function selectChannel(channel) {
     onselectchannel?.(channel);

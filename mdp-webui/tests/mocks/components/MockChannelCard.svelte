@@ -25,10 +25,10 @@
     <span class="machine-type">{channel.machineType || 'Unknown'}</span>
   </div>
   <div class="measurements">
-    <div>V: {channel.voltage || 0}V</div>
-    <div>I: {channel.current || 0}A</div>
-    <div>P: {channel.power || 0}W</div>
-    <div>T: {channel.temperature || 0}°C</div>
+    <div>{(channel.voltage || 0).toFixed(3)} V</div>
+    <div>{(channel.current || 0).toFixed(3)} A</div>
+    <div>{(channel.power || 0).toFixed(3)} W</div>
+    <div>{(channel.temperature || 0).toFixed(1)} °C</div>
   </div>
 </div>
 

@@ -1,6 +1,27 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
+// Note: Component mocking is done individually in test files where needed
+
+// Add CSS support for computed styles in tests
+// Mock getComputedStyle to return proper CSS values for grid layout
+const originalGetComputedStyle = window.getComputedStyle;
+window.getComputedStyle = vi.fn((element) => {
+  const styles = originalGetComputedStyle(element);
+  
+  // Check if element has grid-related classes or styles
+  if (element.classList?.contains('channel-grid') || 
+      element.className?.includes('channel-grid')) {
+    return {
+      ...styles,
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    };
+  }
+  
+  return styles;
+});
+
 // Mock Web Serial API globally
 global.navigator.serial = {
   requestPort: vi.fn(),
