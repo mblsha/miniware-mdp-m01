@@ -24,12 +24,17 @@ A web-based interface for the Miniware MDP (M01/M02) multi-channel power supply 
 npm install --legacy-peer-deps
 ```
 
-2. Start the development server:
+2. (Optional) Regenerate the Kaitai parser from `cpp/mdp.ksy`:
+```bash
+npm run generate-kaitai
+```
+
+3. Start the development server:
 ```bash
 npm run dev
 ```
 
-3. Open your browser to http://localhost:5173
+4. Open your browser to http://localhost:5173
 
 ## Usage
 
