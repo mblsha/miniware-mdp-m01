@@ -144,7 +144,8 @@ describe('Dashboard Component', () => {
       
       // Click channel 3
       const card = getByTestId('channel-card-3');
-      await fireEvent.click(card);
+      await fireEvent.pointerDown(card);
+      await fireEvent.pointerUp(card);
       
       expect(selectHandler).toHaveBeenCalledWith(3);
     });
@@ -156,9 +157,12 @@ describe('Dashboard Component', () => {
       });
       
       // Click multiple channels
-      await fireEvent.click(getByTestId('channel-card-1'));
-      await fireEvent.click(getByTestId('channel-card-4'));
-      await fireEvent.click(getByTestId('channel-card-0'));
+      await fireEvent.pointerDown(getByTestId('channel-card-1'));
+      await fireEvent.pointerUp(getByTestId('channel-card-1'));
+      await fireEvent.pointerDown(getByTestId('channel-card-4'));
+      await fireEvent.pointerUp(getByTestId('channel-card-4'));
+      await fireEvent.pointerDown(getByTestId('channel-card-0'));
+      await fireEvent.pointerUp(getByTestId('channel-card-0'));
       
       expect(selections).toEqual([1, 4, 0]);
     });
@@ -172,7 +176,8 @@ describe('Dashboard Component', () => {
       });
       
       // Click the already active channel
-      await fireEvent.click(getByTestId('channel-card-2'));
+      await fireEvent.pointerDown(getByTestId('channel-card-2'));
+      await fireEvent.pointerUp(getByTestId('channel-card-2'));
       
       expect(selectHandler).toHaveBeenCalledWith(2);
     });

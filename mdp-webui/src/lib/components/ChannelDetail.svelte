@@ -89,7 +89,7 @@
 
 <div class="channel-detail">
   <div class="header">
-    <button class="back-button" onclick={goBack}>← Back</button>
+    <button class="back-button" onpointerup={goBack}>← Back</button>
     <h2>Channel {channel + 1} - {channelData?.machineType || 'Unknown'}</h2>
   </div>
   
@@ -101,7 +101,7 @@
           <button 
             class="output-toggle"
             class:on={channelData.isOutput}
-            onclick={toggleOutput}
+            onpointerup={toggleOutput}
           >
             Output: {channelData.isOutput ? 'ON' : 'OFF'}
           </button>
@@ -121,7 +121,7 @@
                 data-testid="voltage-input"
               />
             </label>
-            <button onclick={applyVoltage}>Set V</button>
+            <button onpointerup={applyVoltage}>Set V</button>
           </div>
           <div class="parameter">
             <label>
@@ -134,7 +134,7 @@
                 step="0.001"
               />
             </label>
-            <button onclick={applyCurrent}>Set I</button>
+            <button onpointerup={applyCurrent}>Set I</button>
           </div>
         </div>
         
@@ -212,11 +212,11 @@
           <h3>Waveform Recording</h3>
           <div class="recording-controls">
             {#if !isRecording}
-              <button class="record-button" onclick={startRecording}>
+              <button class="record-button" onpointerup={startRecording}>
                 Start Recording
               </button>
             {:else}
-              <button class="stop-button" onclick={stopRecording}>
+              <button class="stop-button" onpointerup={stopRecording}>
                 Stop Recording
               </button>
               <span class="recording-indicator">
@@ -224,7 +224,7 @@
               </span>
             {/if}
             {#if channelData.waveformData.length > 0}
-              <button onclick={exportData}>Export Data</button>
+              <button onpointerup={exportData}>Export Data</button>
               <span class="data-points">
                 {channelData.waveformData.length} points
               </span>
@@ -267,10 +267,16 @@
     padding: 0.5rem 1rem;
     border-radius: 4px;
     cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
   }
   
   .back-button:hover {
     background-color: #f0f0f0;
+  }
+  
+  .back-button:active {
+    background-color: #e0e0e0;
   }
   
   h2 {
@@ -313,10 +319,16 @@
     cursor: pointer;
     background-color: #f44336;
     color: white;
+    touch-action: manipulation;
+    user-select: none;
   }
   
   .output-toggle.on {
     background-color: #4caf50;
+  }
+  
+  .output-toggle:active {
+    transform: scale(0.98);
   }
   
   .parameter {
@@ -354,10 +366,16 @@
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.875rem;
+    touch-action: manipulation;
+    user-select: none;
   }
   
   button:hover {
     background-color: #1976d2;
+  }
+  
+  button:active {
+    transform: scale(0.98);
   }
   
   .measurements {

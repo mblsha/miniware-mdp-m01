@@ -159,7 +159,8 @@ describe('ChannelCard Component', () => {
       });
       
       const card = container.querySelector('.channel-card');
-      await fireEvent.click(card);
+      await fireEvent.pointerDown(card);
+      await fireEvent.pointerUp(card);
       
       expect(clickHandler).toHaveBeenCalledTimes(1);
     });
@@ -175,7 +176,8 @@ describe('ChannelCard Component', () => {
       });
       
       const card = container.querySelector('.channel-card');
-      await fireEvent.click(card);
+      await fireEvent.pointerDown(card);
+      await fireEvent.pointerUp(card);
       
       expect(clickHandler).toHaveBeenCalledTimes(1);
     });

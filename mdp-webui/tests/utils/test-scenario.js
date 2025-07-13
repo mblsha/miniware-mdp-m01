@@ -238,7 +238,8 @@ export const CommonScenarios = {
         const channelCard = ctx.getByText(`Channel ${channelIndex + 1}`)
           .closest('.channel-card');
         
-        await fireEvent.click(channelCard);
+        await fireEvent.pointerDown(channelCard);
+      await fireEvent.pointerUp(channelCard);
         await waitForAsyncUpdates();
       });
   },

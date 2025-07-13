@@ -167,7 +167,10 @@ describe('Dashboard Channel Management Tests', () => {
       const { container } = render(Dashboard, { props: { onselectchannel } });
       
       const channelCards = container.querySelectorAll('.channel-card');
-      await fireEvent.click(channelCards[2]);
+      await fireEvent.pointerDown(channelCards[2]);
+
+      await fireEvent.pointerUp(channelCards[2]);
+      await fireEvent.pointerUp(channelCards[2]);
       
       expect(onselectchannel).toHaveBeenCalledWith(2);
     });

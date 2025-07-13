@@ -96,7 +96,8 @@ describe('ChannelDetail Component', () => {
       const backHandler = vi.fn();
       const { getByText } = render(ChannelDetail, { props: { channel: 0, onback: backHandler } });
       
-      await fireEvent.click(getByText('← Back'));
+      await fireEvent.pointerDown(getByText('← Back'));
+      await fireEvent.pointerUp(getByText('← Back'));
       
       expect(backHandler).toHaveBeenCalled();
     });
@@ -123,7 +124,8 @@ describe('ChannelDetail Component', () => {
     it('should toggle output when clicked', async () => {
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
-      await fireEvent.click(getByText('Output: ON'));
+      await fireEvent.pointerDown(getByText('Output: ON'));
+      await fireEvent.pointerUp(getByText('Output: ON'));
       
       expect(channelStore.setOutput).toHaveBeenCalledWith(0, false);
     });
@@ -156,7 +158,8 @@ describe('ChannelDetail Component', () => {
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       await fireEvent.input(voltageInput, { target: { value: '5' } });
       
-      await fireEvent.click(getByText('Set V'));
+      await fireEvent.pointerDown(getByText('Set V'));
+      await fireEvent.pointerUp(getByText('Set V'));
       
       expect(channelStore.setVoltage).toHaveBeenCalledWith(0, 5, 0.5);
     });
@@ -167,7 +170,8 @@ describe('ChannelDetail Component', () => {
       const currentInput = getByLabelText(/Current \(A\)/);
       await fireEvent.input(currentInput, { target: { value: '1.5' } });
       
-      await fireEvent.click(getByText('Set I'));
+      await fireEvent.pointerDown(getByText('Set I'));
+      await fireEvent.pointerUp(getByText('Set I'));
       
       expect(channelStore.setCurrent).toHaveBeenCalledWith(0, 3.3, 1.5);
     });
@@ -193,7 +197,8 @@ describe('ChannelDetail Component', () => {
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       await fireEvent.input(voltageInput, { target: { value: '12.345' } });
       
-      await fireEvent.click(getByText('Set V'));
+      await fireEvent.pointerDown(getByText('Set V'));
+      await fireEvent.pointerUp(getByText('Set V'));
       
       expect(channelStore.setVoltage).toHaveBeenCalledWith(0, 12.345, 0.5);
     });
@@ -239,7 +244,8 @@ describe('ChannelDetail Component', () => {
     it('should start recording when button clicked', async () => {
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
-      await fireEvent.click(getByText('Start Recording'));
+      await fireEvent.pointerDown(getByText('Start Recording'));
+      await fireEvent.pointerUp(getByText('Start Recording'));
       
       expect(channelStore.startRecording).toHaveBeenCalledWith(0);
     });
@@ -258,7 +264,8 @@ describe('ChannelDetail Component', () => {
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
       // Start recording by clicking the button
-      await fireEvent.click(getByText('Start Recording'));
+      await fireEvent.pointerDown(getByText('Start Recording'));
+      await fireEvent.pointerUp(getByText('Start Recording'));
       
       // Update the store to reflect recording state
       mockChannelData[0].recording = true;
@@ -278,7 +285,8 @@ describe('ChannelDetail Component', () => {
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
-      await fireEvent.click(getByText('Stop Recording'));
+      await fireEvent.pointerDown(getByText('Stop Recording'));
+      await fireEvent.pointerUp(getByText('Stop Recording'));
       
       expect(channelStore.stopRecording).toHaveBeenCalledWith(0);
     });
@@ -308,7 +316,8 @@ describe('ChannelDetail Component', () => {
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
-      await fireEvent.click(getByText('Export Data'));
+      await fireEvent.pointerDown(getByText('Export Data'));
+      await fireEvent.pointerUp(getByText('Export Data'));
       
       // Verify Blob creation
       expect(global.Blob).toHaveBeenCalled();
@@ -346,7 +355,8 @@ describe('ChannelDetail Component', () => {
       
       expect(getByText('1000 points')).toBeInTheDocument();
       
-      await fireEvent.click(getByText('Export Data'));
+      await fireEvent.pointerDown(getByText('Export Data'));
+      await fireEvent.pointerUp(getByText('Export Data'));
       
       expect(global.Blob).toHaveBeenCalled();
       expect(mockClick).toHaveBeenCalled();
@@ -443,7 +453,8 @@ describe('ChannelDetail Component', () => {
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
       // Start recording by clicking the button
-      await fireEvent.click(getByText('Start Recording'));
+      await fireEvent.pointerDown(getByText('Start Recording'));
+      await fireEvent.pointerUp(getByText('Start Recording'));
       
       // Update the store to reflect recording state
       mockChannelData[0].recording = true;
@@ -467,7 +478,8 @@ describe('ChannelDetail Component', () => {
       // Rapid changes
       for (let i = 0; i < 10; i++) {
         await fireEvent.input(voltageInput, { target: { value: String(i) } });
-        await fireEvent.click(getByText('Set V'));
+        await fireEvent.pointerDown(getByText('Set V'));
+        await fireEvent.pointerUp(getByText('Set V'));
       }
       
       expect(channelStore.setVoltage).toHaveBeenCalledTimes(10);
@@ -479,7 +491,8 @@ describe('ChannelDetail Component', () => {
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       await fireEvent.input(voltageInput, { target: { value: 'abc' } });
       
-      await fireEvent.click(getByText('Set V'));
+      await fireEvent.pointerDown(getByText('Set V'));
+      await fireEvent.pointerUp(getByText('Set V'));
       
       // When input is invalid, the number input returns null for invalid values
       // The component passes channel (0), targetVoltage (null), targetCurrent (0.5)

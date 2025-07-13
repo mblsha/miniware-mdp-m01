@@ -348,7 +348,7 @@
           <span class="stat-value">{timestampPatterns.packetsWithDuplicates}</span>
         </div>
       </div>
-      <button class="export-button" onclick={exportToCSV}>
+      <button class="export-button" onpointerup={exportToCSV}>
         Export CSV
       </button>
     </div>

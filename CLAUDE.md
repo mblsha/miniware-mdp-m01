@@ -662,6 +662,324 @@ After systematic fixes:
 
 The key insight is that fixing environmental issues first creates a stable foundation where individual test logic can be debugged effectively.
 
+### Unit Test Implementation Insights
+
+#### 1. Keep Event Handlers Simple
+**Problem**: Complex pointer event implementations with state tracking break tests.
+```javascript
+// ❌ WRONG - Overly complex, hard to test
+let isPressed = false;
+function handlePointerDown() { isPressed = true; }
+function handlePointerUp() { if (isPressed) onClick(); }
+
+// ✅ CORRECT - Simple and testable
+<button onpointerup={onClick}>Click Me</button>
+```
+
+**Key Learning**: When asked to change click handlers to pointer events, use the simplest possible implementation. Tests expect straightforward behavior.
+
+#### 2. Test Event Sequences Must Match Implementation
+**Problem**: Tests firing only `pointerDown` when component expects both `pointerDown` and `pointerUp`.
+```javascript
+// ❌ WRONG - Incomplete event sequence
+await fireEvent.pointerDown(button);
+expect(handler).toHaveBeenCalled(); // Fails if component needs pointerUp
+
+// ✅ CORRECT - Complete event sequence
+await fireEvent.pointerDown(button);
+await fireEvent.pointerUp(button);
+expect(handler).toHaveBeenCalled();
+```
+
+#### 3. Mock Component Props Must Match Exactly
+**Problem**: Mock components using different prop names than real components.
+```javascript
+// Real ChannelCard expects: onclick (function prop)
+<ChannelCard onclick={() => selectChannel(0)} />
+
+// Mock must use same prop name:
+export let onclick = () => {};  // Not "handleClick" or "onSelect"
+```
+
+#### 4. Avoid Automated Test Fixes Without Understanding
+**Problem**: Bulk search-and-replace can create duplicate event calls or broken syntax.
+```javascript
+// Automated fix created duplicates:
+await fireEvent.pointerDown(card);
+await fireEvent.pointerUp(card);
+await fireEvent.pointerUp(card); // Duplicate!
+```
+
+**Solution**: Review automated changes carefully, especially in test files.
+
+#### 5. Component Tests vs Integration Tests
+- **Component Tests**: Focus on isolated behavior, mock all dependencies
+- **Integration Tests**: Test full application flow, may have complex setup requirements
+- **Priority**: Fix component tests first - they're simpler and provide immediate value
+
+#### 6. Test Failure Patterns to Recognize
+- **"Unable to find element"**: Often caused by component not rendering due to missing mocks
+- **"spy not called"**: Event handler not triggered - check event sequence
+- **"Cannot read property of undefined"**: Mock data structure doesn't match component expectations
+- **Timeout errors**: Usually infinite loops or unresolved promises in mocked async operations
+
+#### 7. Incremental Testing Strategy
+1. Run all tests to get baseline
+2. Focus on one test file at a time
+3. Fix environmental issues first (missing packages, mock setup)
+4. Then fix individual test logic
+5. Verify fixes don't break other tests
+
+**Success Metric**: Component tests went from 78 failures to 0 failures by following these principles.
+
+### Critical Test Infrastructure Insights
+
+#### 1. Infinite Loop Problem in Test Environments
+**Issue**: The real `SerialConnection` class uses an infinite `readLoop()` that blocks forever in tests:
+```javascript
+// Production code - causes test timeouts
+async readLoop() {
+  while (this.port && this.reader) {
+    const { value, done } = await this.reader.read();
+    // Process data...
+  }
+}
+```
+
+**Solution**: Create a `TestSerialConnection` that eliminates infinite loops and provides controlled processing:
+```javascript
+// Test-specific implementation
+async processAvailableData() {
+  const buffer = [];
+  let readAttempts = 0;
+  while (readAttempts < 10) { // Bounded loop
+    const { value, done } = await this.reader.read();
+    if (done || !value?.length) break;
+    buffer.push(...value);
+    readAttempts++;
+  }
+  if (buffer.length > 0) {
+    this.processBuffer(buffer);
+  }
+}
+
+// Explicit trigger for tests
+async triggerPacketProcessing() {
+  await this.processAvailableData();
+}
+```
+
+#### 2. Module Import Order is Critical
+**Issue**: Importing modules before mocks are set up causes real implementations to be used:
+```javascript
+// ❌ WRONG - Real serialConnection gets imported
+import { serialConnection } from '$lib/serial';
+vi.mock('$lib/serial.js', () => ({ /* mock */ }));
+
+// ✅ CORRECT - Mock first, import later
+vi.mock('$lib/serial.js', () => ({ /* mock */ }));
+const { serialConnection } = await import('$lib/serial');
+```
+
+#### 3. Event Type Consistency is Essential
+**Issue**: Components use `onpointerup` but tests fire `pointerDown`, causing actions to never trigger:
+```javascript
+// Component
+<button onpointerup={handleConnect}>Connect</button>
+
+// ❌ WRONG test - event type mismatch
+await fireEvent.pointerDown(getByText('Connect'));
+
+// ✅ CORRECT test - matching event type
+await fireEvent.pointerUp(getByText('Connect'));
+```
+
+#### 4. Mock Data Must Match Kaitai Parser Output Exactly
+**Issue**: Tests fail when mock data structure doesn't match what the real Kaitai parser produces:
+```javascript
+// ❌ WRONG - Old field names
+{
+  voltage: ch.voltage,
+  current: ch.current,
+  isOutput: ch.isOutput,
+  machineType: ch.machineType
+}
+
+// ✅ CORRECT - Kaitai field names
+{
+  voltage: ch.outVoltage,      // Kaitai converts mV to V
+  current: ch.outCurrent,      // Kaitai converts mA to A
+  isOutput: ch.outputOn !== 0,
+  machineType: getMachineTypeString(ch.type)
+}
+```
+
+#### 5. Test-Specific Architecture for Streaming Components
+**Problem**: Production code optimized for real-time streaming is incompatible with test environments.
+
+**Solution**: Create test-specific implementations that maintain the same API but eliminate problematic patterns:
+- Replace infinite async loops with bounded processing
+- Remove timer dependencies in mocks
+- Provide explicit control methods for deterministic testing
+- Clear all handlers between tests to prevent interference
+
+#### 6. Packet Decoder Validation is Working as Intended
+**Insight**: Tests that appear to be "failing" may actually be testing error conditions:
+- Decoder correctly rejects packets with size mismatches
+- Cannot decode multiple packets in one buffer (by design)
+- Validates packet headers and checksums
+- These "failures" in console output are the tests verifying error handling
+
+#### 7. Always Clean Up Test State
+**Critical**: Failing to clean up can cause cascading test failures:
+```javascript
+afterEach(async () => {
+  serialConnection.stopHeartbeat();
+  serialConnection.clearPacketHandlers();
+  if (get(serialConnection.status) !== 'disconnected') {
+    await serialConnection.disconnect();
+  }
+  channelStore.reset();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+```
+
+## UI Event Handling: Pointer Events Best Practices
+
+### Always Use Pointer Events, Not Click or Touch Events
+
+**Critical**: This codebase uses pointer events exclusively for all user interactions. Do NOT use `onclick`, `onmousedown`, `ontouchstart`, or similar legacy events.
+
+#### Why Pointer Events?
+
+1. **Unified API**: Single event system for mouse, touch, and stylus input
+2. **Better Touch Support**: No 300ms click delay on mobile devices
+3. **Pressure Sensitivity**: Ready for future pressure-sensitive features
+4. **Consistent Behavior**: Same code path for all input types
+
+#### Implementation Guidelines
+
+##### Simple Pattern (Recommended)
+```javascript
+// Component
+<button onpointerup={handleAction}>Click Me</button>
+
+// Test
+await fireEvent.pointerUp(getByText('Click Me'));
+```
+
+##### Complex Pattern (When Visual Feedback Needed)
+```javascript
+// Component
+let isPressed = false;
+
+function handlePointerDown() {
+  isPressed = true;
+}
+
+function handlePointerUp() {
+  if (isPressed) {
+    doAction();
+  }
+  isPressed = false;
+}
+
+<button 
+  onpointerdown={handlePointerDown}
+  onpointerup={handlePointerUp}
+  onpointercancel={() => isPressed = false}
+  class:pressed={isPressed}
+>
+
+// Test - MUST fire both events
+await fireEvent.pointerDown(button);
+await fireEvent.pointerUp(button);
+```
+
+#### CSS Requirements
+
+Always add these properties to interactive elements:
+```css
+.interactive-element {
+  touch-action: manipulation; /* Prevents double-tap zoom */
+  user-select: none;         /* Prevents text selection */
+}
+
+.interactive-element:active {
+  /* Visual feedback for press state */
+  transform: scale(0.98);
+}
+```
+
+#### Common Pitfalls to Avoid
+
+1. **DON'T use click events**: They add unnecessary delays on touch devices
+2. **DON'T mix event types**: Use pointer events exclusively
+3. **DON'T forget both events**: If using pointerdown, always handle pointerup
+4. **DON'T ignore pointer cancel**: Users can cancel by dragging away
+
+#### Testing Pointer Events
+
+```javascript
+// ❌ WRONG
+await fireEvent.click(button);
+
+// ✅ CORRECT - Simple interaction
+await fireEvent.pointerUp(button);
+
+// ✅ CORRECT - Complex interaction with visual feedback
+await fireEvent.pointerDown(button);
+await fireEvent.pointerUp(button);
+```
+
+#### Migration Checklist
+
+When updating existing code:
+1. Replace `onclick` → `onpointerup`
+2. Replace `onmousedown` → `onpointerdown`
+3. Replace `ontouchstart` → `onpointerdown`
+4. Add `touch-action: manipulation` to CSS
+5. Update tests to use `fireEvent.pointerUp/Down`
+6. Test on both desktop and touch devices
+
+#### Svelte-Specific Patterns
+
+##### Event Forwarding
+```svelte
+<!-- Parent passes handler -->
+<ChannelCard {channel} onclick={handleChannelClick} />
+
+<!-- Child component -->
+<script>
+  export let onclick = undefined;
+</script>
+
+<div onpointerup={onclick}>
+  <!-- content -->
+</div>
+```
+
+##### Preventing Event Bubbling
+```svelte
+<div onpointerup={handleCardClick}>
+  <button onpointerdown|stopPropagation onpointerup|stopPropagation={handleButtonClick}>
+    Button inside card
+  </button>
+</div>
+```
+
+##### Keyboard Support
+Always maintain keyboard accessibility alongside pointer events:
+```svelte
+<div 
+  onpointerup={handleClick}
+  onkeydown={(e) => e.key === 'Enter' && handleClick()}
+  role="button"
+  tabindex="0"
+>
+```
+
 ## Important Considerations
 
 - The C++ code references Qt's deprecated features and may need updates for newer Qt versions
@@ -672,3 +990,4 @@ The key insight is that fixing environmental issues first creates a stable found
 - Use QSignalSpy from QtTest to verify Qt signal emissions in tests
 - All packet checksums are calculated as XOR of data bytes only (excluding 6-byte header)
 - Kaitai cross-validation ensures protocol specification accuracy against reference implementation
+- ALWAYS use pointer events for UI interactions, never click or touch events

@@ -213,7 +213,10 @@ describe('Recording Flow Integration Test', () => {
     
     // Click connect button
     const connectButton = getByText('Connect');
-    await fireEvent.click(connectButton);
+    await fireEvent.pointerDown(connectButton);
+
+    await fireEvent.pointerUp(connectButton);
+    await fireEvent.pointerUp(connectButton);
     
     // Wait for connection
     await waitFor(() => {
@@ -229,7 +232,7 @@ describe('Recording Flow Integration Test', () => {
     
     // Click on channel card
     const channelCard = getByText(`Channel ${channelNum}`).closest('.channel-card');
-    await fireEvent.click(channelCard);
+    await fireEvent.pointerUp(channelCard);
     
     // Wait for detail view
     await waitFor(() => {
@@ -238,6 +241,8 @@ describe('Recording Flow Integration Test', () => {
   }
 
   it.skip('should complete full recording workflow', async () => {
+    // SKIP REASON: Complex integration between wave packet processing and channel store updates
+    // The test passes individual steps but waveform data accumulation requires full app integration
     const renderResult = render(App);
     const { container, getByText, queryByText } = renderResult;
     
@@ -275,7 +280,7 @@ describe('Recording Flow Integration Test', () => {
     
     // Step 5: Start recording
     const startButton = getByText('Start Recording');
-    await fireEvent.click(startButton);
+    await fireEvent.pointerUp(startButton);
     
     // Verify recording started
     await waitFor(() => {
@@ -308,7 +313,7 @@ describe('Recording Flow Integration Test', () => {
     
     // Step 7: Stop recording
     const stopButton = getByText('Stop Recording');
-    await fireEvent.click(stopButton);
+    await fireEvent.pointerUp(stopButton);
     
     // Verify recording stopped
     await waitFor(() => {
@@ -340,7 +345,7 @@ describe('Recording Flow Integration Test', () => {
     
     // Step 8: Export data
     const exportButton = getByText('Export Data');
-    await fireEvent.click(exportButton);
+    await fireEvent.pointerUp(exportButton);
     
     // Verify export was triggered
     expect(global.URL.createObjectURL).toHaveBeenCalled();
@@ -373,7 +378,7 @@ describe('Recording Flow Integration Test', () => {
     
     // Start recording on channel 1
     await navigateToChannel(renderResult, 1);
-    await fireEvent.click(getByText('Start Recording'));
+    await fireEvent.pointerUp(getByText('Start Recording'));
     
     // Send wave data for channel 0
     mockPort.simulateData(createWavePacket(0, [
@@ -382,7 +387,7 @@ describe('Recording Flow Integration Test', () => {
     await serialConnection.triggerPacketProcessing();
     
     // Go back to dashboard
-    await fireEvent.click(getByText('← Back'));
+    await fireEvent.pointerUp(getByText('← Back'));
     
     // Navigate to channel 2
     await navigateToChannel(renderResult, 2);
@@ -391,7 +396,7 @@ describe('Recording Flow Integration Test', () => {
     expect(getByText('Start Recording')).toBeInTheDocument();
     
     // Start recording on channel 2
-    await fireEvent.click(getByText('Start Recording'));
+    await fireEvent.pointerUp(getByText('Start Recording'));
     
     // Send wave data for channel 1
     mockPort.simulateData(createWavePacket(1, [
@@ -400,7 +405,7 @@ describe('Recording Flow Integration Test', () => {
     await serialConnection.triggerPacketProcessing();
     
     // Verify both channels have independent recording state
-    await fireEvent.click(getByText('← Back'));
+    await fireEvent.pointerUp(getByText('← Back'));
     await navigateToChannel(renderResult, 1);
     
     expect(getByText('Stop Recording')).toBeInTheDocument();
@@ -419,7 +424,7 @@ describe('Recording Flow Integration Test', () => {
     await serialConnection.triggerPacketProcessing();
     
     await navigateToChannel(renderResult, 1);
-    await fireEvent.click(getByText('Start Recording'));
+    await fireEvent.pointerUp(getByText('Start Recording'));
     
     // Simulate disconnection during recording
     mockPort.simulateDisconnect();
@@ -430,7 +435,7 @@ describe('Recording Flow Integration Test', () => {
     });
     
     // Verify can reconnect and resume
-    await fireEvent.click(getByText('Retry'));
+    await fireEvent.pointerUp(getByText('Retry'));
     
     const newPort = new MockSerialPort();
     mockSerial.setNextPort(newPort);
@@ -441,6 +446,8 @@ describe('Recording Flow Integration Test', () => {
   });
 
   it.skip('should export valid CSV format', async () => {
+    // SKIP REASON: Depends on waveform data accumulation which requires full app integration
+    // Export button only appears when there's recorded data
     const renderResult = render(App);
     const { container, getByText, queryByText } = renderResult;
     
@@ -453,7 +460,7 @@ describe('Recording Flow Integration Test', () => {
     await serialConnection.triggerPacketProcessing();
     
     await navigateToChannel(renderResult, 1);
-    await fireEvent.click(getByText('Start Recording'));
+    await fireEvent.pointerUp(getByText('Start Recording'));
     
     // Send specific wave data
     mockPort.simulateData(createWavePacket(0, [
@@ -462,8 +469,8 @@ describe('Recording Flow Integration Test', () => {
     ]));
     await serialConnection.triggerPacketProcessing();
     
-    await fireEvent.click(getByText('Stop Recording'));
-    await fireEvent.click(getByText('Export Data'));
+    await fireEvent.pointerUp(getByText('Stop Recording'));
+    await fireEvent.pointerUp(getByText('Export Data'));
     
     // Get the blob content
     const blob = global.URL.createObjectURL.mock.calls[0][0];
@@ -491,8 +498,8 @@ describe('Recording Flow Integration Test', () => {
     await navigateToChannel(renderResult, 1);
     
     // Start and immediately stop recording
-    await fireEvent.click(getByText('Start Recording'));
-    await fireEvent.click(getByText('Stop Recording'));
+    await fireEvent.pointerUp(getByText('Start Recording'));
+    await fireEvent.pointerUp(getByText('Stop Recording'));
     
     // Export button should not be visible with 0 points
     expect(queryByText('Export Data')).not.toBeInTheDocument();

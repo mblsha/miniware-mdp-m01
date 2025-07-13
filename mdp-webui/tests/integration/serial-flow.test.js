@@ -1,7 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/svelte';
-import { tick } from 'svelte';
-import { get, writable, derived } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
 import { 
@@ -14,7 +11,6 @@ import {
 } from '../mocks/packet-data.js';
 import { setupPacketHandlers } from '../helpers/setup-packet-handlers.js';
 import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '$lib/packet-encoder';
-import { serialConnection as realSerialConnection } from '$lib/serial';
 
 // Hoist packet encoder functions for use in mocks
 const packetEncoders = vi.hoisted(() => {
@@ -141,9 +137,17 @@ vi.mock('$lib/stores/channels.js', () => {
   };
 });
 
-import App from '../../src/App.svelte';
-import { serialConnection } from '$lib/serial';
-import { channelStore } from '$lib/stores/channels';
+// Import these after mocks are set up
+const { render, fireEvent, waitFor } = await import('@testing-library/svelte');
+const { tick } = await import('svelte');
+const { get, writable, derived } = await import('svelte/store');
+
+// Now import App after all mocks are in place
+const App = (await import('../../src/App.svelte')).default;
+
+// Use the mocked instances
+const serialConnection = sharedTestConnection;
+const { channelStore } = await import('$lib/stores/channels');
 
 describe('Serial Communication Flow Integration Test', () => {
   let mockSerial;
@@ -187,7 +191,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockSerial.setNextPort(mockPort);
       
       // Click connect
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Verify connection established
       await waitFor(() => {
@@ -243,7 +247,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Wait for connection to be established
       await waitFor(() => {
@@ -279,7 +283,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockSerial.setNextPort(mockPort);
       
       // Connect and initialize
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       await tick();
       
       // Wait for connection to complete
@@ -305,7 +309,7 @@ describe('Serial Communication Flow Integration Test', () => {
       });
       
       const channelCard = getByText('Channel 1').closest('.channel-card');
-      await fireEvent.click(channelCard);
+      await fireEvent.pointerUp(channelCard);
       await tick();
       
       // Set voltage
@@ -315,7 +319,7 @@ describe('Serial Communication Flow Integration Test', () => {
       
       const voltageInput = getByTestId('voltage-input');
       await fireEvent.input(voltageInput, { target: { value: '12' } });
-      await fireEvent.click(getByText('Set V'));
+      await fireEvent.pointerUp(getByText('Set V'));
       
       // Wait for the async setVoltage to complete
       await tick();
@@ -348,7 +352,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       mockPort.simulateData(createMachinePacket(0x10));
       await serialConnection.triggerPacketProcessing();
       mockPort.simulateData(createSynthesizePacket([
@@ -429,7 +433,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Wait for connection to be established
       await waitFor(() => {
@@ -455,7 +459,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Wait for connection first
       await waitFor(() => {
@@ -474,7 +478,7 @@ describe('Serial Communication Flow Integration Test', () => {
       const newPort = new MockSerialPort();
       mockSerial.setNextPort(newPort);
       
-      await fireEvent.click(getByText('Retry'));
+      await fireEvent.pointerUp(getByText('Retry'));
       
       await waitFor(() => {
         expect(getByText('Connected')).toBeInTheDocument();
@@ -502,7 +506,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Send multiple packets at once
       const combinedPackets = createPacketSequence([
@@ -533,7 +537,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Split a synthesize packet (156 bytes)
       const fullPacket = createSynthesizePacket([{ online: 1 }]);
@@ -570,7 +574,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Send garbage data first
       const garbage = new Uint8Array([
@@ -607,7 +611,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Send address packet
       const addresses = Array(6).fill(null).map((_, i) => ({
@@ -641,7 +645,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Send 100 synthesize packets rapidly
       for (let i = 0; i < 100; i++) {
@@ -671,7 +675,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Wave packet with 4 points per group (206 bytes)
       const largeWaveData = Array(40).fill(null).map((_, i) => ({
@@ -714,7 +718,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Wait for connection to be established
       await waitFor(() => {
@@ -732,7 +736,7 @@ describe('Serial Communication Flow Integration Test', () => {
       });
       
       // Toggle output
-      await fireEvent.click(getByText('Output: OFF'));
+      await fireEvent.pointerUp(getByText('Output: OFF'));
       
       // Simulate device confirming change
       mockPort.simulateData(createSynthesizePacket([

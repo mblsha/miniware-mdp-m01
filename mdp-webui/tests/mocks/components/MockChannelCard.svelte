@@ -12,7 +12,7 @@
   class="channel-card {active ? 'active' : ''}"
   data-testid="channel-card-{channel.channel}"
   data-channel={channel.channel}
-  on:click={handleClick}
+  on:pointerup={handleClick}
   on:keydown={(e) => e.key === 'Enter' && handleClick()}
   role="button"
   tabindex="0"

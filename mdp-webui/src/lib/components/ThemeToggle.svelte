@@ -6,7 +6,7 @@
   }
 </script>
 
-<button class="theme-toggle" on:click={toggleTheme} aria-label="Toggle theme">
+<button class="theme-toggle" on:pointerup={toggleTheme} aria-label="Toggle theme">
   {#if $theme === 'light'}
     <!-- Moon icon for dark mode -->
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -44,11 +44,17 @@
     justify-content: center;
     transition: all 0.2s ease;
     z-index: 1000;
+    touch-action: manipulation;
+    user-select: none;
   }
   
   .theme-toggle:hover {
     background: var(--text-color-secondary);
     color: var(--bg-color);
+  }
+  
+  .theme-toggle:active {
+    transform: scale(0.95);
   }
   
   svg {

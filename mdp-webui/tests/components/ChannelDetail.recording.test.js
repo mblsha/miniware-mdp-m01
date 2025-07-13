@@ -106,7 +106,8 @@ describe('ChannelDetail Recording Tests', () => {
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
       // Start recording
-      await fireEvent.click(getByText('Start Recording'));
+      await fireEvent.pointerDown(getByText('Start Recording'));
+      await fireEvent.pointerUp(getByText('Start Recording'));
       
       expect(channelStore.startRecording).toHaveBeenCalledWith(0);
       
@@ -126,7 +127,8 @@ describe('ChannelDetail Recording Tests', () => {
       });
       
       // Stop recording
-      await fireEvent.click(getByText('Stop Recording'));
+      await fireEvent.pointerDown(getByText('Stop Recording'));
+      await fireEvent.pointerUp(getByText('Stop Recording'));
       
       expect(channelStore.stopRecording).toHaveBeenCalledWith(0);
     });
@@ -146,7 +148,8 @@ describe('ChannelDetail Recording Tests', () => {
       channels.set([...mockChannelData]);
       
       // Stop recording
-      await fireEvent.click(getByText('Stop Recording'));
+      await fireEvent.pointerDown(getByText('Stop Recording'));
+      await fireEvent.pointerUp(getByText('Stop Recording'));
       
       // Should show export button with data count
       expect(getByText('Export Data')).toBeInTheDocument();
@@ -157,12 +160,14 @@ describe('ChannelDetail Recording Tests', () => {
       const { getByText, queryByText } = render(ChannelDetail, { props: { channel: 0 } });
       
       // Start and immediately stop recording
-      await fireEvent.click(getByText('Start Recording'));
+      await fireEvent.pointerDown(getByText('Start Recording'));
+      await fireEvent.pointerUp(getByText('Start Recording'));
       
       mockChannelData[0].recording = true;
       channels.set([...mockChannelData]);
       
-      await fireEvent.click(getByText('Stop Recording'));
+      await fireEvent.pointerDown(getByText('Stop Recording'));
+      await fireEvent.pointerUp(getByText('Stop Recording'));
       
       mockChannelData[0].recording = false;
       channels.set([...mockChannelData]);
@@ -184,7 +189,8 @@ describe('ChannelDetail Recording Tests', () => {
       
       const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
-      await fireEvent.click(getByText('Export Data'));
+      await fireEvent.pointerDown(getByText('Export Data'));
+      await fireEvent.pointerUp(getByText('Export Data'));
       
       // Verify CSV content
       expect(global.Blob).toHaveBeenCalled();
@@ -216,7 +222,8 @@ describe('ChannelDetail Recording Tests', () => {
       
       expect(getByText('1000 points')).toBeInTheDocument();
       
-      await fireEvent.click(getByText('Export Data'));
+      await fireEvent.pointerDown(getByText('Export Data'));
+      await fireEvent.pointerUp(getByText('Export Data'));
       
       expect(global.Blob).toHaveBeenCalled();
       const blobContent = global.Blob.mock.calls[0][0][0];
@@ -235,7 +242,8 @@ describe('ChannelDetail Recording Tests', () => {
       
       // Start recording on channel 0
       const { getByText, rerender } = render(ChannelDetail, { props: { channel: 0 } });
-      await fireEvent.click(getByText('Start Recording'));
+      await fireEvent.pointerDown(getByText('Start Recording'));
+      await fireEvent.pointerUp(getByText('Start Recording'));
       
       mockChannelData[0].recording = true;
       channels.set([...mockChannelData]);
@@ -247,7 +255,8 @@ describe('ChannelDetail Recording Tests', () => {
       expect(getByText('Start Recording')).toBeInTheDocument();
       
       // Start recording on channel 1
-      await fireEvent.click(getByText('Start Recording'));
+      await fireEvent.pointerDown(getByText('Start Recording'));
+      await fireEvent.pointerUp(getByText('Start Recording'));
       
       mockChannelData[1].recording = true;
       channels.set([...mockChannelData]);
@@ -282,7 +291,8 @@ describe('ChannelDetail Recording Tests', () => {
       expect(getByText('1 points')).toBeInTheDocument();
       
       // Export channel 1 data
-      await fireEvent.click(getByText('Export Data'));
+      await fireEvent.pointerDown(getByText('Export Data'));
+      await fireEvent.pointerUp(getByText('Export Data'));
       
       const blobContent = global.Blob.mock.calls[0][0][0];
       expect(blobContent).toContain('0,3.3,0.5');

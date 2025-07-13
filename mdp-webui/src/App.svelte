@@ -59,7 +59,7 @@
       </div>
       <div class="connection-status">
         {#if $status === ConnectionStatus.DISCONNECTED}
-          <button onclick={handleConnect}>Connect</button>
+          <button onpointerup={handleConnect}>Connect</button>
         {:else if $status === ConnectionStatus.CONNECTING}
           <span class="status connecting">Connecting...</span>
         {:else if $status === ConnectionStatus.CONNECTED}
@@ -67,10 +67,10 @@
           {#if $deviceType}
             <span class="device-type">({$deviceType.type})</span>
           {/if}
-          <button onclick={handleDisconnect}>Disconnect</button>
+          <button onpointerup={handleDisconnect}>Disconnect</button>
         {:else if $status === ConnectionStatus.ERROR}
           <span class="status error">Error: {$error}</span>
-          <button onclick={handleConnect}>Retry</button>
+          <button onpointerup={handleConnect}>Retry</button>
         {/if}
       </div>
     </div>
@@ -185,10 +185,16 @@
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.875rem;
+    touch-action: manipulation;
+    user-select: none;
   }
   
   button:hover {
     background-color: #1976d2;
+  }
+  
+  button:active {
+    transform: scale(0.98);
   }
   
   .placeholder {

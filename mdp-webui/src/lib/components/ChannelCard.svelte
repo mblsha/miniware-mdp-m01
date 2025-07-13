@@ -11,7 +11,11 @@
   }
 </script>
 
-<div class="channel-card" class:active class:online={channel.online} onclick={onclick} onkeydown={(e) => e.key === 'Enter' && onclick?.()} role="button" tabindex="0">
+<div class="channel-card" class:active class:online={channel.online}
+     onpointerup={onclick}
+     onkeydown={(e) => e.key === 'Enter' && onclick?.()} 
+     role="button" 
+     tabindex="0">
   <div class="header">
     <h3>Channel {channel.channel + 1}</h3>
     <span class="status" class:online={channel.online}>
@@ -55,7 +59,7 @@
       <button 
         class="output-button" 
         class:on={channel.isOutput}
-        onclick={toggleOutput}
+        onpointerup={toggleOutput}
         type="button"
       >
         Output: {channel.isOutput ? 'ON' : 'OFF'}
@@ -83,11 +87,14 @@
     color: inherit;
     width: 100%;
     box-sizing: border-box;
+    touch-action: manipulation;
+    user-select: none;
   }
   
   .channel-card:hover {
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
   }
+  
   
   .channel-card.active {
     border-color: #2196f3;
@@ -211,11 +218,18 @@
     min-width: 80px;
     cursor: pointer;
     transition: all 0.2s ease;
+    touch-action: manipulation;
+    user-select: none;
   }
   
   .output-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  
+  .output-button:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
   }
   
   .output-button.on {

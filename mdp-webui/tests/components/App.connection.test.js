@@ -100,7 +100,8 @@ describe('App Connection Management Tests', () => {
         return new Promise(() => {}); // Never resolves
       });
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerDown(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       await waitFor(() => {
         expect(getByText('Connecting...')).toBeInTheDocument();
@@ -117,7 +118,8 @@ describe('App Connection Management Tests', () => {
         mockStatus.set('connected');
       });
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerDown(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       await waitFor(() => {
         expect(getByText('Connected')).toBeInTheDocument();
@@ -148,7 +150,8 @@ describe('App Connection Management Tests', () => {
         throw new Error('Port not available');
       });
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerDown(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       await waitFor(() => {
         expect(getByText('Error: Port not available')).toBeInTheDocument();
@@ -163,7 +166,8 @@ describe('App Connection Management Tests', () => {
         new Error('Web Serial API not supported. Please use Chrome, Edge, or Opera.')
       );
       
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerDown(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       
       // Error should be logged but UI handles gracefully
       expect(serialConnection.connect).toHaveBeenCalled();
@@ -176,7 +180,8 @@ describe('App Connection Management Tests', () => {
       
       const { getByText } = render(App);
       
-      await fireEvent.click(getByText('Disconnect'));
+      await fireEvent.pointerDown(getByText('Disconnect'));
+      await fireEvent.pointerUp(getByText('Disconnect'));
       
       expect(serialConnection.disconnect).toHaveBeenCalled();
     });

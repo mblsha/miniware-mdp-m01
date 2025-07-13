@@ -95,7 +95,10 @@ describe('App Component', () => {
         await new Promise(resolve => setTimeout(resolve, 10));
         serialConnection.status.set('connected');
       });
-      await fireEvent.click(connectButton);
+      await fireEvent.pointerDown(connectButton);
+
+      await fireEvent.pointerUp(connectButton);
+      await fireEvent.pointerUp(connectButton);
       
       // Wait for connection to complete
       await waitFor(() => {
@@ -119,7 +122,8 @@ describe('App Component', () => {
     it('should handle connection errors', async () => {
       const { getByText } = render(App);
       mockConnect.mockRejectedValue(new Error('Port not available'));
-      await fireEvent.click(getByText('Connect'));
+      await fireEvent.pointerDown(getByText('Connect'));
+      await fireEvent.pointerUp(getByText('Connect'));
       serialConnection.status.set('error');
       serialConnection.error.set('Port not available');
       
@@ -143,7 +147,8 @@ describe('App Component', () => {
         serialConnection.status.set('disconnected');
       });
       
-      await fireEvent.click(getByText('Disconnect'));
+      await fireEvent.pointerDown(getByText('Disconnect'));
+      await fireEvent.pointerUp(getByText('Disconnect'));
       
       await waitFor(() => {
         expect(getByText('Connect')).toBeInTheDocument();
@@ -252,7 +257,10 @@ describe('App Component', () => {
       const { getByText } = render(App);
       
       const connectButton = getByText('Connect');
-      await fireEvent.click(connectButton);
+      await fireEvent.pointerDown(connectButton);
+
+      await fireEvent.pointerUp(connectButton);
+      await fireEvent.pointerUp(connectButton);
       
       await waitFor(() => {
         expect(getByText(/Web Serial API not supported/)).toBeInTheDocument();
