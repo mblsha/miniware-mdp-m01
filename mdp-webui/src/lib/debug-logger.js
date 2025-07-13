@@ -70,6 +70,7 @@ function getLogPrefix(category) {
     'raw-serial': '🔴 RAW SERIAL: ',
     'packet-parse': '🔵 PACKET PARSE: ',
     'packet-handle': '🟢 PACKET HANDLE: ',
+    'packet-register': '📋 PACKET REGISTER: ',
     'packet-decode': '🔧 PACKET DECODE: ',
     'synthesize': '⚙️ SYNTHESIZE: ',
     'channel-store': '📊 CHANNEL STORE: ',

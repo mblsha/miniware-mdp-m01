@@ -223,25 +223,32 @@ export class SerialConnection {
       console.log('Failed to decode packet in fallback:', error.message);
     }
     
-    const handler = this.packetHandlers.get(packetType);
-    debugLog('packet-handle', `  Handler registered: ${!!handler}`);
+    const handlers = this.packetHandlers.get(packetType) || [];
+    debugLog('packet-handle', `  Handlers registered: ${handlers.length}`);
     
-    if (handler) {
-      debugLog('packet-handle', `  🚀 Calling packet handler for ${typeDisplay}`);
-      try {
-        handler(packet);
-        debugLog('packet-handle', `  ✅ Handler completed successfully for ${typeDisplay}`);
-      } catch (error) {
-        debugError('packet-handle', `  ❌ Handler error for ${typeDisplay}:`, error);
-      }
+    if (handlers.length > 0) {
+      debugLog('packet-handle', `  🚀 Calling ${handlers.length} packet handlers for ${typeDisplay}`);
+      
+      handlers.forEach((handler, index) => {
+        try {
+          handler(packet);
+          debugLog('packet-handle', `  ✅ Handler ${index + 1} completed successfully for ${typeDisplay}`);
+        } catch (error) {
+          debugError('packet-handle', `  ❌ Handler ${index + 1} error for ${typeDisplay}:`, error);
+        }
+      });
     } else {
-      debugWarn('packet-handle', `  ⚠️ No handler registered for ${typeDisplay}`);
-      debugLog('packet-handle', `  Registered handlers: ${Array.from(this.packetHandlers.keys()).map(t => getPacketTypeDisplay(t)).join(', ')}`);
+      debugWarn('packet-handle', `  ⚠️ No handlers registered for ${typeDisplay}`);
+      debugLog('packet-handle', `  Registered packet types: ${Array.from(this.packetHandlers.keys()).map(t => getPacketTypeDisplay(t)).join(', ')}`);
     }
   }
 
   registerPacketHandler(packetType, handler) {
-    this.packetHandlers.set(packetType, handler);
+    if (!this.packetHandlers.has(packetType)) {
+      this.packetHandlers.set(packetType, []);
+    }
+    this.packetHandlers.get(packetType).push(handler);
+    debugLog('packet-register', `Registered handler for ${getPacketTypeDisplay(packetType)} (total: ${this.packetHandlers.get(packetType).length})`);
   }
 
   async sendPacket(packet) {

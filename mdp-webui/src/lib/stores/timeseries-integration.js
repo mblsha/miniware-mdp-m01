@@ -12,7 +12,7 @@ import { get } from 'svelte/store';
  * Initialize timeseries integration with packet handlers
  */
 export function initializeTimeseriesIntegration() {
-  // Register synthesize packet handler for channel state updates
+  // Register synthesize packet handler for timeseries logging
   serialConnection.registerPacketHandler(0x11, (packet) => {
     const activeSession = get(timeseriesStore.activeSession);
     if (!activeSession) return;
