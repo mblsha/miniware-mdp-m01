@@ -186,39 +186,59 @@ export function createChannelStore() {
     const processed = processWavePacket(decoded);
     
     if (processed && processed.points.length > 0) {
-      const currentTime = Date.now();
-      const pointCount = processed.points.length;
-      
-      // Use browser timestamp and spread points backwards
-      // Assume 10ms between points (100Hz sampling rate)
-      const pointSpacing = 10; // milliseconds
-      
-      // Calculate timestamps spreading backwards from current time
-      const convertedPoints = processed.points.map((point, index) => {
-        // Start from current time and go backwards
-        // Last point gets current time, first point gets oldest time
-        const pointTimestamp = currentTime - (pointCount - 1 - index) * pointSpacing;
-        
-        return {
-          ...point,
-          timestamp: pointTimestamp
-        };
-      });
-      
       channels.update(chs => {
         const ch = chs[processed.channel];
         if (ch && ch.recording) {
-          // Add new points
-          ch.waveformData.push(...convertedPoints);
+          // Initialize running time if this is the first data for this channel
+          if (!ch.runningTimeUs) {
+            ch.runningTimeUs = 0;
+          }
           
-          // No need to sort since we're generating monotonically increasing timestamps
+          // Determine group size from packet length
+          // 126 bytes = 2 samples per group, 206 bytes = 4 samples per group
+          const packetLength = packet.length;
+          const samplesPerGroup = packetLength === 126 ? 2 : 4;
+          
+          // Process each group's worth of points
+          let currentPointIndex = 0;
+          const wave = decoded.data;
+          
+          wave.groups.forEach((group) => {
+            // Convert timestamp from 0.1µs (100ns) ticks to microseconds
+            const groupElapsedTimeUs = group.timestamp / 10;
+            
+            // Time per sample in this group
+            const timePerSampleUs = groupElapsedTimeUs / samplesPerGroup;
+            
+            // Process each sample in this group
+            for (let i = 0; i < samplesPerGroup && currentPointIndex < processed.points.length; i++) {
+              const point = processed.points[currentPointIndex];
+              
+              // Calculate absolute time for this sample
+              const sampleTimeUs = ch.runningTimeUs + (i * timePerSampleUs);
+              
+              ch.waveformData.push({
+                timestamp: sampleTimeUs / 1000, // Convert to milliseconds for display
+                voltage: point.voltage,
+                current: point.current
+              });
+              
+              currentPointIndex++;
+            }
+            
+            // Update running time for next group
+            ch.runningTimeUs += groupElapsedTimeUs;
+          });
         }
         return chs;
       });
       
-      // Also update timeseries store with converted timestamps
+      // Also update timeseries store with proper timestamps
       if (get(channels)[processed.channel]?.recording) {
-        const timeseriesPoints = convertedPoints.map(point => ({
+        const ch = get(channels)[processed.channel];
+        const recentPoints = ch.waveformData.slice(-processed.points.length);
+        
+        const timeseriesPoints = recentPoints.map(point => ({
           channel: processed.channel,
           timestamp: point.timestamp,
           data: {
@@ -305,6 +325,7 @@ export function createChannelStore() {
     channels.update(chs => {
       chs[channel].recording = true;
       chs[channel].waveformData = [];
+      chs[channel].runningTimeUs = 0; // Reset the running time counter
       return chs;
     });
   }
