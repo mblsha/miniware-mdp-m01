@@ -3,14 +3,47 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Default to dark theme */
+  --bg-color: #242424;
+  --text-color: rgba(255, 255, 255, 0.87);
+  --text-color-secondary: rgba(255, 255, 255, 0.6);
+  --chart-grid-color: rgba(255, 255, 255, 0.1);
+  --chart-text-color: rgba(255, 255, 255, 0.87);
+  --chart-voltage-color: #ff5722;
+  --chart-current-color: #2196f3;
+  color-scheme: dark;
+}
+
+:root.light {
+  --bg-color: #ffffff;
+  --text-color: #213547;
+  --text-color-secondary: #666;
+  --chart-grid-color: rgba(0, 0, 0, 0.1);
+  --chart-text-color: #213547;
+  --chart-voltage-color: #d32f2f;
+  --chart-current-color: #1976d2;
+  color-scheme: light;
+}
+
+:root.dark {
+  --bg-color: #242424;
+  --text-color: rgba(255, 255, 255, 0.87);
+  --text-color-secondary: rgba(255, 255, 255, 0.6);
+  --chart-grid-color: rgba(255, 255, 255, 0.1);
+  --chart-text-color: rgba(255, 255, 255, 0.87);
+  --chart-voltage-color: #ff5722;
+  --chart-current-color: #2196f3;
+  color-scheme: dark;
+}
+
+:root {
+  color: var(--text-color);
+  background-color: var(--bg-color);
 }
 
 a {
@@ -65,15 +98,11 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* Theme-specific overrides */
+.light button {
+  background-color: #f9f9f9;
+}
+
+.light a:hover {
+  color: #747bff;
 }

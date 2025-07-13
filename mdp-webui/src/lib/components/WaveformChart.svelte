@@ -1,12 +1,25 @@
 <script>
   import * as Plot from '@observablehq/plot';
   import { onDestroy } from 'svelte';
+  import { theme } from '$lib/stores/theme.js';
   
   export let data = [];
   export let isRecording = false;
   
   let chartContainer;
   let resizeObserver;
+  let currentTheme;
+  
+  // Subscribe to theme changes
+  $: currentTheme = $theme;
+  
+  // Get theme-specific colors
+  $: chartColors = {
+    voltage: currentTheme === 'dark' ? '#ff5722' : '#d32f2f',
+    current: currentTheme === 'dark' ? '#2196f3' : '#1976d2',
+    text: currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.87)' : '#213547',
+    grid: currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+  };
   
   // Transform data for Plot
   $: plotData = data.map(d => ({
@@ -34,26 +47,38 @@
       marginRight: 60,
       title: "Voltage & Current vs Time",
       grid: true,
+      style: {
+        color: chartColors.text,
+        fontFamily: 'inherit',
+        fontSize: '12px',
+        backgroundColor: 'transparent'
+      },
       x: {
         label: "Time (s)",
-        nice: true
+        nice: true,
+        labelColor: chartColors.text,
+        tickColor: chartColors.text,
+        gridColor: chartColors.grid
       },
       y: {
         label: "Voltage (V)",
         nice: true,
-        grid: true
+        grid: true,
+        labelColor: chartColors.text,
+        tickColor: chartColors.text,
+        gridColor: chartColors.grid
       },
       color: {
         legend: true,
         domain: ["Voltage", "Current"],
-        range: ["#2196f3", "#ff5722"]
+        range: [chartColors.voltage, chartColors.current]
       },
       marks: [
         // Voltage line
         Plot.lineY(displayData, {
           x: "timestamp",
           y: "voltage",
-          stroke: "#2196f3",
+          stroke: chartColors.voltage,
           strokeWidth: 2,
           title: d => `Time: ${d.timestamp.toFixed(1)}s\nVoltage: ${d.voltage.toFixed(3)}V`
         }),
@@ -61,7 +86,7 @@
         Plot.lineY(displayData, {
           x: "timestamp", 
           y: d => d.current * 10, // Scale current for visibility
-          stroke: "#ff5722",
+          stroke: chartColors.current,
           strokeWidth: 2,
           title: d => `Time: ${d.timestamp.toFixed(1)}s\nCurrent: ${d.current.toFixed(3)}A`
         }),
@@ -70,13 +95,13 @@
           Plot.dot(displayData, {
             x: "timestamp",
             y: "voltage", 
-            fill: "#2196f3",
+            fill: chartColors.voltage,
             r: 2
           }),
           Plot.dot(displayData, {
             x: "timestamp",
             y: d => d.current * 10,
-            fill: "#ff5722", 
+            fill: chartColors.current, 
             r: 2
           })
         ] : [])
@@ -84,8 +109,8 @@
     });
   }
   
-  // Update plot when data changes
-  $: if (chartContainer) {
+  // Update plot when data or theme changes
+  $: if (chartContainer && (plotData || currentTheme)) {
     // Remove old chart
     chartContainer.replaceChildren();
     
@@ -144,7 +169,7 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    color: #999;
+    color: var(--text-color-secondary);
     text-align: center;
   }
   

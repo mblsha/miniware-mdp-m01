@@ -4,6 +4,9 @@
   import { debugEnabled } from './lib/debug-logger.js';
   import Dashboard from './lib/components/Dashboard.svelte';
   import ChannelDetail from './lib/components/ChannelDetail.svelte';
+  import ThemeToggle from './lib/components/ThemeToggle.svelte';
+  import { theme } from './lib/stores/theme.js';
+  import { onMount } from 'svelte';
   
   // Allow dependency injection for testing
   export let serialConnection = defaultSerialConnection;
@@ -12,6 +15,10 @@
   let currentView = 'dashboard';
   let selectedChannel = 0;
 
+  // Initialize theme on mount
+  onMount(() => {
+    theme.init();
+  });
   
   // Extract stores from serialConnection object (now reactive to prop changes)
   $: ({ status, error, deviceType } = serialConnection);
@@ -37,6 +44,8 @@
     currentView = 'dashboard';
   }
 </script>
+
+<ThemeToggle />
 
 <main>
   <header>
@@ -85,7 +94,8 @@
     margin: 0;
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #f5f5f5;
+    background-color: var(--bg-color);
+    color: var(--text-color);
   }
   
   main {
@@ -95,13 +105,14 @@
   }
   
   header {
-    background-color: #1a1a1a;
-    color: white;
+    background-color: var(--bg-color);
+    color: var(--text-color);
     padding: 1rem 2rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-bottom: 1px solid var(--chart-grid-color);
   }
   
   h1 {
@@ -126,7 +137,7 @@
     gap: 0.5rem;
     cursor: pointer;
     font-size: 0.875rem;
-    color: #ccc;
+    color: var(--text-color-secondary);
   }
   
   .debug-checkbox input[type="checkbox"] {
@@ -162,7 +173,7 @@
   }
   
   .device-type {
-    color: #ccc;
+    color: var(--text-color-secondary);
     font-size: 0.875rem;
   }
   
@@ -185,6 +196,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #666;
+    color: var(--text-color-secondary);
   }
 </style>
