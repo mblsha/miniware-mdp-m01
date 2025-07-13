@@ -47,7 +47,23 @@ export class SerialConnection {
         throw new Error('Web Serial API not supported. Please use Chrome, Edge, or Opera.');
       }
 
-      this.port = await navigator.serial.requestPort();
+      // Filter for Miniware devices
+      const filters = [
+        { usbVendorId: 0x0416, usbProductId: 0xdc01 }  // Miniware MDP devices
+      ];
+      
+      try {
+        // Try with filters first
+        this.port = await navigator.serial.requestPort({ filters });
+      } catch (error) {
+        // If user cancels or no matching devices, show all devices as fallback
+        if (error.name === 'NotFoundError' || error.name === 'AbortError') {
+          console.warn('No Miniware devices found or user cancelled. Showing all devices...');
+          this.port = await navigator.serial.requestPort();
+        } else {
+          throw error;
+        }
+      }
       await this.port.open(SERIAL_CONFIG);
 
       this.reader = this.port.readable.getReader();
