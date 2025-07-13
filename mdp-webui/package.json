@@ -10,7 +10,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "type-check": "tsc --noEmit"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.0.0",
@@ -23,6 +24,7 @@
     "jsdom": "^26.1.0",
     "playwright": "^1.54.0",
     "svelte": "^5.35.2",
+    "typescript": "^5.8.3",
     "vite": "^7.0.3",
     "vitest": "^3.2.4"
   },

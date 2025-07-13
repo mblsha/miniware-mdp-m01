@@ -35,6 +35,9 @@ jobs:
     - name: Run linting
       run: npm run lint --if-present
 
+    - name: Run TypeScript checks
+      run: npm run type-check
+
     - name: Run unit tests
       run: npm run test:run
       
