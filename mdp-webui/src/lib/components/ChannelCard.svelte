@@ -44,8 +44,11 @@
       </div>
     </div>
     
-    <div class="output-status" class:on={channel.isOutput}>
-      Output: {channel.isOutput ? 'ON' : 'OFF'}
+    <div class="status-row">
+      <span class="mode-display">Mode: {channel.mode}</span>
+      <span class="output-status" class:on={channel.isOutput}>
+        Output: {channel.isOutput ? 'ON' : 'OFF'}
+      </span>
     </div>
   {:else}
     <div class="offline-message">
@@ -176,13 +179,28 @@
     font-weight: 500;
   }
   
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .mode-display {
+    font-size: 0.875rem;
+    color: #666;
+    font-weight: 500;
+  }
+  
   .output-status {
-    text-align: center;
-    padding: 0.5rem;
+    padding: 0.25rem 0.5rem;
     border-radius: 4px;
     background-color: #f0f0f0;
     color: #666;
     font-weight: 500;
+    font-size: 0.875rem;
+    text-align: center;
+    min-width: 80px;
   }
   
   .output-status.on {
