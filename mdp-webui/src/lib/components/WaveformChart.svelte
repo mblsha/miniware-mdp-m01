@@ -34,6 +34,9 @@
       marginRight: 60,
       title: "Voltage & Current vs Time",
       grid: true,
+      style: {
+        background: "transparent"
+      },
       x: {
         label: "Time (s)",
         nice: true
