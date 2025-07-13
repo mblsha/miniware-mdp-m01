@@ -82,6 +82,7 @@
     font-size: inherit;
     color: inherit;
     width: 100%;
+    box-sizing: border-box;
   }
   
   .channel-card:hover {
