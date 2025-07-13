@@ -2,17 +2,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SerialConnection } from '$lib/serial.js';
 
 // Mock the Kaitai dependencies first
-vi.mock('$lib/kaitai-wrapper.js', () => ({
-  KaitaiStream: vi.fn(),
-  MiniwareMdpM01: {
-    PackType: {
-      SYNTHESIZE: 0x11,
-      WAVE: 0x12,
-      HEARTBEAT: 0x22,
-      MACHINE: 0x16
-    }
-  }
-}));
+vi.mock('$lib/kaitai-wrapper.js', () => {
+  const MockMiniwareMdpM01 = vi.fn(() => {
+    throw new Error('Kaitai parser not available in test environment');
+  });
+  MockMiniwareMdpM01.PackType = {
+    SYNTHESIZE: 0x11,
+    WAVE: 0x12,
+    HEARTBEAT: 0x22,
+    MACHINE: 0x16
+  };
+  
+  return {
+    KaitaiStream: vi.fn(),
+    MiniwareMdpM01: MockMiniwareMdpM01
+  };
+});
 
 // Now import after mocking
 const { decodePacket } = await import('$lib/packet-decoder.js');
@@ -28,14 +33,15 @@ describe('Multi-Packet Handling Analysis', () => {
       // Combine them
       const multiPacketData = [...packet1, ...packet2];
       
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       
       // Try to decode multi-packet data - this WILL FAIL
       const result = decodePacket(multiPacketData);
       
       expect(result).toBeNull();
+      // Check that malformed data was logged
       expect(consoleSpy).toHaveBeenCalledWith(
-        'Packet size mismatch: expected 6, got 13'
+        '🚨 MALFORMED DATA: Packet size mismatch'
       );
       
       consoleSpy.mockRestore();
@@ -135,7 +141,7 @@ describe('Multi-Packet Handling Analysis', () => {
       const packet2 = [0x5A, 0x5A, 0x16, 0x07, 0xEE, 0x10, 0x10];
       const multiPacketData = [...packet1, ...packet2];
       
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       
       // This is the WRONG way - would lose packets
       const result = decodePacket(multiPacketData);

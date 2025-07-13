@@ -1,4 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// Mock the Kaitai dependencies first
+vi.mock('$lib/kaitai-wrapper.js', () => {
+  const MockMiniwareMdpM01 = vi.fn(() => {
+    throw new Error('Kaitai parser not available in test environment');
+  });
+  MockMiniwareMdpM01.PackType = {
+    SYNTHESIZE: 0x11,
+    WAVE: 0x12,
+    HEARTBEAT: 0x22,
+    MACHINE: 0x16
+  };
+  
+  return {
+    KaitaiStream: vi.fn(),
+    MiniwareMdpM01: MockMiniwareMdpM01
+  };
+});
+
 import { SerialConnection } from '$lib/serial.js';
 import { get } from 'svelte/store';
 
@@ -216,12 +235,12 @@ describe('SerialConnection Buffer Management', () => {
         garbage[i] = 0xFF;
       }
 
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       serialConnection.receiveBuffer = garbage;
       serialConnection.processIncomingData();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Clearing receive buffer - no valid header found');
+      expect(consoleSpy).toHaveBeenCalledWith('🚨 MALFORMED DATA: Clearing large buffer with no valid headers');
       expect(serialConnection.receiveBuffer.length).toBe(0);
 
       consoleSpy.mockRestore();
