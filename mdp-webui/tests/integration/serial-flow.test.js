@@ -13,6 +13,14 @@ import {
   createPacketSequence
 } from '../mocks/packet-data.js';
 import { setupPacketHandlers } from '../helpers/setup-packet-handlers.js';
+import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '$lib/packet-encoder';
+import { serialConnection as realSerialConnection } from '$lib/serial';
+
+// Hoist packet encoder functions for use in mocks
+const packetEncoders = vi.hoisted(() => {
+  const { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } = require('../../src/lib/packet-encoder');
+  return { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket };
+});
 
 // Create factory functions for mock stores
 const createMockStores = vi.hoisted(() => {
@@ -62,9 +70,7 @@ vi.mock('$lib/serial.js', () => {
 
 // Mock the channel store with proper packet sending
 vi.mock('$lib/stores/channels.js', () => {
-  const { writable, derived } = require('svelte/store');
   const { channels, activeChannel, waitingSynthesize } = createMockStores();
-  const { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } = require('../../src/lib/packet-encoder');
   
   return {
     channelStore: {
@@ -92,16 +98,12 @@ vi.mock('$lib/stores/channels.js', () => {
         waitingSynthesize.set(true);
       }),
       setActiveChannel: vi.fn(async (channel) => {
-        // Import inside function to get correct instance
-        const { serialConnection } = await import('../../src/lib/serial');
-        const packet = createSetChannelPacket(channel);
+        const packet = packetEncoders.createSetChannelPacket(channel);
         await serialConnection.sendPacket(packet);
         activeChannel.set(channel);
       }),
       setVoltage: vi.fn(async (channel, voltage, current) => {
-        // Import inside function to get correct instance
-        const { serialConnection } = await import('../../src/lib/serial');
-        const packet = createSetVoltagePacket(channel, voltage, current);
+        const packet = packetEncoders.createSetVoltagePacket(channel, voltage, current);
         await serialConnection.sendPacket(packet);
         channels.update(chs => {
           chs[channel].targetVoltage = voltage;
@@ -110,9 +112,7 @@ vi.mock('$lib/stores/channels.js', () => {
         });
       }),
       setCurrent: vi.fn(async (channel, voltage, current) => {
-        // Import inside function to get correct instance
-        const { serialConnection } = await import('../../src/lib/serial');
-        const packet = createSetCurrentPacket(channel, voltage, current);
+        const packet = packetEncoders.createSetCurrentPacket(channel, voltage, current);
         await serialConnection.sendPacket(packet);
         channels.update(chs => {
           chs[channel].targetVoltage = voltage;
@@ -121,9 +121,7 @@ vi.mock('$lib/stores/channels.js', () => {
         });
       }),
       setOutput: vi.fn(async (channel, enabled) => {
-        // Import inside function to get correct instance
-        const { serialConnection } = await import('../../src/lib/serial');
-        const packet = createSetOutputPacket(channel, enabled);
+        const packet = packetEncoders.createSetOutputPacket(channel, enabled);
         await serialConnection.sendPacket(packet);
       }),
       startRecording: vi.fn((channel) => {

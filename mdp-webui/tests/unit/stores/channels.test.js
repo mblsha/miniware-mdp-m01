@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createSynthesizePacket, createWavePacket, createUpdateChannelPacket } from '../../mocks/packet-data.js';
+import { serialConnection as serialConnectionImport } from '$lib/serial.js';
+import { channelStore as channelStoreImport } from '$lib/stores/channels.js';
 
 // Mock the kaitai-wrapper first (before any imports that use it)
 vi.mock('$lib/kaitai-wrapper.js', () => {
