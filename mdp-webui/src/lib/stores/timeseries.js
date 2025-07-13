@@ -77,57 +77,56 @@ function createSession(channels = []) {
  * @param {Object} data - Data object with voltage, current, etc.
  * @param {string} sessionId - Optional session ID (uses active if not provided)
  */
+function applyChannelData(state, session, timestamp, channelData) {
+  if (session.pointCount >= state.config.maxPoints) {
+    return;
+  }
+
+  if (!session.data.has(timestamp)) {
+    session.data.set(timestamp, {});
+    session.pointCount++;
+  }
+
+  Object.assign(session.data.get(timestamp), channelData);
+
+  if (!session.metadata.minTimestamp || timestamp < session.metadata.minTimestamp) {
+    session.metadata.minTimestamp = timestamp;
+  }
+  if (!session.metadata.maxTimestamp || timestamp > session.metadata.maxTimestamp) {
+    session.metadata.maxTimestamp = timestamp;
+  }
+
+  if (!session.metadata.sampleRate && session.data.size > 10) {
+    const timestamps = Array.from(session.data.keys()).sort((a, b) => a - b);
+    const intervals = [];
+    for (let i = 1; i < Math.min(10, timestamps.length); i++) {
+      intervals.push(timestamps[i] - timestamps[i - 1]);
+    }
+    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    session.metadata.sampleRate = avgInterval > 0 ? 1000 / avgInterval : null;
+  }
+}
+
 function addDataPoint(channel, timestamp, data, sessionId = null) {
   store.update(state => {
     const targetSessionId = sessionId || state.activeSessionId;
     if (!targetSessionId || !state.sessions.has(targetSessionId)) {
       return state;
     }
-    
+
     const session = state.sessions.get(targetSessionId);
-    
-    // Check if we've exceeded limits
-    if (session.pointCount >= state.config.maxPoints) {
-      console.warn(`Session ${targetSessionId} has reached max points limit`);
-      return state;
-    }
-    
-    // Get or create timestamp entry
-    if (!session.data.has(timestamp)) {
-      session.data.set(timestamp, {});
-      session.pointCount++;
-    }
-    
-    // Add channel data
-    const timestampData = session.data.get(timestamp);
-    timestampData[`ch${channel}`] = {
-      voltage: data.voltage,
-      current: data.current,
-      power: data.voltage * data.current,
-      temperature: data.temperature || null,
-      mode: data.mode || null,
-      isOutput: data.isOutput || false
-    };
-    
-    // Update metadata
-    if (!session.metadata.minTimestamp || timestamp < session.metadata.minTimestamp) {
-      session.metadata.minTimestamp = timestamp;
-    }
-    if (!session.metadata.maxTimestamp || timestamp > session.metadata.maxTimestamp) {
-      session.metadata.maxTimestamp = timestamp;
-    }
-    
-    // Calculate sample rate from first few samples
-    if (!session.metadata.sampleRate && session.data.size > 10) {
-      const timestamps = Array.from(session.data.keys()).sort((a, b) => a - b);
-      const intervals = [];
-      for (let i = 1; i < Math.min(10, timestamps.length); i++) {
-        intervals.push(timestamps[i] - timestamps[i-1]);
+
+    applyChannelData(state, session, timestamp, {
+      [`ch${channel}`]: {
+        voltage: data.voltage,
+        current: data.current,
+        power: data.voltage * data.current,
+        temperature: data.temperature || null,
+        mode: data.mode || null,
+        isOutput: data.isOutput || false
       }
-      const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-      session.metadata.sampleRate = avgInterval > 0 ? 1000 / avgInterval : null;
-    }
-    
+    });
+
     return state;
   });
 }
@@ -143,10 +142,9 @@ function addDataPoints(points, sessionId = null) {
     if (!targetSessionId || !state.sessions.has(targetSessionId)) {
       return state;
     }
-    
+
     const session = state.sessions.get(targetSessionId);
-    
-    // Group points by timestamp for efficiency
+
     const groupedPoints = new Map();
     points.forEach(point => {
       if (!groupedPoints.has(point.timestamp)) {
@@ -161,29 +159,11 @@ function addDataPoints(points, sessionId = null) {
         isOutput: point.data.isOutput || false
       };
     });
-    
-    // Add all grouped points
+
     groupedPoints.forEach((channelData, timestamp) => {
-      if (session.pointCount >= state.config.maxPoints) {
-        return;
-      }
-      
-      if (!session.data.has(timestamp)) {
-        session.data.set(timestamp, {});
-        session.pointCount++;
-      }
-      
-      Object.assign(session.data.get(timestamp), channelData);
-      
-      // Update metadata
-      if (!session.metadata.minTimestamp || timestamp < session.metadata.minTimestamp) {
-        session.metadata.minTimestamp = timestamp;
-      }
-      if (!session.metadata.maxTimestamp || timestamp > session.metadata.maxTimestamp) {
-        session.metadata.maxTimestamp = timestamp;
-      }
+      applyChannelData(state, session, timestamp, channelData);
     });
-    
+
     return state;
   });
 }
