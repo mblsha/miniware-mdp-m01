@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SerialConnection } from '../../src/lib/serial.js';
+import { SerialConnection } from '$lib/serial.js';
 
 // Mock the Kaitai dependencies first
-vi.mock('../../src/lib/kaitai-wrapper.js', () => ({
+vi.mock('$lib/kaitai-wrapper.js', () => ({
   KaitaiStream: vi.fn(),
   MiniwareMdpM01: {
     PackType: {
@@ -15,7 +15,7 @@ vi.mock('../../src/lib/kaitai-wrapper.js', () => ({
 }));
 
 // Now import after mocking
-const { decodePacket } = await import('../../src/lib/packet-decoder.js');
+const { decodePacket } = await import('$lib/packet-decoder.js');
 
 describe('Multi-Packet Handling Analysis', () => {
   
@@ -46,7 +46,7 @@ describe('Multi-Packet Handling Analysis', () => {
       const packet2 = [0x5A, 0x5A, 0x16, 0x07, 0xEE, 0x10, 0x10];
       
       // Mock the Kaitai parser since we're testing the validation logic
-      vi.doMock('../../src/lib/kaitai-wrapper.js', () => ({
+      vi.doMock('$lib/kaitai-wrapper.js', () => ({
         KaitaiStream: vi.fn(),
         MiniwareMdpM01: vi.fn(() => ({
           packets: [{ type: 'test' }]

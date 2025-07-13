@@ -24,11 +24,11 @@ document.createElement = vi.fn((tag) => {
 });
 
 // Mock WaveformChart BEFORE other imports
-vi.mock('../../src/lib/components/WaveformChart.svelte', async () => ({
+vi.mock('$lib/components/WaveformChart.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockWaveformChart.svelte')).default
 }));
 
-vi.mock('../../src/lib/stores/channels.js', () => ({
+vi.mock('$lib/stores/channels.js', () => ({
   channelStore: {
     channels: writable([]),
     activeChannel: writable(0),
@@ -43,8 +43,8 @@ vi.mock('../../src/lib/stores/channels.js', () => ({
 }));
 
 // Import component after mocks
-import { channelStore } from '../../src/lib/stores/channels.js';
-import ChannelDetail from '../../src/lib/components/ChannelDetail.svelte';
+import { channelStore } from '$lib/stores/channels.js';
+import ChannelDetail from '$lib/components/ChannelDetail.svelte';
 
 describe('ChannelDetail Component', () => {
   let mockChannelData;

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { timeseriesStore } from '../../../src/lib/stores/timeseries.js';
+import { timeseriesStore } from '$lib/stores/timeseries.js';
 
 describe('TimeseriesStore', () => {
   beforeEach(() => {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createSynthesizePacket, createWavePacket, createUpdateChannelPacket } from '../../mocks/packet-data.js';
 
 // Mock the kaitai-wrapper first (before any imports that use it)
-vi.mock('../../../src/lib/kaitai-wrapper.js', () => {
+vi.mock('$lib/kaitai-wrapper.js', () => {
   const PackType = {
     SYNTHESIZE: 0x11,
     WAVE: 0x12,
@@ -123,7 +123,7 @@ vi.mock('../../../src/lib/kaitai-wrapper.js', () => {
 });
 
 // Mock the serial connection
-vi.mock('../../../src/lib/serial.js', () => {
+vi.mock('$lib/serial.js', () => {
   const mockHandlers = {};
   
   return {
@@ -151,7 +151,7 @@ describe('Channel Store', () => {
     packetHandlers = {};
 
     // Re-import mocks and store to re-initialize
-    const serialModule = await import('../../../src/lib/serial.js');
+    const serialModule = await import('$lib/serial.js');
     serialConnection = serialModule.serialConnection;
 
     // Capture packet handlers
@@ -159,7 +159,7 @@ describe('Channel Store', () => {
       packetHandlers[type] = handler;
     });
     
-    const storeModule = await import('../../../src/lib/stores/channels.js');
+    const storeModule = await import('$lib/stores/channels.js');
     channelStore = storeModule.channelStore;
   });
 

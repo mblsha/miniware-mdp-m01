@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { writable, get } from 'svelte/store';
-import ChannelDetail from '../../src/lib/components/ChannelDetail.svelte';
+import ChannelDetail from '$lib/components/ChannelDetail.svelte';
 
 // Mock URL and Blob for CSV export
 global.URL.createObjectURL = vi.fn(() => 'mock-blob-url');
@@ -25,12 +25,12 @@ document.createElement = vi.fn((tag) => {
 });
 
 // Mock WaveformChart
-vi.mock('../../src/lib/components/WaveformChart.svelte', async () => ({
+vi.mock('$lib/components/WaveformChart.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockWaveformChart.svelte')).default
 }));
 
 // Mock the channel store
-vi.mock('../../src/lib/stores/channels.js', () => {
+vi.mock('$lib/stores/channels.js', () => {
   const { writable } = require('svelte/store');
   const channels = writable([]);
   const activeChannel = writable(0);
@@ -64,7 +64,7 @@ vi.mock('../../src/lib/stores/channels.js', () => {
   };
 });
 
-import { channelStore } from '../../src/lib/stores/channels.js';
+import { channelStore } from '$lib/stores/channels.js';
 
 describe('ChannelDetail Recording Tests', () => {
   let mockChannelData;

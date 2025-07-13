@@ -4,7 +4,7 @@ import { writable } from 'svelte/store';
 import App from '../../src/App.svelte';
 
 // Mock serial connection
-vi.mock('../../src/lib/serial.js', () => {
+vi.mock('$lib/serial.js', () => {
   const { writable } = require('svelte/store');
   const mockStatus = writable('disconnected');
   const mockError = writable(null);
@@ -32,7 +32,7 @@ vi.mock('../../src/lib/serial.js', () => {
 });
 
 // Mock channel store
-vi.mock('../../src/lib/stores/channels.js', () => {
+vi.mock('$lib/stores/channels.js', () => {
   const { writable } = require('svelte/store');
   const mockChannels = writable(Array(6).fill(null).map((_, i) => ({
     channel: i,
@@ -61,18 +61,18 @@ vi.mock('../../src/lib/stores/channels.js', () => {
 });
 
 // Mock Dashboard and ChannelDetail components
-vi.mock('../../src/lib/components/Dashboard.svelte', async () => {
+vi.mock('$lib/components/Dashboard.svelte', async () => {
   const MockDashboard = await import('../mocks/components/MockDashboard.svelte');
   return { default: MockDashboard.default };
 });
 
-vi.mock('../../src/lib/components/ChannelDetail.svelte', async () => {
+vi.mock('$lib/components/ChannelDetail.svelte', async () => {
   const MockChannelDetail = await import('../mocks/components/MockChannelDetail.svelte');
   return { default: MockChannelDetail.default };
 });
 
-import { serialConnection, ConnectionStatus } from '../../src/lib/serial.js';
-import { channelStore } from '../../src/lib/stores/channels.js';
+import { serialConnection, ConnectionStatus } from '$lib/serial.js';
+import { channelStore } from '$lib/stores/channels.js';
 
 describe('App Connection Management Tests', () => {
   const { status: mockStatus, error: mockError, deviceType: mockDeviceType } = serialConnection;

@@ -14,7 +14,7 @@ import {
   createStopAutoMatchPacket,
   createResetToDfuPacket,
   createRgbPacket
-} from '../../src/lib/packet-encoder.js';
+} from '$lib/packet-encoder.js';
 
 describe('Packet Encoder', () => {
   describe('Packet Type Constants', () => {

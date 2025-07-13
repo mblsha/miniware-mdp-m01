@@ -12,7 +12,7 @@ import {
   createMalformedPacket,
   createPacketSequence
 } from '../mocks/packet-data.js';
-import { setupTestPacketHandlers } from '../helpers/setup-packet-handlers.js';
+import { setupPacketHandlers } from '../helpers/setup-packet-handlers.js';
 
 // Create factory functions for mock stores
 const createMockStores = vi.hoisted(() => {
@@ -47,7 +47,7 @@ const createTestConnection = vi.hoisted(() => {
 });
 
 // Mock the serial connection module to use TestSerialConnection
-vi.mock('../../src/lib/serial.js', () => {
+vi.mock('$lib/serial.js', () => {
   const testConnection = createTestConnection();
   return {
     serialConnection: testConnection,
@@ -60,10 +60,11 @@ vi.mock('../../src/lib/serial.js', () => {
   };
 });
 
-// Mock the channel store
-vi.mock('../../src/lib/stores/channels.js', () => {
+// Mock the channel store with proper packet sending
+vi.mock('$lib/stores/channels.js', () => {
   const { writable, derived } = require('svelte/store');
   const { channels, activeChannel, waitingSynthesize } = createMockStores();
+  const { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } = require('../../src/lib/packet-encoder');
   
   return {
     channelStore: {
@@ -90,20 +91,62 @@ vi.mock('../../src/lib/stores/channels.js', () => {
         activeChannel.set(0);
         waitingSynthesize.set(true);
       }),
-      setActiveChannel: vi.fn(),
-      setVoltage: vi.fn(),
-      setCurrent: vi.fn(),
-      setOutput: vi.fn(),
-      startRecording: vi.fn(),
-      stopRecording: vi.fn(),
+      setActiveChannel: vi.fn(async (channel) => {
+        // Import inside function to get correct instance
+        const { serialConnection } = await import('../../src/lib/serial');
+        const packet = createSetChannelPacket(channel);
+        await serialConnection.sendPacket(packet);
+        activeChannel.set(channel);
+      }),
+      setVoltage: vi.fn(async (channel, voltage, current) => {
+        // Import inside function to get correct instance
+        const { serialConnection } = await import('../../src/lib/serial');
+        const packet = createSetVoltagePacket(channel, voltage, current);
+        await serialConnection.sendPacket(packet);
+        channels.update(chs => {
+          chs[channel].targetVoltage = voltage;
+          chs[channel].targetCurrent = current;
+          return chs;
+        });
+      }),
+      setCurrent: vi.fn(async (channel, voltage, current) => {
+        // Import inside function to get correct instance
+        const { serialConnection } = await import('../../src/lib/serial');
+        const packet = createSetCurrentPacket(channel, voltage, current);
+        await serialConnection.sendPacket(packet);
+        channels.update(chs => {
+          chs[channel].targetVoltage = voltage;
+          chs[channel].targetCurrent = current;
+          return chs;
+        });
+      }),
+      setOutput: vi.fn(async (channel, enabled) => {
+        // Import inside function to get correct instance
+        const { serialConnection } = await import('../../src/lib/serial');
+        const packet = createSetOutputPacket(channel, enabled);
+        await serialConnection.sendPacket(packet);
+      }),
+      startRecording: vi.fn((channel) => {
+        channels.update(chs => {
+          chs[channel].recording = true;
+          chs[channel].waveformData = [];
+          return chs;
+        });
+      }),
+      stopRecording: vi.fn((channel) => {
+        channels.update(chs => {
+          chs[channel].recording = false;
+          return chs;
+        });
+      }),
       clearRecording: vi.fn()
     }
   };
 });
 
 import App from '../../src/App.svelte';
-import { serialConnection } from '../../src/lib/serial';
-import { channelStore } from '../../src/lib/stores/channels';
+import { serialConnection } from '$lib/serial';
+import { channelStore } from '$lib/stores/channels';
 
 describe('Serial Communication Flow Integration Test', () => {
   let mockSerial;
@@ -122,7 +165,7 @@ describe('Serial Communication Flow Integration Test', () => {
     channelStore.reset();
     
     // Set up packet handlers for test
-    setupTestPacketHandlers(serialConnection, channelStore);
+    setupPacketHandlers(serialConnection, channelStore);
   });
 
   afterEach(async () => {
@@ -262,8 +305,14 @@ describe('Serial Communication Flow Integration Test', () => {
       await fireEvent.input(voltageInput, { target: { value: '12' } });
       await fireEvent.click(getByText('Set V'));
       
+      // Wait for the async setVoltage to complete
+      await tick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Verify SET_V packet sent
       const sentPackets = mockPort.getWrittenData();
+      console.log('Sent packets:', sentPackets.map(p => ({ type: `0x${p[2].toString(16)}`, size: p[3] })));
+      
       const setVPacket = sentPackets.find(packet => 
         packet[2] === 0x1A // SET_V type
       );
@@ -321,14 +370,18 @@ describe('Serial Communication Flow Integration Test', () => {
       
       // Send various malformed packets
       mockPort.simulateData(createMalformedPacket('short'));
+      await serialConnection.triggerPacketProcessing();
       mockPort.simulateData(createMalformedPacket('bad-header'));
+      await serialConnection.triggerPacketProcessing();
       mockPort.simulateData(createMalformedPacket('bad-checksum'));
+      await serialConnection.triggerPacketProcessing();
       
       // Should still be connected
       expect(getByText('Connected')).toBeInTheDocument();
       
       // Send valid packet to verify still processing
       mockPort.simulateData(createMachinePacket(0x10));
+      await serialConnection.triggerPacketProcessing();
       
       await waitFor(() => {
         expect(getByText('(M01)')).toBeInTheDocument();
@@ -350,6 +403,7 @@ describe('Serial Communication Flow Integration Test', () => {
       
       // Send error packet
       mockPort.simulateData(createError240Packet());
+      await serialConnection.triggerPacketProcessing();
       
       // Should remain connected (error is informational)
       expect(getByText('Connected')).toBeInTheDocument();
@@ -363,8 +417,14 @@ describe('Serial Communication Flow Integration Test', () => {
       
       await fireEvent.click(getByText('Connect'));
       
+      // Wait for connection first
+      await waitFor(() => {
+        expect(getByText('Connected')).toBeInTheDocument();
+      });
+      
       // Simulate disconnection
       mockPort.simulateDisconnect();
+      await serialConnection.triggerPacketProcessing();
       
       await waitFor(() => {
         expect(getByText(/Error:/)).toBeInTheDocument();
@@ -382,6 +442,7 @@ describe('Serial Communication Flow Integration Test', () => {
       
       // Verify can receive data on new connection
       newPort.simulateData(createMachinePacket(0x11));
+      await serialConnection.triggerPacketProcessing();
       
       await waitFor(() => {
         expect(getByText('(M02)')).toBeInTheDocument();
@@ -408,6 +469,7 @@ describe('Serial Communication Flow Integration Test', () => {
       ]);
       
       mockPort.simulateData(combinedPackets);
+      await serialConnection.triggerPacketProcessing();
       
       // All packets should be processed
       await waitFor(() => {
@@ -431,12 +493,15 @@ describe('Serial Communication Flow Integration Test', () => {
       
       // Send in parts
       mockPort.simulateData(part1);
+      await serialConnection.triggerPacketProcessing();
       await new Promise(resolve => setTimeout(resolve, 50));
       
       mockPort.simulateData(part2);
+      await serialConnection.triggerPacketProcessing();
       await new Promise(resolve => setTimeout(resolve, 50));
       
       mockPort.simulateData(part3);
+      await serialConnection.triggerPacketProcessing();
       
       // Should process complete packet
       await waitFor(() => {
@@ -461,6 +526,7 @@ describe('Serial Communication Flow Integration Test', () => {
       
       const combined = new Uint8Array([...garbage, ...validPacket]);
       mockPort.simulateData(combined);
+      await serialConnection.triggerPacketProcessing();
       
       // Should find and process valid packet
       await waitFor(() => {
@@ -490,6 +556,7 @@ describe('Serial Communication Flow Integration Test', () => {
       }, { timeout: 3000 });
       
       mockPort.simulateData(createAddressPacket(addresses));
+      await serialConnection.triggerPacketProcessing();
       
       // Note: UI doesn't display addresses, but they're processed
       // Verify by checking no errors occurred
@@ -514,6 +581,7 @@ describe('Serial Communication Flow Integration Test', () => {
           current: 500 + i
         }]);
         mockPort.simulateData(packet);
+        await serialConnection.triggerPacketProcessing();
       }
       
       // Should process without crashing
@@ -552,6 +620,7 @@ describe('Serial Communication Flow Integration Test', () => {
       }, { timeout: 3000 });
       
       mockPort.simulateData(packet);
+      await serialConnection.triggerPacketProcessing();
       
       // Should handle without error
       expect(getByText('Connected')).toBeInTheDocument();
@@ -571,6 +640,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort.simulateData(createSynthesizePacket([
         { online: 1, isOutput: false, voltage: 0, current: 0 }
       ]));
+      await serialConnection.triggerPacketProcessing();
       
       await waitFor(() => {
         expect(getByText('Output: OFF')).toBeInTheDocument();
@@ -583,6 +653,7 @@ describe('Serial Communication Flow Integration Test', () => {
       mockPort.simulateData(createSynthesizePacket([
         { online: 1, isOutput: true, voltage: 3300, current: 500 }
       ]));
+      await serialConnection.triggerPacketProcessing();
       
       await waitFor(() => {
         expect(getByText('Output: ON')).toBeInTheDocument();

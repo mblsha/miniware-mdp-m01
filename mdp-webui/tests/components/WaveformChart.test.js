@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor } from '@testing-library/svelte';
-import WaveformChart from '../../src/lib/components/WaveformChart.svelte';
+import WaveformChart from '$lib/components/WaveformChart.svelte';
 
 // Mock uPlot
 vi.mock('uplot', () => {

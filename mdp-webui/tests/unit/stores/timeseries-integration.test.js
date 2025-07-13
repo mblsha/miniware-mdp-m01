@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 
 // Mock kaitai-wrapper before importing anything that uses it
-vi.mock('../../../src/lib/kaitai-wrapper.js', () => ({
+vi.mock('$lib/kaitai-wrapper.js', () => ({
   KaitaiStream: vi.fn(),
   MiniwareMdpM01: {
     PackType: {
@@ -28,7 +28,7 @@ const mockDecodeSynthesize = vi.fn();
 const mockDecodeWave = vi.fn();
 
 // Mock the serial connection
-vi.mock('../../../src/lib/serial.js', () => ({
+vi.mock('$lib/serial.js', () => ({
   serialConnection: {
     registerPacketHandler: vi.fn(),
     getDecoder: vi.fn(() => ({
@@ -38,9 +38,9 @@ vi.mock('../../../src/lib/serial.js', () => ({
   }
 }));
 
-import { timeseriesStore } from '../../../src/lib/stores/timeseries.js';
-import { channelStore } from '../../../src/lib/stores/channels.js';
-import { serialConnection } from '../../../src/lib/serial.js';
+import { timeseriesStore } from '$lib/stores/timeseries.js';
+import { channelStore } from '$lib/stores/channels.js';
+import { serialConnection } from '$lib/serial.js';
 
 describe('TimeseriesIntegration', () => {
   let mockHandlers = new Map(); // Initialize once and persist
@@ -69,7 +69,7 @@ describe('TimeseriesIntegration', () => {
     
     // Don't use vi.resetModules() as it causes multiple imports
     // Instead, just import fresh each time - the mock should capture properly
-    integration = await import('../../../src/lib/stores/timeseries-integration.js');
+    integration = await import('$lib/stores/timeseries-integration.js');
   });
 
   afterEach(() => {

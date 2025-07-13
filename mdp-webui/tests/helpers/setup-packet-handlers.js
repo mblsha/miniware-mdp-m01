@@ -1,97 +1,137 @@
+import { get } from 'svelte/store';
+
 /**
- * Set up packet handlers for integration tests that mock the channelStore.
- * This simulates the packet handling that would normally be done by the real channelStore.
+ * Setup packet handlers to update channel store
+ * This mimics what happens in the real channelStore
  */
-export function setupTestPacketHandlers(serialConnection, channelStore) {
-  // Register machine packet handler to update deviceTypeStore
-  serialConnection.registerPacketHandler(0x15, (packet) => { // MACHINE type = 0x15 = 21
-    if (packet.length >= 9) {
-      const machineType = packet[8]; // Data starts at index 6, machine type is 3rd byte in data
-      serialConnection.deviceTypeStore.set({
-        type: machineType === 0x10 ? 'M01' : 'M02',
-        hasLCD: machineType === 0x10
+export function setupPacketHandlers(serialConnection, channelStore) {
+  // Synthesize packet handler
+  serialConnection.registerPacketHandler(0x11, (packet) => {
+    // Skip header (6 bytes)
+    const data = packet.slice(6);
+    
+    channelStore.channels.update(channels => {
+      // Each channel is 25 bytes
+      for (let i = 0; i < 6; i++) {
+        const offset = i * 25;
+        const channelData = data.slice(offset, offset + 25);
+        
+        if (channelData.length >= 25) {
+          const ch = channels[i];
+          
+          // Parse channel data
+          const outVoltage = channelData[1] | (channelData[2] << 8);
+          const outCurrent = channelData[3] | (channelData[4] << 8);
+          const temperature = channelData[13] | (channelData[14] << 8);
+          
+          ch.online = channelData[15] === 1;
+          ch.voltage = outVoltage / 1000; // Convert to V
+          ch.current = outCurrent / 1000; // Convert to A
+          ch.power = ch.voltage * ch.current;
+          ch.temperature = temperature / 10; // Convert to °C
+          ch.isOutput = channelData[19] === 1;
+          ch.machineType = channelData[16] === 0 ? 'P906' : 
+                          channelData[16] === 3 ? 'L1060' : 'Unknown';
+        }
+      }
+      
+      return [...channels];
+    });
+    
+    // Clear waiting flag
+    if (channelStore.waitingSynthesize) {
+      channelStore.waitingSynthesize.set(false);
+    }
+  });
+  
+  // Wave packet handler
+  serialConnection.registerPacketHandler(0x12, (packet) => {
+    const activeChannelValue = get(channelStore.activeChannel);
+    const waitingSynth = channelStore.waitingSynthesize ? 
+      get(channelStore.waitingSynthesize) : false;
+    
+    if (waitingSynth) return; // Skip if waiting for synthesize
+    
+    // Parse wave data
+    const size = packet[3];
+    const channel = packet[4];
+    
+    if (channel !== activeChannelValue) return;
+    
+    const data = packet.slice(6);
+    const pointSize = 4; // 2 bytes voltage + 2 bytes current
+    const timestampSize = 4; // 4 bytes for timestamp (little-endian)
+    const groupSize = size === 126 ? (timestampSize + 2 * pointSize) : 
+                     size === 206 ? (timestampSize + 4 * pointSize) : 0;
+    
+    if (groupSize === 0) return;
+    
+    const waveData = [];
+    const numGroups = Math.floor(data.length / groupSize);
+    
+    for (let g = 0; g < numGroups; g++) {
+      const groupOffset = g * groupSize;
+      const timestamp = data[groupOffset] | 
+                       (data[groupOffset + 1] << 8) |
+                       (data[groupOffset + 2] << 16) |
+                       (data[groupOffset + 3] << 24);
+      
+      const pointsPerGroup = (groupSize - timestampSize) / pointSize;
+      
+      for (let p = 0; p < pointsPerGroup; p++) {
+        const pointOffset = groupOffset + timestampSize + (p * pointSize);
+        const voltage = (data[pointOffset] | (data[pointOffset + 1] << 8)) / 1000;
+        const current = (data[pointOffset + 2] | (data[pointOffset + 3] << 8)) / 1000;
+        
+        waveData.push({ timestamp, voltage, current });
+      }
+    }
+    
+    // Add to channel's waveform data
+    if (channelStore.addWaveformData) {
+      channelStore.addWaveformData(channel, waveData);
+    } else {
+      channelStore.channels.update(channels => {
+        if (channels[channel].recording) {
+          channels[channel].waveformData.push(...waveData);
+        }
+        return [...channels];
       });
     }
   });
   
-  // Register synthesize packet handler to update channels
-  serialConnection.registerPacketHandler(0x11, (packet) => { // SYNTHESIZE type = 0x11 = 17
-    // Set waitingSynthesize to false when we receive synthesize packet
-    channelStore.waitingSynthesize.set(false);
-    // Update the mock channel store with synthesize data
-    const channelData = [];
-    
-    // Parse synthesize packet (6 channels × 25 bytes each)
-    for (let i = 0; i < 6; i++) {
-      const offset = 6 + i * 25; // Skip header + checksum
-      if (packet.length >= offset + 25) {
-        const voltage = packet[offset + 1] | (packet[offset + 2] << 8);
-        const current = packet[offset + 3] | (packet[offset + 4] << 8);
-        const tempRaw = packet[offset + 13] | (packet[offset + 14] << 8);
-        const online = packet[offset + 15];
-        const outputOn = packet[offset + 19];
-        const machineType = packet[offset + 16];
-        
-        channelData.push({
-          channel: i,
-          online: online !== 0,
-          machineType: machineType === 0 ? 'P905' : 
-                      machineType === 1 ? 'P906' : 
-                      machineType === 2 ? 'P906' : 
-                      machineType === 3 ? 'L1060' : 'Unknown',
-          voltage: voltage / 1000, // Convert mV to V
-          current: current / 1000, // Convert mA to A
-          power: (voltage * current) / 1000000, // Calculate power in W
-          temperature: tempRaw / 10, // Convert raw temperature to °C
-          isOutput: outputOn !== 0,
-          mode: 'Normal',
-          address: [0, 0, 0, 0, 0],
-          targetVoltage: voltage / 1000,
-          targetCurrent: current / 1000,
-          recording: false,
-          waveformData: []
-        });
-      }
-    }
-    
-    // Update the mock store directly
-    channelStore.channels.set(channelData);
-  });
-  
-  // Register update channel packet handler
-  serialConnection.registerPacketHandler(0x14, (packet) => { // UPDATE_CH type = 0x14 = 20
-    if (packet.length >= 7) {
-      const channel = packet[6];
-      // Use setActiveChannel function instead of trying to set derived store
+  // Update channel packet handler
+  serialConnection.registerPacketHandler(0x14, (packet) => {
+    const newChannel = packet[6];
+    if (newChannel < 6) {
+      // activeChannel is derived, so we need to call setActiveChannel
       if (channelStore.setActiveChannel) {
-        channelStore.setActiveChannel(channel);
+        channelStore.setActiveChannel(newChannel);
       }
     }
   });
   
-  // Register wave packet handler
-  serialConnection.registerPacketHandler(0x12, (packet) => { // WAVE type = 0x12 = 18
-    if (packet.length >= 6) {
-      const channel = packet[4];
-      // Simple wave packet handling - just add some mock waveform data
-      const currentChannels = channelStore.channels.subscribe ? undefined : channelStore.channels.get();
-      if (currentChannels && currentChannels[channel] && currentChannels[channel].recording) {
-        const waveformData = currentChannels[channel].waveformData || [];
-        // Add some mock points
-        for (let i = 0; i < 2; i++) {
-          waveformData.push({
-            timestamp: waveformData.length * 10,
-            voltage: 5.0 + Math.random() * 0.2,
-            current: 1.0 + Math.random() * 0.1
-          });
-        }
-        
-        // Update the channel with new waveform data
-        channelStore.channels.update(channels => {
-          channels[channel].waveformData = waveformData;
-          return channels;
-        });
-      }
+  // Machine packet handler
+  serialConnection.registerPacketHandler(0x15, (packet) => {
+    const machineType = packet[8]; // Machine type is at index 8 (after header + channel + dummy)
+    const deviceType = {
+      type: machineType === 0x10 ? 'M01' : 'M02',
+      haveLcd: machineType === 0x10
+    };
+    
+    if (serialConnection.deviceTypeStore) {
+      serialConnection.deviceTypeStore.set(deviceType);
     }
   });
+  
+  // Error packet handler
+  serialConnection.registerPacketHandler(0x23, (packet) => {
+    console.log('Error 240 packet received');
+  });
+  
+  return {
+    cleanup: () => {
+      serialConnection.clearPacketHandlers();
+    }
+  };
 }

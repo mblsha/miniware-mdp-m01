@@ -8,7 +8,7 @@ import { createMachinePacket, createSynthesizePacket } from '../mocks/packet-dat
 const mockConnect = vi.hoisted(() => vi.fn());
 const mockDisconnect = vi.hoisted(() => vi.fn());
 
-vi.mock('../../src/lib/serial.js', () => {
+vi.mock('$lib/serial.js', () => {
   const { writable } = require('svelte/store');
   return {
     serialConnection: {
@@ -28,14 +28,14 @@ vi.mock('../../src/lib/serial.js', () => {
 });
 
 // Mock child components with proper Svelte components BEFORE other imports
-vi.mock('../../src/lib/components/Dashboard.svelte', async () => ({
+vi.mock('$lib/components/Dashboard.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockDashboard.svelte')).default
 }));
-vi.mock('../../src/lib/components/ChannelDetail.svelte', async () => ({
+vi.mock('$lib/components/ChannelDetail.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockChannelDetail.svelte')).default
 }));
 
-vi.mock('../../src/lib/stores/channels.js', () => {
+vi.mock('$lib/stores/channels.js', () => {
   const { writable } = require('svelte/store');
   const mockChannels = writable([
     { channel: 0, online: true, voltage: 3.3, current: 0.5, power: 1.65, temperature: 25, isOutput: false, machineType: 'P906', recording: false, waveformData: [] },
@@ -59,7 +59,7 @@ vi.mock('../../src/lib/stores/channels.js', () => {
 });
 
 import App from '../../src/App.svelte';
-import { serialConnection } from '../../src/lib/serial.js';
+import { serialConnection } from '$lib/serial.js';
 
 describe('App Component', () => {
   let mockSerial;

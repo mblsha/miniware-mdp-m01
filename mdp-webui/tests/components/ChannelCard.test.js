@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
-import ChannelCard from '../../src/lib/components/ChannelCard.svelte';
+import ChannelCard from '$lib/components/ChannelCard.svelte';
 
 describe('ChannelCard Component', () => {
   const mockOnlineChannel = {

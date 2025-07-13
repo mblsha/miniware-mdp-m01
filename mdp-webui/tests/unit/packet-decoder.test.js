@@ -8,7 +8,7 @@ import {
 } from '../mocks/packet-data.js';
 
 // Mock the kaitai-wrapper.js module
-vi.mock('../../src/lib/kaitai-wrapper.js', () => {
+vi.mock('$lib/kaitai-wrapper.js', () => {
   const PackType = {
     SYNTHESIZE: 0x11,  // 17
     WAVE: 0x12,        // 18
@@ -195,7 +195,7 @@ import {
   processAddressPacket,
   processMachinePacket,
   PackType
-} from '../../src/lib/packet-decoder.js';
+} from '$lib/packet-decoder.js';
 
 describe('Packet Decoder', () => {
   describe('decodePacket', () => {

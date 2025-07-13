@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SerialConnection } from '../../src/lib/serial.js';
+import { SerialConnection } from '$lib/serial.js';
 import { get } from 'svelte/store';
 
 describe('SerialConnection Buffer Management', () => {

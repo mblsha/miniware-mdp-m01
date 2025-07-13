@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
-import Dashboard from '../../src/lib/components/Dashboard.svelte';
+import Dashboard from '$lib/components/Dashboard.svelte';
 
 // Mock channel store
-vi.mock('../../src/lib/stores/channels.js', () => {
+vi.mock('$lib/stores/channels.js', () => {
   const { writable } = require('svelte/store');
   const channels = writable([]);
   const activeChannel = writable(0);
@@ -17,7 +17,7 @@ vi.mock('../../src/lib/stores/channels.js', () => {
   };
 });
 
-import { channelStore } from '../../src/lib/stores/channels.js';
+import { channelStore } from '$lib/stores/channels.js';
 
 describe('Dashboard Channel Management Tests', () => {
   const { channels, activeChannel } = channelStore;

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { createMachinePacket, createPacketSequence } from '../mocks/packet-data.js';
-import { createHeartbeatPacket } from '../../src/lib/packet-encoder.js';
+import { createHeartbeatPacket } from '$lib/packet-encoder.js';
 
 describe('Serial Connection', () => {
   let mockSerial;

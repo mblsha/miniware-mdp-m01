@@ -3,7 +3,7 @@ import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 
 // Mock ChannelCard component BEFORE other imports
-vi.mock('../../src/lib/components/ChannelCard.svelte', async () => ({
+vi.mock('$lib/components/ChannelCard.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockChannelCard.svelte')).default
 }));
 
@@ -23,12 +23,12 @@ const mockChannelStore = vi.hoisted(() => {
   };
 });
 
-vi.mock('../../src/lib/stores/channels.js', () => ({
+vi.mock('$lib/stores/channels.js', () => ({
   channelStore: mockChannelStore
 }));
 
-import Dashboard from '../../src/lib/components/Dashboard.svelte';
-import { channelStore } from '../../src/lib/stores/channels.js';
+import Dashboard from '$lib/components/Dashboard.svelte';
+import { channelStore } from '$lib/stores/channels.js';
 
 describe('Dashboard Component', () => {
   beforeEach(() => {
