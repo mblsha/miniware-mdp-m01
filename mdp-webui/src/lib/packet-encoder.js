@@ -47,32 +47,26 @@ export function createSetChannelPacket(channel) {
   return createPacket(PacketType.SET_CH, channel);
 }
 
-export function createSetVoltagePacket(channel, voltage, current) {
+function createVoltageCurrentPacket(type, channel, voltage, current) {
   const voltageMv = Math.round(voltage * 1000);
   const currentMa = Math.round(current * 1000);
-  
+
   const data = [
     voltageMv & 0xFF,
     (voltageMv >> 8) & 0xFF,
     currentMa & 0xFF,
     (currentMa >> 8) & 0xFF
   ];
-  
-  return createPacket(PacketType.SET_V, channel, data);
+
+  return createPacket(type, channel, data);
+}
+
+export function createSetVoltagePacket(channel, voltage, current) {
+  return createVoltageCurrentPacket(PacketType.SET_V, channel, voltage, current);
 }
 
 export function createSetCurrentPacket(channel, voltage, current) {
-  const voltageMv = Math.round(voltage * 1000);
-  const currentMa = Math.round(current * 1000);
-  
-  const data = [
-    voltageMv & 0xFF,
-    (voltageMv >> 8) & 0xFF,
-    currentMa & 0xFF,
-    (currentMa >> 8) & 0xFF
-  ];
-  
-  return createPacket(PacketType.SET_I, channel, data);
+  return createVoltageCurrentPacket(PacketType.SET_I, channel, voltage, current);
 }
 
 export function createSetOutputPacket(channel, enabled) {
