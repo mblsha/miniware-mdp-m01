@@ -43,33 +43,31 @@ import { channelStore } from '$lib/stores/channels.js';
 import { serialConnection } from '$lib/serial.js';
 
 describe('TimeseriesIntegration', () => {
-  let mockHandlers = new Map(); // Initialize once and persist
+  let mockHandlers;
   let integration;
 
   beforeEach(async () => {
     // Reset stores
     timeseriesStore.reset();
     channelStore.reset();
-    
-    // Clear mock call history but preserve implementations
+
+    // Reset mocks
     mockDecodeSynthesize.mockClear();
     mockDecodeWave.mockClear();
     serialConnection.registerPacketHandler.mockClear();
-    
-    // Only create the implementation once, don't recreate the Map
-    if (mockHandlers.size === 0) {
-      // Capture registered handlers BEFORE importing integration module
-      serialConnection.registerPacketHandler.mockImplementation((type, handler) => {
-        if (!mockHandlers.has(type)) {
-          mockHandlers.set(type, []);
-        }
-        mockHandlers.get(type).push(handler);
-      });
-    }
-    
+
+    mockHandlers = new Map();
+    serialConnection.registerPacketHandler.mockImplementation((type, handler) => {
+      if (!mockHandlers.has(type)) {
+        mockHandlers.set(type, []);
+      }
+      mockHandlers.get(type).push(handler);
+    });
+
     // Don't use vi.resetModules() as it causes multiple imports
     // Instead, just import fresh each time - the mock should capture properly
     integration = await import('$lib/stores/timeseries-integration.js');
+    integration.initializeTimeseriesIntegration();
   });
 
   afterEach(() => {
@@ -82,9 +80,8 @@ describe('TimeseriesIntegration', () => {
       expect(serialConnection.registerPacketHandler).toHaveBeenCalledWith(0x12, expect.any(Function));
       expect(mockHandlers.has(0x11)).toBe(true);
       expect(mockHandlers.has(0x12)).toBe(true);
-      // Since the module auto-initializes and we import it each time, handlers may accumulate
-      expect(mockHandlers.get(0x11).length).toBeGreaterThan(0);
-      expect(mockHandlers.get(0x12).length).toBeGreaterThan(0);
+      expect(mockHandlers.get(0x11)).toHaveLength(1);
+      expect(mockHandlers.get(0x12)).toHaveLength(1);
     });
 
     it('should process synthesize packets when session is active', () => {

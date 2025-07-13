@@ -7,9 +7,10 @@
   // Allow dependency injection for testing
   export let serialConnection = defaultSerialConnection;
   export let channelStore = defaultChannelStore;
-  
+
   let currentView = 'dashboard';
   let selectedChannel = 0;
+
   
   // Extract stores from serialConnection object (now reactive to prop changes)
   $: ({ status, error, deviceType } = serialConnection);

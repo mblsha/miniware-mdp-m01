@@ -309,5 +309,5 @@ export function getSessionStats(sessionId = null) {
   return stats;
 }
 
-// Auto-initialize when module is imported
-initializeTimeseriesIntegration();
+// Consumers must explicitly initialize integration
+// e.g. call initializeTimeseriesIntegration() in the application entry point
