@@ -12,7 +12,7 @@ const CLEANUP_INTERVAL = 60000;      // Cleanup old data every minute
 
 // Helper to generate unique session IDs
 function generateSessionId() {
-  return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 // Initialize the store state
