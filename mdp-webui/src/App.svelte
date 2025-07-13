@@ -1,14 +1,18 @@
 <script>
-  import { serialConnection, ConnectionStatus } from './lib/serial.js';
-  import { channelStore } from './lib/stores/channels.js';
+  import { serialConnection as defaultSerialConnection, ConnectionStatus } from './lib/serial.js';
+  import { channelStore as defaultChannelStore } from './lib/stores/channels.js';
   import Dashboard from './lib/components/Dashboard.svelte';
   import ChannelDetail from './lib/components/ChannelDetail.svelte';
+  
+  // Allow dependency injection for testing
+  export let serialConnection = defaultSerialConnection;
+  export let channelStore = defaultChannelStore;
   
   let currentView = 'dashboard';
   let selectedChannel = 0;
   
-  // Extract stores from serialConnection object
-  const { status, error, deviceType } = serialConnection;
+  // Extract stores from serialConnection object (now reactive to prop changes)
+  $: ({ status, error, deviceType } = serialConnection);
   
   async function handleConnect() {
     try {
@@ -55,9 +59,9 @@
   
   {#if $status === ConnectionStatus.CONNECTED}
     {#if currentView === 'dashboard'}
-      <Dashboard onselectchannel={showChannelDetail} />
+      <Dashboard {channelStore} onselectchannel={showChannelDetail} />
     {:else if currentView === 'detail'}
-      <ChannelDetail channel={selectedChannel} onback={showDashboard} />
+      <ChannelDetail {channelStore} channel={selectedChannel} onback={showDashboard} />
     {/if}
   {:else}
     <div class="placeholder">

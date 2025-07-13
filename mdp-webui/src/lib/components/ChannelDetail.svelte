@@ -1,8 +1,9 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { channelStore } from '../stores/channels.js';
+  import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import WaveformChart from './WaveformChart.svelte';
   
+  export let channelStore = defaultChannelStore;
   export let channel = 0;
   export let onback = undefined;
   

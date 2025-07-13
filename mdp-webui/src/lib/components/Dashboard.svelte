@@ -1,10 +1,11 @@
 <script>
-  import { channelStore } from '../stores/channels.js';
+  import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import ChannelCard from './ChannelCard.svelte';
   
+  export let channelStore = defaultChannelStore;
   export let onselectchannel = undefined;
   
-  const { channels, activeChannel } = channelStore;
+  $: ({ channels, activeChannel } = channelStore);
   
   function selectChannel(channel) {
     onselectchannel?.(channel);

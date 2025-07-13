@@ -128,18 +128,26 @@ export class TestSerialConnection {
       for (let i = 0; i <= this.receiveBuffer.length - 2; i++) {
         if (this.receiveBuffer[i] === 0x5A && this.receiveBuffer[i + 1] === 0x5A) {
           // Validate that this is a real header by checking the packet structure
-          if (i + 3 < this.receiveBuffer.length) {
+          // Need at least 4 more bytes: type, size, channel, checksum
+          if (i + 5 < this.receiveBuffer.length) {
             const packetType = this.receiveBuffer[i + 2];
             const packetSize = this.receiveBuffer[i + 3];
-            // Basic validation: packet type should be reasonable and size should be >= 6
-            if (packetType !== 0x5A && packetSize >= 6 && packetSize <= 256) {
+            // Validate packet type and size
+            if (packetType >= 0x11 && packetType <= 0x23 && packetSize >= 6 && packetSize <= 256) {
+              headerIndex = i;
+              break;
+            }
+          } else if (i + 3 < this.receiveBuffer.length) {
+            // Have type and size, check those at minimum
+            const packetType = this.receiveBuffer[i + 2];
+            const packetSize = this.receiveBuffer[i + 3];
+            if (packetType >= 0x11 && packetType <= 0x23 && packetSize >= 6 && packetSize <= 256) {
               headerIndex = i;
               break;
             }
           } else {
-            // Not enough data to validate, but assume it's a valid header
-            headerIndex = i;
-            break;
+            // Not enough data to validate properly, continue searching
+            continue;
           }
         }
       }
@@ -150,6 +158,11 @@ export class TestSerialConnection {
         if (this.receiveBuffer.length > 256) {
           console.warn('Clearing receive buffer - no valid header found');
           this.receiveBuffer = [];
+        }
+        // If there's any data but no valid header, remove the first byte and try again
+        else if (this.receiveBuffer.length > 0) {
+          this.receiveBuffer.shift();
+          continue;
         }
         break;
       }
