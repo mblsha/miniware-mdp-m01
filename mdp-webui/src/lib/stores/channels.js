@@ -34,6 +34,47 @@ export function createChannelStore() {
   const activeChannel = writable(0);
   const waitingSynthesize = writable(true);
 
+  // Channel validation functions
+  function validateChannelData(channelData, channelIndex) {
+    const warnings = [];
+    let isValid = true;
+
+    // Validate online flag (accept boolean or 0/1)
+    if (typeof channelData.online === 'boolean') {
+      // Boolean values are valid
+    } else if (channelData.online !== 0 && channelData.online !== 1) {
+      warnings.push(`Invalid online flag: ${channelData.online} (should be 0, 1, true, or false)`);
+      isValid = false;
+    }
+
+    // Validate temperature range (reasonable for electronics: -10°C to 85°C)
+    if (channelData.temperature < -10 || channelData.temperature > 85) {
+      warnings.push(`Temperature out of range: ${channelData.temperature.toFixed(1)}°C (should be -10°C to 85°C)`);
+      isValid = false;
+    }
+
+    // Validate voltage range (0-50V reasonable for these devices)
+    if (channelData.voltage < 0 || channelData.voltage > 50) {
+      warnings.push(`Voltage out of range: ${channelData.voltage.toFixed(3)}V (should be 0V to 50V)`);
+      isValid = false;
+    }
+
+    // Validate current range (0-10A reasonable for these devices)
+    if (channelData.current < 0 || channelData.current > 10) {
+      warnings.push(`Current out of range: ${channelData.current.toFixed(3)}A (should be 0A to 10A)`);
+      isValid = false;
+    }
+
+    // Validate machine type
+    const validTypes = ['Node', 'P905', 'P906', 'L1060', 'Unknown'];
+    if (!validTypes.includes(channelData.machineType)) {
+      warnings.push(`Invalid machine type: ${channelData.machineType}`);
+      isValid = false;
+    }
+
+    return { isValid, warnings };
+  }
+
   // Register packet handlers
   function synthesizeHandler(packet) {
     const decoded = decodePacket(packet);
@@ -54,9 +95,71 @@ export function createChannelStore() {
     const processed = processSynthesizePacket(decoded);
 
     if (processed) {
+      // Validate and filter channels
+      const validatedChannels = [];
+      const filteredChannels = [];
+      let totalWarnings = 0;
+
+      // console.log('🔍 CHANNEL VALIDATION ANALYSIS:');
+      
+      processed.forEach((channelData, i) => {
+        const validation = validateChannelData(channelData, i);
+        
+        if (validation.isValid && channelData.online) {
+          validatedChannels.push(channelData);
+          // console.log(`✅ Channel ${i}: VALID and ONLINE`);
+        } else if (!validation.isValid) {
+          filteredChannels.push({ channel: i, data: channelData, warnings: validation.warnings });
+          totalWarnings += validation.warnings.length;
+          
+          console.log(`❌ Channel ${i}: FILTERED (${validation.warnings.length} issues)`);
+          validation.warnings.forEach(warning => {
+            console.log(`   ⚠️  ${warning}`);
+          });
+          
+          // Show the problematic raw data for this channel
+          if (decoded.data.channels && decoded.data.channels[i]) {
+            const rawCh = decoded.data.channels[i];
+            console.log(`   📊 Raw channel data:`, {
+              num: rawCh.num,
+              online: rawCh.online,
+              type: rawCh.type,
+              outVoltageRaw: rawCh.outVoltageRaw,
+              outCurrentRaw: rawCh.outCurrentRaw,
+              tempRaw: rawCh.tempRaw,
+              temperature: rawCh.temperature,
+              outputOn: rawCh.outputOn
+            });
+          }
+        } else {
+          // console.log(`ℹ️  Channel ${i}: VALID but OFFLINE`);
+        }
+      });
+
+      const validOnlineCount = validatedChannels.length;
+      
+      // Only show debug output if there are filtered channels
+      if (filteredChannels.length > 0) {
+        console.log(`\n📊 VALIDATION SUMMARY:`);
+        console.log(`   Valid online channels: ${validOnlineCount}`);
+        console.log(`   Filtered channels: ${filteredChannels.length}`);
+        console.log(`   Total warnings: ${totalWarnings}`);
+        
+        console.log(`\n🚨 FILTERED CHANNEL BREAKDOWN:`);
+        filteredChannels.forEach(filtered => {
+          console.log(`   Channel ${filtered.channel}: ${filtered.data.machineType}, ${filtered.data.voltage.toFixed(3)}V, ${filtered.data.current.toFixed(3)}A, ${filtered.data.temperature.toFixed(1)}°C`);
+          console.log(`     Issues: ${filtered.warnings.join(', ')}`);
+        });
+      }
+      
+      // Update store with all processed channels (including filtered ones as offline)
       channels.update(chs => {
         processed.forEach((data, i) => {
-          chs[i] = { ...chs[i], ...data, waveformData: chs[i].waveformData };
+          // If channel was filtered, mark it as offline regardless of original online status
+          const validation = validateChannelData(data, i);
+          const channelData = validation.isValid ? data : { ...data, online: false };
+          
+          chs[i] = { ...chs[i], ...channelData, waveformData: chs[i].waveformData };
         });
         return chs;
       });

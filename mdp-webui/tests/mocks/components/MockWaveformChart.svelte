@@ -1,20 +1,22 @@
 <script>
   export let data = [];
+  export let isRecording = false;
   export let width = 800;
   export let height = 400;
-  export let title = 'Waveform Chart';
+  export let title = 'Voltage & Current vs Time';
   
   // Mock chart functionality
   let chartElement;
   
   $: dataPoints = data.length;
   $: hasData = dataPoints > 0;
+  $: recordingStatus = isRecording ? 'Recording...' : 'Stopped';
 </script>
 
 <div class="waveform-chart" data-testid="waveform-chart" bind:this={chartElement}>
   <div class="chart-header">
     <h3>{title}</h3>
-    <span class="data-info">Data points: {dataPoints}</span>
+    <span class="data-info">Data points: {dataPoints} | {recordingStatus}</span>
   </div>
   
   <div class="chart-container" style="width: {width}px; height: {height}px;">
@@ -43,7 +45,7 @@
       </div>
     {:else}
       <div class="no-data" data-testid="no-data">
-        No waveform data available
+        {isRecording ? 'Waiting for data...' : 'No data recorded yet. Click "Start Recording" to begin.'}
       </div>
     {/if}
   </div>

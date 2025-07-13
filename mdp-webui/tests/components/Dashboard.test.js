@@ -53,10 +53,6 @@ describe('Dashboard Component', () => {
   });
 
   describe('Rendering', () => {
-    it('should display dashboard title', () => {
-      const { getByText } = render(Dashboard);
-      expect(getByText('Channels Overview')).toBeInTheDocument();
-    });
 
     it('should render all 6 channel cards', () => {
       const { getAllByTestId } = render(Dashboard);
@@ -280,11 +276,6 @@ describe('Dashboard Component', () => {
   describe('Accessibility', () => {
     it('should have semantic HTML structure', () => {
       const { container } = render(Dashboard);
-      
-      // Should have heading
-      const heading = container.querySelector('h2');
-      expect(heading).toBeInTheDocument();
-      expect(heading).toHaveTextContent('Channels Overview');
       
       // Grid should be properly structured
       const grid = container.querySelector('.channel-grid');

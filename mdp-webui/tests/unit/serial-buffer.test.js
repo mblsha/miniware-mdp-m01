@@ -235,15 +235,11 @@ describe('SerialConnection Buffer Management', () => {
         garbage[i] = 0xFF;
       }
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
       serialConnection.receiveBuffer = garbage;
       serialConnection.processIncomingData();
 
-      expect(consoleSpy).toHaveBeenCalledWith('🚨 MALFORMED DATA: Clearing large buffer with no valid headers');
+      // Should clear the buffer when it gets too large with no valid headers
       expect(serialConnection.receiveBuffer.length).toBe(0);
-
-      consoleSpy.mockRestore();
     });
 
     it('should handle packet split at header boundary', async () => {

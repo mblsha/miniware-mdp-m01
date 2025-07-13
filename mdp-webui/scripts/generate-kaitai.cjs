@@ -4,7 +4,7 @@ const YAML = require('yaml');
 const KaitaiStructCompiler = require('kaitai-struct-compiler');
 
 async function main() {
-  const ksyPath = path.resolve(__dirname, '..', 'cpp', 'mdp.ksy');
+  const ksyPath = path.resolve(__dirname, '..', '..', 'cpp', 'mdp.ksy');
   const outDir = path.resolve(__dirname, '..', 'src', 'lib', 'kaitai');
   const ksyYaml = fs.readFileSync(ksyPath, 'utf8');
   const ksy = YAML.parse(ksyYaml);

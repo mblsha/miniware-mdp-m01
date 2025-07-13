@@ -37,7 +37,7 @@
     "yaml": "^2.8.0"
   },
   "dependencies": {
-    "kaitai-struct": "^0.10.0",
-    "uplot": "^1.6.32"
+    "@observablehq/plot": "^0.6.17",
+    "kaitai-struct": "^0.10.0"
   }
 }

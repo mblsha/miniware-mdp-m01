@@ -12,7 +12,6 @@
 </script>
 
 <div class="dashboard" data-testid="mock-dashboard">
-  <h2>Channels Overview</h2>
   <div class="channel-grid">
     {#each $channels as channel (channel.channel)}
       <ChannelCard 
@@ -28,11 +27,6 @@
   .dashboard {
     flex: 1;
     padding: 2rem;
-  }
-  
-  h2 {
-    margin: 0 0 1.5rem 0;
-    color: #333;
   }
   
   .channel-grid {

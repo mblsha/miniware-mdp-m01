@@ -67,6 +67,10 @@ describe('ChannelDetail Component', () => {
       mode: 'CV',
       targetVoltage: 3.3,
       targetCurrent: 0.5,
+      targetPower: 1.65,
+      inputVoltage: 5.0,
+      inputCurrent: 0.4,
+      inputPower: 2.0,
       recording: false,
       waveformData: []
     }));
@@ -195,13 +199,14 @@ describe('ChannelDetail Component', () => {
     });
   });
 
-  describe('Current Measurements Display', () => {
+  describe('Output Measurements Display', () => {
     it('should display all measurements', () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getAllByText, getByText } = render(ChannelDetail, { props: { channel: 0 } });
       
-      expect(getByText('3.300 V')).toBeInTheDocument();
-      expect(getByText('0.500 A')).toBeInTheDocument();
-      expect(getByText('1.650 W')).toBeInTheDocument();
+      // Check that voltage, current, and power values are displayed (may appear multiple times)
+      expect(getAllByText('3.300 V').length).toBeGreaterThan(0);
+      expect(getAllByText('0.500 A').length).toBeGreaterThan(0);
+      expect(getAllByText('1.650 W').length).toBeGreaterThan(0);
       expect(getByText('25.5 °C')).toBeInTheDocument();
     });
 

@@ -11,7 +11,7 @@
   }
 </script>
 
-<button type="button" class="channel-card" class:active class:online={channel.online} {onclick}>
+<div class="channel-card" class:active class:online={channel.online} onclick={onclick} onkeydown={(e) => e.key === 'Enter' && onclick?.()} role="button" tabindex="0">
   <div class="header">
     <h3>Channel {channel.channel + 1}</h3>
     <span class="status" class:online={channel.online}>
@@ -22,7 +22,6 @@
   {#if channel.online}
     <div class="info">
       <div class="machine-type">{channel.machineType}</div>
-      <div class="mode">Mode: {channel.mode}</div>
     </div>
     
     <div class="measurements-table">
@@ -33,21 +32,21 @@
       </div>
       <div class="table-row">
         <div class="label-cell">Voltage</div>
-        <div class="value-cell">{channel.voltage.toFixed(3)}V</div>
-        <div class="value-cell">{channel.targetVoltage.toFixed(3)}V</div>
+        <div class="value-cell">{channel.voltage.toFixed(3)} V</div>
+        <div class="value-cell">{(channel.targetVoltage || 0).toFixed(3)} V</div>
       </div>
       <div class="table-row">
         <div class="label-cell">Current</div>
-        <div class="value-cell">{channel.current.toFixed(3)}A</div>
-        <div class="value-cell">{channel.targetCurrent.toFixed(3)}A</div>
+        <div class="value-cell">{channel.current.toFixed(3)} A</div>
+        <div class="value-cell">{(channel.targetCurrent || 0).toFixed(3)} A</div>
       </div>
       <div class="table-row">
         <div class="label-cell">Power</div>
-        <div class="value-cell">{channel.power.toFixed(3)}W</div>
-        <div class="value-cell">{channel.targetPower.toFixed(3)}W</div>
+        <div class="value-cell">{channel.power.toFixed(3)} W</div>
+        <div class="value-cell">{(channel.targetPower || 0).toFixed(3)} W</div>
       </div>
       <div class="temperature-row">
-        <span class="temp-value">{channel.temperature.toFixed(1)}°C</span>
+        <span class="temp-value">{channel.temperature.toFixed(1)} °C</span>
       </div>
     </div>
     
@@ -67,7 +66,7 @@
       No device connected
     </div>
   {/if}
-</button>
+</div>
 
 <style>
   .channel-card {
@@ -126,11 +125,6 @@
     font-weight: 600;
     color: #555;
     margin-bottom: 0.25rem;
-  }
-  
-  .mode {
-    font-size: 0.875rem;
-    color: #666;
   }
   
   .measurements-table {

@@ -13,7 +13,10 @@ describe('ChannelCard Component', () => {
     temperature: 25.5,
     isOutput: true,
     mode: 'CV',
-    address: [0x01, 0x02, 0x03, 0x04, 0x05]
+    address: [0x01, 0x02, 0x03, 0x04, 0x05],
+    targetVoltage: 3.3,
+    targetCurrent: 0.5,
+    targetPower: 1.65
   };
 
   const mockOfflineChannel = {
@@ -26,7 +29,10 @@ describe('ChannelCard Component', () => {
     temperature: 0,
     isOutput: false,
     mode: 'Normal',
-    address: [0, 0, 0, 0, 0]
+    address: [0, 0, 0, 0, 0],
+    targetVoltage: 0,
+    targetCurrent: 0,
+    targetPower: 0
   };
 
   describe('Online Channel Display', () => {
@@ -58,13 +64,14 @@ describe('ChannelCard Component', () => {
     });
 
     it('should display measurements with correct formatting', () => {
-      const { getByText } = render(ChannelCard, {
+      const { getAllByText, getByText } = render(ChannelCard, {
         props: { channel: mockOnlineChannel, active: false }
       });
       
-      expect(getByText('3.300 V')).toBeInTheDocument();
-      expect(getByText('0.500 A')).toBeInTheDocument();
-      expect(getByText('1.650 W')).toBeInTheDocument();
+      // We have actual and target values, so we'll have 2 of each
+      expect(getAllByText('3.300 V')).toHaveLength(2);
+      expect(getAllByText('0.500 A')).toHaveLength(2);
+      expect(getAllByText('1.650 W')).toHaveLength(2);
       expect(getByText('25.5 °C')).toBeInTheDocument();
     });
 

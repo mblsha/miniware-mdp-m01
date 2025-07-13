@@ -23,15 +23,15 @@ var MiniwareMdpM01 = (function() {
   });
 
   MiniwareMdpM01.P906Type = Object.freeze({
-    FALSE: 0,
+    OFF: 0,
     CC: 1,
     CV: 2,
-    TRUE: 3,
+    ON: 3,
 
-    0: "FALSE",
+    0: "OFF",
     1: "CC",
     2: "CV",
-    3: "TRUE",
+    3: "ON",
   });
 
   MiniwareMdpM01.PackType = Object.freeze({

@@ -2,7 +2,15 @@ import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper.js';
 import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger.js';
 import { get } from 'svelte/store';
 
-export const PackType = MiniwareMdpM01.PackType;
+export const PackType = MiniwareMdpM01?.PackType || {
+  SYNTHESIZE: 0x11,
+  WAVE: 0x12,
+  ADDR: 0x13,
+  UPDAT_CH: 0x14,
+  MACHINE: 0x15,
+  SET_ISOUTPUT: 0x16,
+  ERR_240: 0x23
+};
 
 export function decodePacket(data) {
   const currentDebugState = get(debugEnabled);
@@ -159,20 +167,20 @@ export function processSynthesizePacket(packet) {
       channel: i,
       online: ch.online !== 0,
       machineType: getMachineTypeString(ch.type),
-      voltage: ch.outVoltage, // Kaitai already converts to V
-      current: ch.outCurrent, // Kaitai already converts to A
-      power: ch.outVoltage * ch.outCurrent, // W
-      temperature: ch.temperature, // Kaitai already converts to °C
+      voltage: ch.outVoltage || 0, // Kaitai already converts to V
+      current: ch.outCurrent || 0, // Kaitai already converts to A
+      power: (ch.outVoltage || 0) * (ch.outCurrent || 0), // W
+      temperature: ch.temperature || 0, // Kaitai already converts to °C
       isOutput: ch.outputOn !== 0,
       mode: getOperatingMode(ch),
       // Add input measurements for extended view
-      inputVoltage: ch.inVoltage, // Kaitai already converts to V
-      inputCurrent: ch.inCurrent, // Kaitai already converts to A
-      inputPower: ch.inVoltage * ch.inCurrent, // W
+      inputVoltage: ch.inVoltage || 0, // Kaitai already converts to V
+      inputCurrent: ch.inCurrent || 0, // Kaitai already converts to A
+      inputPower: (ch.inVoltage || 0) * (ch.inCurrent || 0), // W
       // Add target values
-      targetVoltage: ch.setVoltage, // Kaitai already converts to V
-      targetCurrent: ch.setCurrent, // Kaitai already converts to A
-      targetPower: ch.setVoltage * ch.setCurrent // W
+      targetVoltage: ch.setVoltage || 0, // Kaitai already converts to V
+      targetCurrent: ch.setCurrent || 0, // Kaitai already converts to A
+      targetPower: (ch.setVoltage || 0) * (ch.setCurrent || 0) // W
     };
     
     debugLog('synthesize', `    ✅ Processed channel ${i}:`, channelData);

@@ -117,7 +117,12 @@ describe('ChannelDetail Recording Tests', () => {
       // Should show recording UI
       await waitFor(() => {
         expect(getByText('Stop Recording')).toBeInTheDocument();
-        expect(getByText(/Recording\.\.\./)).toBeInTheDocument();
+      });
+      
+      // Advance timer and check recording duration display
+      vi.advanceTimersByTime(1000);
+      await waitFor(() => {
+        expect(getByText(/Recording\.\.\. 0:01/)).toBeInTheDocument();
       });
       
       // Stop recording
