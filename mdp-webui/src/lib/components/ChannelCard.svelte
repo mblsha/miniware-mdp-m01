@@ -1,7 +1,14 @@
 <script>
+  import { channelStore } from '../stores/channels.js';
+  
   export let channel;
   export let active = false;
   export let onclick = undefined;
+  
+  async function toggleOutput(event) {
+    event.stopPropagation(); // Prevent card click when clicking output button
+    await channelStore.setOutput(channel.channel, !channel.isOutput);
+  }
 </script>
 
 <button type="button" class="channel-card" class:active class:online={channel.online} {onclick}>
@@ -46,9 +53,14 @@
     
     <div class="status-row">
       <span class="mode-display">Mode: {channel.mode}</span>
-      <span class="output-status" class:on={channel.isOutput}>
+      <button 
+        class="output-button" 
+        class:on={channel.isOutput}
+        onclick={toggleOutput}
+        type="button"
+      >
         Output: {channel.isOutput ? 'ON' : 'OFF'}
-      </span>
+      </button>
     </div>
   {:else}
     <div class="offline-message">
@@ -192,20 +204,36 @@
     font-weight: 500;
   }
   
-  .output-status {
+  .output-button {
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
-    background-color: #f0f0f0;
-    color: #666;
+    border: 1px solid #ccc;
+    background-color: #f44336;
+    color: white;
     font-weight: 500;
     font-size: 0.875rem;
     text-align: center;
     min-width: 80px;
+    cursor: pointer;
+    transition: all 0.2s ease;
   }
   
-  .output-status.on {
-    background-color: #e8f5e9;
-    color: #2e7d32;
+  .output-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  
+  .output-button.on {
+    background-color: #4caf50;
+    border-color: #45a049;
+  }
+  
+  .output-button.on:hover {
+    background-color: #45a049;
+  }
+  
+  .output-button:not(.on):hover {
+    background-color: #d32f2f;
   }
   
   .offline-message {
