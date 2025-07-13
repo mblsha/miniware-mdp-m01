@@ -1,6 +1,7 @@
 <script>
   import { serialConnection as defaultSerialConnection, ConnectionStatus } from './lib/serial.js';
   import { channelStore as defaultChannelStore } from './lib/stores/channels.js';
+  import { debugEnabled } from './lib/debug-logger.js';
   import Dashboard from './lib/components/Dashboard.svelte';
   import ChannelDetail from './lib/components/ChannelDetail.svelte';
   
@@ -40,21 +41,29 @@
 <main>
   <header>
     <h1>MDP-WebUI</h1>
-    <div class="connection-status">
-      {#if $status === ConnectionStatus.DISCONNECTED}
-        <button onclick={handleConnect}>Connect</button>
-      {:else if $status === ConnectionStatus.CONNECTING}
-        <span class="status connecting">Connecting...</span>
-      {:else if $status === ConnectionStatus.CONNECTED}
-        <span class="status connected">Connected</span>
-        {#if $deviceType}
-          <span class="device-type">({$deviceType.type})</span>
+    <div class="header-controls">
+      <div class="debug-controls">
+        <label class="debug-checkbox">
+          <input type="checkbox" bind:checked={$debugEnabled} />
+          console.log incoming data
+        </label>
+      </div>
+      <div class="connection-status">
+        {#if $status === ConnectionStatus.DISCONNECTED}
+          <button onclick={handleConnect}>Connect</button>
+        {:else if $status === ConnectionStatus.CONNECTING}
+          <span class="status connecting">Connecting...</span>
+        {:else if $status === ConnectionStatus.CONNECTED}
+          <span class="status connected">Connected</span>
+          {#if $deviceType}
+            <span class="device-type">({$deviceType.type})</span>
+          {/if}
+          <button onclick={handleDisconnect}>Disconnect</button>
+        {:else if $status === ConnectionStatus.ERROR}
+          <span class="status error">Error: {$error}</span>
+          <button onclick={handleConnect}>Retry</button>
         {/if}
-        <button onclick={handleDisconnect}>Disconnect</button>
-      {:else if $status === ConnectionStatus.ERROR}
-        <span class="status error">Error: {$error}</span>
-        <button onclick={handleConnect}>Retry</button>
-      {/if}
+      </div>
     </div>
   </header>
   
@@ -98,6 +107,31 @@
   h1 {
     margin: 0;
     font-size: 1.5rem;
+  }
+  
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+  
+  .debug-controls {
+    display: flex;
+    align-items: center;
+  }
+  
+  .debug-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #ccc;
+  }
+  
+  .debug-checkbox input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
   }
   
   .connection-status {

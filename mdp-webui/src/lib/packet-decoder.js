@@ -1,23 +1,58 @@
 import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper.js';
+import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger.js';
+import { get } from 'svelte/store';
 
 export const PackType = MiniwareMdpM01.PackType;
 
 export function decodePacket(data) {
+  const currentDebugState = get(debugEnabled);
+  
+  if (currentDebugState) {
+    console.log('🔍 decodePacket() called, data length:', data ? data.length : 'null');
+  }
+  
   try {
-    if (!data || data.length < 6) return null;
+    debugLog('packet-decode', 'DECODE PACKET START');
+    debugLog('packet-decode', `  Input data length: ${data ? data.length : 'null'}`);
+    
+    if (!data || data.length < 6) {
+      if (currentDebugState) {
+        console.log('❌ decodePacket FAILED: Invalid data or too short');
+      }
+      debugError('packet-decode', '  ❌ Invalid data or too short');
+      return null;
+    }
     
     // Validate packet header
     if (data[0] !== 0x5A || data[1] !== 0x5A) {
-      console.warn('Invalid packet header');
+      console.log('🚨 MALFORMED DATA: Invalid packet header');
+      console.log(`  Expected: 0x5A 0x5A, Got: 0x${data[0]?.toString(16).padStart(2, '0')} 0x${data[1]?.toString(16).padStart(2, '0')}`);
+      if (currentDebugState) {
+        console.log('❌ decodePacket FAILED: Invalid packet header', data[0], data[1]);
+      }
+      debugError('packet-decode', '  ❌ Invalid packet header');
       return null;
     }
+    
+    const packetType = data[2];
+    const typeDisplay = getPacketTypeDisplay(packetType);
+    debugLog('packet-decode', `  Packet type: ${typeDisplay}`);
     
     // Validate packet size
     const expectedSize = data[3];
     if (data.length !== expectedSize) {
-      console.warn(`Packet size mismatch: expected ${expectedSize}, got ${data.length}`);
+      console.log('🚨 MALFORMED DATA: Packet size mismatch');
+      console.log(`  Expected size: ${expectedSize}, Actual size: ${data.length}`);
+      console.log(`  Packet data (hex): ${Array.from(data.slice(0, Math.min(16, data.length))).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+      if (currentDebugState) {
+        console.log('❌ decodePacket FAILED: Size mismatch, expected:', expectedSize, 'got:', data.length);
+      }
+      debugError('packet-decode', `  ❌ Packet size mismatch: expected ${expectedSize}, got ${data.length}`);
       return null;
     }
+
+    debugLog('packet-decode', '  ✅ Packet validation passed');
+    debugLog('kaitai', 'Creating Kaitai parser...');
 
     const buffer = new ArrayBuffer(data.length);
     const view = new Uint8Array(buffer);
@@ -26,27 +61,101 @@ export function decodePacket(data) {
     const stream = new KaitaiStream(buffer);
     const parsed = new MiniwareMdpM01(stream);
     
+    debugLog('kaitai', 'Kaitai parser created successfully');
+    debugLog('kaitai', `Parsed object type: ${parsed.constructor.name}`);
+    debugLog('kaitai', `Packets array length: ${parsed.packets ? parsed.packets.length : 'no packets array'}`);
+    
     // The parser creates a packets array, get the first (and only) packet
     if (parsed.packets && parsed.packets.length > 0) {
-      return parsed.packets[0];
+      const packet = parsed.packets[0];
+      
+      if (currentDebugState) {
+        console.log('✅ decodePacket SUCCESS for packet type:', getPacketTypeDisplay(packet.packType));
+        // Direct console.log of decoded data - only when debug enabled
+        console.log('decoded_data:', packet.data);
+      }
+      
+      debugLog('kaitai', `✅ Got packet from Kaitai`);
+      debugLog('kaitai', `  Pack type: ${getPacketTypeDisplay(packet.packType)}`);
+      debugLog('kaitai', `  Data object type: ${packet.data?.constructor?.name || 'Unknown'}`);
+      
+      // Log detailed decoded data
+      logDecodedKaitaiData('kaitai', packet);
+      
+      return packet;
     }
     
+    if (currentDebugState) {
+      console.log('❌ decodePacket FAILED: No packets found in parsed result');
+    }
+    debugError('kaitai', '  ❌ No packets found in parsed result');
     return null;
   } catch (error) {
-    console.error('Failed to decode packet:', error);
+    if (currentDebugState) {
+      console.log('❌ decodePacket FAILED with exception:', error.message);
+    }
+    debugError('packet-decode', `  ❌ Failed to decode packet: ${error.message}`);
+    debugError('packet-decode', `  Stack: ${error.stack}`);
     return null;
   }
 }
 
 export function processSynthesizePacket(packet) {
-  if (!packet || !packet.data || packet.packType !== PackType.SYNTHESIZE) return null;
+  debugLog('synthesize', 'PROCESS SYNTHESIZE PACKET START');
+  debugLog('synthesize', '  Packet:', packet);
+  debugLog('synthesize', '  Packet type check:', packet ? packet.packType : 'no packet');
+  debugLog('synthesize', '  Expected type (PackType.SYNTHESIZE):', PackType.SYNTHESIZE);
+  debugLog('synthesize', '  PackType object:', PackType);
+  
+  if (!packet || !packet.data) {
+    debugError('synthesize', '  ❌ No packet or no data');
+    return null;
+  }
+  
+  if (packet.packType !== PackType.SYNTHESIZE) {
+    debugError('synthesize', '  ❌ Wrong packet type. Got:', packet.packType, 'Expected:', PackType.SYNTHESIZE);
+    debugLog('synthesize', '  PackType === 17?', PackType.SYNTHESIZE === 17);
+    debugLog('synthesize', '  packet.packType === 17?', packet.packType === 17);
+    return null;
+  }
   
   const synthesize = packet.data;
+  debugLog('synthesize', '  Synthesize data object:', synthesize);
+  debugLog('synthesize', '  Channels array:', synthesize.channels);
+  debugLog('synthesize', '  Channels length:', synthesize.channels ? synthesize.channels.length : 'no channels');
+  
   const channels = [];
   
   for (let i = 0; i < 6; i++) {
+    debugLog('synthesize', `  🔍 Processing channel ${i}:`);
+    
+    if (!synthesize.channels || !synthesize.channels[i]) {
+      debugWarn('synthesize', `    ❌ No data for channel ${i}`);
+      channels.push({
+        channel: i,
+        online: false,
+        machineType: 'Unknown',
+        voltage: 0,
+        current: 0,
+        power: 0,
+        temperature: 0,
+        isOutput: false,
+        mode: 'Normal'
+      });
+      continue;
+    }
+    
     const ch = synthesize.channels[i];
-    channels.push({
+    debugLog('synthesize', `    Raw channel data:`, ch);
+    debugLog('synthesize', `    Online raw value:`, ch.online);
+    debugLog('synthesize', `    Online !== 0:`, ch.online !== 0);
+    debugLog('synthesize', `    OutVoltage:`, ch.outVoltage);
+    debugLog('synthesize', `    OutCurrent:`, ch.outCurrent);
+    debugLog('synthesize', `    Temperature:`, ch.temperature);
+    debugLog('synthesize', `    OutputOn:`, ch.outputOn);
+    debugLog('synthesize', `    Type:`, ch.type);
+    
+    const channelData = {
       channel: i,
       online: ch.online !== 0,
       machineType: getMachineTypeString(ch.type),
@@ -56,8 +165,14 @@ export function processSynthesizePacket(packet) {
       temperature: ch.temperature, // Kaitai already converts to °C
       isOutput: ch.outputOn !== 0,
       mode: getOperatingMode(ch)
-    });
+    };
+    
+    debugLog('synthesize', `    ✅ Processed channel ${i}:`, channelData);
+    channels.push(channelData);
   }
+  
+  debugLog('synthesize', '  📋 All processed channels:', channels);
+  debugLog('synthesize', '  🎯 Online channels:', channels.filter(ch => ch.online).map(ch => ch.channel));
   
   return channels;
 }
