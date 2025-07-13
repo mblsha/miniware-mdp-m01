@@ -18,22 +18,29 @@
       <div class="mode">Mode: {channel.mode}</div>
     </div>
     
-    <div class="measurements">
-      <div class="measurement">
-        <span class="label">Voltage</span>
-        <span class="value">{channel.voltage.toFixed(3)} V</span>
+    <div class="measurements-table">
+      <div class="table-header">
+        <div class="header-cell"></div>
+        <div class="header-cell">ACTUAL</div>
+        <div class="header-cell">TARGET</div>
       </div>
-      <div class="measurement">
-        <span class="label">Current</span>
-        <span class="value">{channel.current.toFixed(3)} A</span>
+      <div class="table-row">
+        <div class="label-cell">Voltage</div>
+        <div class="value-cell">{channel.voltage.toFixed(3)}V</div>
+        <div class="value-cell">{channel.targetVoltage.toFixed(3)}V</div>
       </div>
-      <div class="measurement">
-        <span class="label">Power</span>
-        <span class="value">{channel.power.toFixed(3)} W</span>
+      <div class="table-row">
+        <div class="label-cell">Current</div>
+        <div class="value-cell">{channel.current.toFixed(3)}A</div>
+        <div class="value-cell">{channel.targetCurrent.toFixed(3)}A</div>
       </div>
-      <div class="measurement">
-        <span class="label">Temperature</span>
-        <span class="value">{channel.temperature.toFixed(1)} °C</span>
+      <div class="table-row">
+        <div class="label-cell">Power</div>
+        <div class="value-cell">{channel.power.toFixed(3)}W</div>
+        <div class="value-cell">{channel.targetPower.toFixed(3)}W</div>
+      </div>
+      <div class="temperature-row">
+        <span class="temp-value">{channel.temperature.toFixed(1)}°C</span>
       </div>
     </div>
     
@@ -111,28 +118,62 @@
     color: #666;
   }
   
-  .measurements {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
+  .measurements-table {
     margin-bottom: 1rem;
   }
   
-  .measurement {
-    display: flex;
-    flex-direction: column;
+  .table-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #e0e0e0;
   }
   
-  .label {
+  .header-cell {
     font-size: 0.75rem;
+    font-weight: 600;
     color: #666;
-    margin-bottom: 0.25rem;
+    text-align: center;
   }
   
-  .value {
-    font-size: 1.125rem;
+  .header-cell:first-child {
+    text-align: left;
+  }
+  
+  .table-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+  }
+  
+  .label-cell {
+    font-size: 0.875rem;
+    color: #666;
+    font-weight: 500;
+  }
+  
+  .value-cell {
+    font-size: 1rem;
     font-weight: 600;
     color: #333;
+    text-align: center;
+  }
+  
+  .temperature-row {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+  }
+  
+  .temp-value {
+    font-size: 0.875rem;
+    color: #666;
+    font-weight: 500;
   }
   
   .output-status {

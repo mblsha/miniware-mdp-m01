@@ -164,7 +164,15 @@ export function processSynthesizePacket(packet) {
       power: ch.outVoltage * ch.outCurrent, // W
       temperature: ch.temperature, // Kaitai already converts to °C
       isOutput: ch.outputOn !== 0,
-      mode: getOperatingMode(ch)
+      mode: getOperatingMode(ch),
+      // Add input measurements for extended view
+      inputVoltage: ch.inVoltage, // Kaitai already converts to V
+      inputCurrent: ch.inCurrent, // Kaitai already converts to A
+      inputPower: ch.inVoltage * ch.inCurrent, // W
+      // Add target values
+      targetVoltage: ch.setVoltage, // Kaitai already converts to V
+      targetCurrent: ch.setCurrent, // Kaitai already converts to A
+      targetPower: ch.setVoltage * ch.setCurrent // W
     };
     
     debugLog('synthesize', `    ✅ Processed channel ${i}:`, channelData);

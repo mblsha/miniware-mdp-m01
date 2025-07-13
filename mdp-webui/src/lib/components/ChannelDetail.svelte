@@ -138,7 +138,7 @@
         </div>
         
         <div class="section">
-          <h3>Current Measurements</h3>
+          <h3>Output Measurements</h3>
           <div class="measurements">
             <div class="measurement">
               <span class="label">Voltage</span>
@@ -155,6 +155,54 @@
             <div class="measurement">
               <span class="label">Temperature</span>
               <span class="value">{channelData.temperature.toFixed(1)} °C</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <h3>Input Measurements</h3>
+          <div class="measurements">
+            <div class="measurement">
+              <span class="label">Input Voltage</span>
+              <span class="value">{channelData.inputVoltage?.toFixed(3) || '0.000'} V</span>
+            </div>
+            <div class="measurement">
+              <span class="label">Input Current</span>
+              <span class="value">{channelData.inputCurrent?.toFixed(3) || '0.000'} A</span>
+            </div>
+            <div class="measurement">
+              <span class="label">Input Power</span>
+              <span class="value">{channelData.inputPower?.toFixed(3) || '0.000'} W</span>
+            </div>
+            <div class="measurement">
+              <span class="label">Efficiency</span>
+              <span class="value">
+                {channelData.inputPower > 0 ? 
+                  (channelData.power / channelData.inputPower * 100).toFixed(1) : '0.0'
+                }%
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <h3>Target Settings</h3>
+          <div class="measurements">
+            <div class="measurement">
+              <span class="label">Target Voltage</span>
+              <span class="value">{channelData.targetVoltage?.toFixed(3) || '0.000'} V</span>
+            </div>
+            <div class="measurement">
+              <span class="label">Target Current</span>
+              <span class="value">{channelData.targetCurrent?.toFixed(3) || '0.000'} A</span>
+            </div>
+            <div class="measurement">
+              <span class="label">Target Power</span>
+              <span class="value">{channelData.targetPower?.toFixed(3) || '0.000'} W</span>
+            </div>
+            <div class="measurement">
+              <span class="label">Mode</span>
+              <span class="value">{channelData.mode}</span>
             </div>
           </div>
         </div>
