@@ -1,8 +1,9 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { serialConnection } from '../serial';
 import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket } from '../packet-decoder';
 import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder';
 import { debugLog, debugError, debugWarn } from '../debug-logger';
+import { timeseriesStore } from './timeseries';
 
 const PACKET_TYPES = {
   SYNTHESIZE: 17,  // 0x11
@@ -184,14 +185,50 @@ export function createChannelStore() {
 
     const processed = processWavePacket(decoded);
     
-    if (processed) {
+    if (processed && processed.points.length > 0) {
+      const currentTime = Date.now();
+      const pointCount = processed.points.length;
+      
+      // Use browser timestamp and spread points backwards
+      // Assume 10ms between points (100Hz sampling rate)
+      const pointSpacing = 10; // milliseconds
+      
+      // Calculate timestamps spreading backwards from current time
+      const convertedPoints = processed.points.map((point, index) => {
+        // Start from current time and go backwards
+        // Last point gets current time, first point gets oldest time
+        const pointTimestamp = currentTime - (pointCount - 1 - index) * pointSpacing;
+        
+        return {
+          ...point,
+          timestamp: pointTimestamp
+        };
+      });
+      
       channels.update(chs => {
         const ch = chs[processed.channel];
         if (ch && ch.recording) {
-          ch.waveformData.push(...processed.points);
+          // Add new points
+          ch.waveformData.push(...convertedPoints);
+          
+          // No need to sort since we're generating monotonically increasing timestamps
         }
         return chs;
       });
+      
+      // Also update timeseries store with converted timestamps
+      if (get(channels)[processed.channel]?.recording) {
+        const timeseriesPoints = convertedPoints.map(point => ({
+          channel: processed.channel,
+          timestamp: point.timestamp,
+          data: {
+            voltage: point.voltage,
+            current: point.current
+          }
+        }));
+        
+        timeseriesStore.addDataPoints(timeseriesPoints);
+      }
     }
   }
 

@@ -202,7 +202,7 @@ export function processWavePacket(packet) {
   wave.groups.forEach((group, groupIndex) => {
     group.items.forEach((item, pointIndex) => {
       points.push({
-        timestamp: group.timestamp + pointIndex * 10, // 10ms between points
+        timestamp: group.timestamp, // All items in a group share the same timestamp
         voltage: item.voltage, // Kaitai already converts to V
         current: item.current  // Kaitai already converts to A
       });

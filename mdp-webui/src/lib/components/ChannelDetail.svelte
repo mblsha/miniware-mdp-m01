@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import WaveformChart from './WaveformChart.svelte';
+  import TimestampAnalysis from './TimestampAnalysis.svelte';
   
   export let channelStore = defaultChannelStore;
   export let channel = 0;
@@ -235,6 +236,9 @@
       <div class="chart-section">
         <h3>Waveform Visualization</h3>
         <WaveformChart data={channelData.waveformData} {isRecording} />
+        
+        <h3 style="margin-top: 2rem;">Timestamp Analysis</h3>
+        <TimestampAnalysis {channel} {isRecording} />
       </div>
     </div>
   {:else}

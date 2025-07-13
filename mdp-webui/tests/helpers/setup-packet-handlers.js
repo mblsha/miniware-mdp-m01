@@ -30,7 +30,9 @@ export function setupPacketHandlers(serialConnection, channelStore) {
           ch.power = ch.voltage * ch.current;
           ch.temperature = temperature / 10; // Convert to °C
           ch.isOutput = channelData[19] === 1;
-          ch.machineType = channelData[16] === 0 ? 'P906' : 
+          ch.machineType = channelData[16] === 0 ? 'Node' : 
+                          channelData[16] === 1 ? 'P905' :
+                          channelData[16] === 2 ? 'P906' :
                           channelData[16] === 3 ? 'L1060' : 'Unknown';
         }
       }
@@ -56,8 +58,7 @@ export function setupPacketHandlers(serialConnection, channelStore) {
     const size = packet[3];
     const channel = packet[4];
     
-    if (channel !== activeChannelValue) return;
-    
+    // Process wave packets for any recording channel, not just active channel
     const data = packet.slice(6);
     const pointSize = 4; // 2 bytes voltage + 2 bytes current
     const timestampSize = 4; // 4 bytes for timestamp (little-endian)
@@ -92,7 +93,7 @@ export function setupPacketHandlers(serialConnection, channelStore) {
       channelStore.addWaveformData(channel, waveData);
     } else {
       channelStore.channels.update(channels => {
-        if (channels[channel].recording) {
+        if (channels[channel] && channels[channel].recording) {
           channels[channel].waveformData.push(...waveData);
         }
         return [...channels];
