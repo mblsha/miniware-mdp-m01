@@ -446,7 +446,10 @@ interface TimestampedData {
   [channelId: string]: ChannelDataPoint | number;
 }
 
-const activeSessionData: Readable<TimestampedData[]> = derived(activeSession, ($session: Session | null) => {
+// Helper type to properly type the activeSessionData
+type SessionDataEntry = { timestamp: number } & Record<string, ChannelDataPoint>;
+
+const activeSessionData: Readable<SessionDataEntry[]> = derived(activeSession, ($session: Session | null) => {
   if (!$session) return [];
   
   return Array.from($session.data.entries())
