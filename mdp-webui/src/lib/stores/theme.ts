@@ -1,15 +1,24 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, type Writable, type Readable } from 'svelte/store';
+
+// Type definitions
+type Theme = 'light' | 'dark';
+
+interface ThemeStore extends Readable<Theme> {
+  setTheme: (theme: Theme) => void;
+  toggle: () => void;
+  init: () => void;
+}
 
 // Check if we're in the browser
 const isBrowser = typeof window !== 'undefined';
 
 // Create the theme store
-function createThemeStore() {
+function createThemeStore(): ThemeStore {
   const STORAGE_KEY = 'mdp:theme';
   
   // Initialize with saved theme or system preference
-  const initial = isBrowser ? (
-    localStorage.getItem(STORAGE_KEY) || 
+  const initial: Theme = isBrowser ? (
+    (localStorage.getItem(STORAGE_KEY) as Theme) || 
     (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   ) : 'dark';
   
@@ -19,7 +28,7 @@ function createThemeStore() {
     subscribe,
     
     // Set theme and persist to localStorage
-    setTheme(theme) {
+    setTheme(theme: Theme) {
       if (isBrowser) {
         localStorage.setItem(STORAGE_KEY, theme);
         document.documentElement.classList.remove('light', 'dark');
@@ -44,8 +53,8 @@ function createThemeStore() {
     // Initialize theme on app start
     init() {
       if (isBrowser) {
-        const savedTheme = localStorage.getItem(STORAGE_KEY);
-        const theme = savedTheme || (
+        const savedTheme = localStorage.getItem(STORAGE_KEY) as Theme;
+        const theme: Theme = savedTheme || (
           window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
         );
         document.documentElement.classList.remove('light', 'dark');
@@ -56,7 +65,7 @@ function createThemeStore() {
   };
 }
 
-export const theme = createThemeStore();
+export const theme: ThemeStore = createThemeStore();
 
 // Derived store for theme-specific values
-export const isDark = derived(theme, $theme => $theme === 'dark');
+export const isDark: Readable<boolean> = derived(theme, ($theme: Theme) => $theme === 'dark');

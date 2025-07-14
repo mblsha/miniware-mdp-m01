@@ -1,9 +1,83 @@
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 
 /**
  * Centralized time-series data store for all channel data
  * Stores data points with timestamp correlation across channels
  */
+
+// Type definitions
+interface ChannelDataPoint {
+  voltage: number;
+  current: number;
+  power: number;
+  temperature: number | null;
+  mode: string | null;
+  isOutput: boolean;
+}
+
+interface SessionMetadata {
+  createdAt: Date;
+  sampleRate: number | null;
+  minTimestamp: number | null;
+  maxTimestamp: number | null;
+}
+
+interface Session {
+  id: string;
+  startTime: number;
+  endTime: number | null;
+  channels: Set<number>;
+  data: Map<number, Record<string, ChannelDataPoint>>;
+  pointCount: number;
+  metadata: SessionMetadata;
+}
+
+interface TimeseriesConfig {
+  maxDuration: number;
+  maxPoints: number;
+  autoCleanup: boolean;
+}
+
+interface TimeseriesState {
+  sessions: Map<string, Session>;
+  activeSessionId: string | null;
+  config: TimeseriesConfig;
+}
+
+interface DataPoint {
+  channel: number;
+  timestamp: number;
+  data: {
+    voltage: number;
+    current: number;
+    temperature?: number;
+    mode?: string;
+    isOutput?: boolean;
+  };
+}
+
+interface TimeRangePoint {
+  timestamp: number;
+  data: Record<string, ChannelDataPoint>;
+}
+
+interface TimeseriesStore {
+  subscribe: Writable<TimeseriesState>['subscribe'];
+  createSession: (channels?: number[]) => string;
+  addDataPoint: (channel: number, timestamp: number, data: DataPoint['data'], sessionId?: string | null) => void;
+  addDataPoints: (points: DataPoint[], sessionId?: string | null) => void;
+  getDataRange: (startTime: number, endTime: number, channels?: number[] | null, sessionId?: string | null) => TimeRangePoint[];
+  closeSession: (sessionId: string) => void;
+  setActiveSession: (sessionId: string) => void;
+  updateConfig: (config: Partial<TimeseriesConfig>) => void;
+  cleanupOldData: (referenceTime?: number | null) => void;
+  startAutoCleanup: () => void;
+  stopAutoCleanup: () => void;
+  reset: () => void;
+  activeSession: Readable<Session | null>;
+  sessionList: Readable<Session[]>;
+  activeSessionData: Readable<Array<{ timestamp: number } & Record<string, ChannelDataPoint>>>;
+}
 
 // Configuration constants
 const DEFAULT_MAX_DURATION = 3600000; // 1 hour in milliseconds
@@ -11,12 +85,12 @@ const DEFAULT_MAX_POINTS = 100000;   // Maximum data points per session
 const CLEANUP_INTERVAL = 60000;      // Cleanup old data every minute
 
 // Helper to generate unique session IDs
-function generateSessionId() {
+function generateSessionId(): string {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 // Initialize the store state
-function createInitialState() {
+function createInitialState(): TimeseriesState {
   return {
     sessions: new Map(),
     activeSessionId: null,
@@ -29,17 +103,17 @@ function createInitialState() {
 }
 
 // Create the main store
-const store = writable(createInitialState());
+const store: Writable<TimeseriesState> = writable(createInitialState());
 
 // Keep track of cleanup interval
-let cleanupTimer = null;
+let cleanupTimer: NodeJS.Timeout | null = null;
 
 /**
  * Create a new recording session
  * @param {Array<number>} channels - Array of channel numbers to record
  * @returns {string} The new session ID
  */
-function createSession(channels = []) {
+function createSession(channels: number[] = []): string {
   const sessionId = generateSessionId();
   const startTime = Date.now();
   
@@ -77,7 +151,7 @@ function createSession(channels = []) {
  * @param {Object} data - Data object with voltage, current, etc.
  * @param {string} sessionId - Optional session ID (uses active if not provided)
  */
-function applyChannelData(state, session, timestamp, channelData) {
+function applyChannelData(state: TimeseriesState, session: Session, timestamp: number, channelData: Record<string, ChannelDataPoint>): void {
   if (session.pointCount >= state.config.maxPoints) {
     return;
   }
@@ -107,7 +181,7 @@ function applyChannelData(state, session, timestamp, channelData) {
   }
 }
 
-function addDataPoint(channel, timestamp, data, sessionId = null) {
+function addDataPoint(channel: number, timestamp: number, data: DataPoint['data'], sessionId: string | null = null): void {
   store.update(state => {
     const targetSessionId = sessionId || state.activeSessionId;
     if (!targetSessionId || !state.sessions.has(targetSessionId)) {
@@ -136,7 +210,7 @@ function addDataPoint(channel, timestamp, data, sessionId = null) {
  * @param {Array<{channel, timestamp, data}>} points - Array of data points
  * @param {string} sessionId - Optional session ID
  */
-function addDataPoints(points, sessionId = null) {
+function addDataPoints(points: DataPoint[], sessionId: string | null = null): void {
   store.update(state => {
     const targetSessionId = sessionId || state.activeSessionId;
     if (!targetSessionId || !state.sessions.has(targetSessionId)) {
@@ -145,7 +219,7 @@ function addDataPoints(points, sessionId = null) {
 
     const session = state.sessions.get(targetSessionId);
 
-    const groupedPoints = new Map();
+    const groupedPoints = new Map<number, Record<string, ChannelDataPoint>>();
     points.forEach(point => {
       if (!groupedPoints.has(point.timestamp)) {
         groupedPoints.set(point.timestamp, {});
@@ -176,7 +250,7 @@ function addDataPoints(points, sessionId = null) {
  * @param {string} sessionId - Optional session ID
  * @returns {Array<{timestamp, data}>} Sorted array of data points
  */
-function getDataRange(startTime, endTime, channels = null, sessionId = null) {
+function getDataRange(startTime: number, endTime: number, channels: number[] | null = null, sessionId: string | null = null): TimeRangePoint[] {
   const state = get(store);
   const targetSessionId = sessionId || state.activeSessionId;
   
@@ -185,7 +259,7 @@ function getDataRange(startTime, endTime, channels = null, sessionId = null) {
   }
   
   const session = state.sessions.get(targetSessionId);
-  const result = [];
+  const result: TimeRangePoint[] = [];
   
   // Filter and sort timestamps
   const timestamps = Array.from(session.data.keys())
@@ -221,7 +295,7 @@ function getDataRange(startTime, endTime, channels = null, sessionId = null) {
  * Clean up old data based on max duration
  * @param {number} referenceTime - Optional reference time for testing
  */
-function cleanupOldData(referenceTime = null) {
+function cleanupOldData(referenceTime: number | null = null): void {
   store.update(state => {
     const now = referenceTime || Date.now();
     
@@ -282,7 +356,7 @@ function cleanupOldData(referenceTime = null) {
  * Close a session
  * @param {string} sessionId - Session ID to close
  */
-function closeSession(sessionId) {
+function closeSession(sessionId: string): void {
   store.update(state => {
     if (state.sessions.has(sessionId)) {
       const session = state.sessions.get(sessionId);
@@ -301,7 +375,7 @@ function closeSession(sessionId) {
  * Set the active session
  * @param {string} sessionId - Session ID to activate
  */
-function setActiveSession(sessionId) {
+function setActiveSession(sessionId: string): void {
   store.update(state => {
     if (state.sessions.has(sessionId)) {
       state.activeSessionId = sessionId;
@@ -314,7 +388,7 @@ function setActiveSession(sessionId) {
  * Update configuration
  * @param {Object} config - Configuration updates
  */
-function updateConfig(config) {
+function updateConfig(config: Partial<TimeseriesConfig>): void {
   store.update(state => {
     Object.assign(state.config, config);
     return state;
@@ -324,7 +398,7 @@ function updateConfig(config) {
 /**
  * Reset the entire store
  */
-function reset() {
+function reset(): void {
   if (cleanupTimer) {
     clearInterval(cleanupTimer);
     cleanupTimer = null;
@@ -335,7 +409,7 @@ function reset() {
 /**
  * Start automatic cleanup if enabled
  */
-function startAutoCleanup() {
+function startAutoCleanup(): void {
   const state = get(store);
   if (state.config.autoCleanup && !cleanupTimer) {
     cleanupTimer = setInterval(cleanupOldData, CLEANUP_INTERVAL);
@@ -345,7 +419,7 @@ function startAutoCleanup() {
 /**
  * Stop automatic cleanup
  */
-function stopAutoCleanup() {
+function stopAutoCleanup(): void {
   if (cleanupTimer) {
     clearInterval(cleanupTimer);
     cleanupTimer = null;
@@ -353,19 +427,19 @@ function stopAutoCleanup() {
 }
 
 // Derived stores for convenience
-const activeSession = derived(store, $store => {
+const activeSession: Readable<Session | null> = derived(store, ($store: TimeseriesState) => {
   if ($store.activeSessionId && $store.sessions.has($store.activeSessionId)) {
-    return $store.sessions.get($store.activeSessionId);
+    return $store.sessions.get($store.activeSessionId) || null;
   }
   return null;
 });
 
-const sessionList = derived(store, $store => {
+const sessionList: Readable<Session[]> = derived(store, ($store: TimeseriesState) => {
   return Array.from($store.sessions.values())
     .sort((a, b) => b.startTime - a.startTime);
 });
 
-const activeSessionData = derived(activeSession, $session => {
+const activeSessionData: Readable<Array<{ timestamp: number } & Record<string, ChannelDataPoint>>> = derived(activeSession, ($session: Session | null) => {
   if (!$session) return [];
   
   return Array.from($session.data.entries())
@@ -377,7 +451,7 @@ const activeSessionData = derived(activeSession, $session => {
 // startAutoCleanup();
 
 // Export the store and functions
-export const timeseriesStore = {
+export const timeseriesStore: TimeseriesStore = {
   subscribe: store.subscribe,
   createSession,
   addDataPoint,

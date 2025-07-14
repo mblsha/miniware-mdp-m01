@@ -8,10 +8,36 @@ import { channelStore } from './channels.js';
 import { serialConnection } from '../serial.js';
 import { get } from 'svelte/store';
 
+// Type definitions
+interface ChartData {
+  timestamps: number[];
+  voltage: number[];
+  current: number[];
+  power: number[];
+}
+
+interface ChannelStats {
+  voltage: { min: number; max: number; avg: number };
+  current: { min: number; max: number; avg: number };
+  power: { min: number; max: number; avg: number };
+  sampleCount: number;
+}
+
+interface SessionStats {
+  sessionId: string;
+  startTime: number;
+  endTime: number | null;
+  duration: number;
+  channels: number[];
+  pointCount: number;
+  sampleRate: number | null;
+  channelStats: Record<number, ChannelStats>;
+}
+
 /**
  * Initialize timeseries integration with packet handlers
  */
-export function initializeTimeseriesIntegration() {
+export function initializeTimeseriesIntegration(): void {
   // Register synthesize packet handler for timeseries logging
   serialConnection.registerPacketHandler(0x11, (packet) => {
     const activeSession = get(timeseriesStore.activeSession);
@@ -23,7 +49,7 @@ export function initializeTimeseriesIntegration() {
     
     if (parsedData && parsedData.data && parsedData.data.channels) {
       const timestamp = Date.now();
-      const points = [];
+      const points: Array<{ channel: number; timestamp: number; data: any }> = [];
       
       parsedData.data.channels.forEach((channelData, index) => {
         // Only record channels that are in the active session
@@ -63,7 +89,7 @@ export function initializeTimeseriesIntegration() {
     const parsedData = decoder.decodeWave(packet);
     
     if (parsedData && parsedData.data && parsedData.data.groups) {
-      const points = [];
+      const points: Array<{ channel: number; timestamp: number; data: any }> = [];
       
       parsedData.data.groups.forEach(group => {
         if (group.items) {
@@ -93,7 +119,7 @@ export function initializeTimeseriesIntegration() {
  * @param {Array<number>} channels - Channel numbers to record
  * @returns {string} Session ID
  */
-export function startRecording(channels) {
+export function startRecording(channels: number[]): string {
   // Create new session
   const sessionId = timeseriesStore.createSession(channels);
   
@@ -108,7 +134,7 @@ export function startRecording(channels) {
 /**
  * Stop the current recording session
  */
-export function stopRecording() {
+export function stopRecording(): void {
   const activeSession = get(timeseriesStore.activeSession);
   if (!activeSession) return;
   
@@ -130,7 +156,7 @@ export function stopRecording() {
  * @param {Array<number>} channels - Channels to include (null for all)
  * @returns {string} CSV data
  */
-export function exportSessionToCSV(sessionId = null, channels = null) {
+export function exportSessionToCSV(sessionId: string | null = null, channels: number[] | null = null): string {
   const targetSessionId = sessionId || get(timeseriesStore.activeSession)?.id;
   if (!targetSessionId) return '';
   
@@ -150,17 +176,17 @@ export function exportSessionToCSV(sessionId = null, channels = null) {
   
   // Build CSV header
   const channelsToExport = channels || Array.from(session.channels);
-  const headers = ['Timestamp (ms)', 'Time (s)'];
+  const headers: string[] = ['Timestamp (ms)', 'Time (s)'];
   channelsToExport.forEach(ch => {
     headers.push(`Ch${ch} Voltage (V)`, `Ch${ch} Current (A)`, `Ch${ch} Power (W)`);
   });
   
   // Build CSV rows
-  const rows = [headers.join(',')];
+  const rows: string[] = [headers.join(',')];
   const startTime = data[0].timestamp;
   
   data.forEach(point => {
-    const row = [
+    const row: (string | number)[] = [
       point.timestamp,
       ((point.timestamp - startTime) / 1000).toFixed(3)
     ];
@@ -190,7 +216,7 @@ export function exportSessionToCSV(sessionId = null, channels = null) {
  * @param {number} duration - Duration in milliseconds to retrieve
  * @returns {Object} Chart data with timestamps and values
  */
-export function getChartData(channel, duration = 10000) {
+export function getChartData(channel: number, duration: number = 10000): ChartData {
   const activeSession = get(timeseriesStore.activeSession);
   if (!activeSession || !activeSession.channels.has(channel)) {
     return { timestamps: [], voltage: [], current: [], power: [] };
@@ -201,7 +227,7 @@ export function getChartData(channel, duration = 10000) {
   
   const data = timeseriesStore.getDataRange(startTime, endTime, [channel]);
   
-  const result = {
+  const result: ChartData = {
     timestamps: [],
     voltage: [],
     current: [],
@@ -226,7 +252,7 @@ export function getChartData(channel, duration = 10000) {
  * @param {string} sessionId - Session ID (null for active)
  * @returns {Object} Statistics object
  */
-export function getSessionStats(sessionId = null) {
+export function getSessionStats(sessionId: string | null = null): SessionStats | null {
   const targetSessionId = sessionId || get(timeseriesStore.activeSession)?.id;
   if (!targetSessionId) return null;
   
@@ -234,7 +260,7 @@ export function getSessionStats(sessionId = null) {
   const session = sessions.find(s => s.id === targetSessionId);
   if (!session) return null;
   
-  const stats = {
+  const stats: SessionStats = {
     sessionId: session.id,
     startTime: session.startTime,
     endTime: session.endTime,

@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, type Writable, type Readable } from 'svelte/store';
 // Removed unused imports: debugLog, debugError, debugWarn, logPacketData, getPacketTypeDisplay, decodePacket
 
 export const ConnectionStatus = {
@@ -6,9 +6,22 @@ export const ConnectionStatus = {
   CONNECTING: 'connecting',
   CONNECTED: 'connected',
   ERROR: 'error'
-};
+} as const;
 
-const SERIAL_CONFIG = {
+// Type definitions
+type ConnectionStatusType = typeof ConnectionStatus[keyof typeof ConnectionStatus];
+
+interface SerialConfig {
+  baudRate: number;
+  dataBits: number;
+  stopBits: number;
+  parity: string;
+  flowControl: string;
+}
+
+type PacketHandler = (packet: Uint8Array) => void;
+
+const SERIAL_CONFIG: SerialConfig = {
   baudRate: 115200,
   dataBits: 8,
   stopBits: 1,
@@ -17,12 +30,17 @@ const SERIAL_CONFIG = {
 };
 
 export class SerialConnection {
+  private port: SerialPort | null = null;
+  private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  private readPromise: Promise<void> | null = null;
+  private heartbeatInterval: number | null = null;
+  private statusStore: Writable<ConnectionStatusType>;
+  private errorStore: Writable<string | null>;
+  private deviceTypeStore: Writable<string | null>;
+  private packetHandlers: Map<number, PacketHandler>;
+
   constructor() {
-    this.port = null;
-    this.reader = null;
-    this.writer = null;
-    this.readPromise = null;
-    this.heartbeatInterval = null;
     this.statusStore = writable(ConnectionStatus.DISCONNECTED);
     this.errorStore = writable(null);
     this.deviceTypeStore = writable(null);
@@ -37,7 +55,13 @@ export class SerialConnection {
     this.deviceType = derived(this.deviceTypeStore, $device => $device);
   }
 
-  async connect() {
+  // Public properties
+  public receiveBuffer: Uint8Array;
+  public readonly status: Readable<ConnectionStatusType>;
+  public readonly error: Readable<string | null>;
+  public readonly deviceType: Readable<string | null>;
+
+  async connect(): Promise<void> {
     try {
       this.statusStore.set(ConnectionStatus.CONNECTING);
       this.errorStore.set(null);
@@ -86,7 +110,7 @@ export class SerialConnection {
     }
   }
 
-  async disconnect() {
+  async disconnect(): Promise<void> {
     this.stopHeartbeat();
     
     if (this.reader) {
@@ -111,7 +135,7 @@ export class SerialConnection {
     this.deviceTypeStore.set(null);
   }
 
-  async readLoop() {
+  private async readLoop(): Promise<void> {
     while (this.port && this.reader) {
       try {
         const { value, done } = await this.reader.read();
@@ -140,7 +164,7 @@ export class SerialConnection {
     }
   }
 
-  processIncomingData() {
+  private processIncomingData(): void {
     while (this.receiveBuffer.length >= 6) {
       // Find packet header (0x5A 0x5A)
       let headerIndex = -1;
@@ -187,19 +211,19 @@ export class SerialConnection {
     }
   }
 
-  handlePacket(packet) {
+  private handlePacket(packet: number[]): void {
     if (!packet || packet.length < 3) {
       return;
     }
     
     const packetType = packet[2];
     
-    const handlers = this.packetHandlers.get(packetType) || [];
+    const handlers = this.packetHandlers.get(packetType);
     
-    if (handlers.length > 0) {
+    if (handlers) {
       handlers.forEach((handler) => {
         try {
-          handler(packet);
+          handler(new Uint8Array(packet));
         } catch {
           // Silently ignore handler errors to prevent one handler from breaking others
         }
@@ -207,43 +231,49 @@ export class SerialConnection {
     }
   }
 
-  registerPacketHandler(packetType, handler) {
+  registerPacketHandler(packetType: number, handler: PacketHandler): void {
     if (!this.packetHandlers.has(packetType)) {
       this.packetHandlers.set(packetType, []);
     }
-    this.packetHandlers.get(packetType).push(handler);
+    this.packetHandlers.get(packetType)!.push(handler);
   }
 
-  async sendPacket(packet) {
+  async sendPacket(packet: number[] | Uint8Array): Promise<void> {
     if (!this.writer) {
       throw new Error('Not connected');
     }
     
-    const uint8Array = new Uint8Array(packet);
+    const uint8Array = packet instanceof Uint8Array ? packet : new Uint8Array(packet);
     await this.writer.write(uint8Array);
   }
 
-  startHeartbeat() {
+  private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       this.sendHeartbeat().catch(console.error);
     }, 1000);
   }
 
-  stopHeartbeat() {
+  private stopHeartbeat(): void {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
   }
 
-  async sendHeartbeat() {
+  private async sendHeartbeat(): Promise<void> {
     const packet = [0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00];
     await this.sendPacket(packet);
   }
 
-  async getMachineType() {
+  private async getMachineType(): Promise<void> {
     const packet = [0x5A, 0x5A, 0x21, 0x06, 0xEE, 0x00];
     await this.sendPacket(packet);
+  }
+
+  getDecoder(): any {
+    // This method should return a decoder instance
+    // Implementation depends on the packet decoder adapter
+    return null; // Placeholder - needs actual implementation
   }
 }
 

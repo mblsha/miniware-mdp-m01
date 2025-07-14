@@ -1,6 +1,52 @@
 import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper.js';
-import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger.js';
+import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger.ts';
 import { get } from 'svelte/store';
+
+// Type definitions
+interface DecodedPacket {
+  packType: number;
+  data?: any;
+}
+
+interface ChannelData {
+  channel: number;
+  online: boolean;
+  machineType: string;
+  voltage: number;
+  current: number;
+  power: number;
+  temperature: number;
+  isOutput: boolean;
+  mode: string;
+  inputVoltage: number;
+  inputCurrent: number;
+  inputPower: number;
+  targetVoltage: number;
+  targetCurrent: number;
+  targetPower: number;
+}
+
+interface WavePoint {
+  timestamp: number;
+  voltage: number;
+  current: number;
+}
+
+interface WaveData {
+  channel: number;
+  points: WavePoint[];
+}
+
+interface AddressData {
+  channel: number;
+  address: number[];
+  frequency: number;
+}
+
+interface MachineInfo {
+  type: string;
+  hasLCD: boolean;
+}
 
 export const PackType = MiniwareMdpM01?.PackType || {
   SYNTHESIZE: 0x11,
@@ -12,7 +58,7 @@ export const PackType = MiniwareMdpM01?.PackType || {
   ERR_240: 0x23
 };
 
-export function decodePacket(data) {
+export function decodePacket(data: Uint8Array | null): DecodedPacket | null {
   const currentDebugState = get(debugEnabled);
   
   if (currentDebugState) {
@@ -108,7 +154,7 @@ export function decodePacket(data) {
   }
 }
 
-export function processSynthesizePacket(packet) {
+export function processSynthesizePacket(packet: DecodedPacket | null): ChannelData[] | null {
   debugLog('synthesize', 'PROCESS SYNTHESIZE PACKET START');
   debugLog('synthesize', '  Packet:', packet);
   debugLog('synthesize', '  Packet type check:', packet ? packet.packType : 'no packet');
@@ -193,7 +239,7 @@ export function processSynthesizePacket(packet) {
   return channels;
 }
 
-export function processWavePacket(packet) {
+export function processWavePacket(packet: DecodedPacket | null): WaveData | null {
   if (!packet || !packet.data || packet.packType !== PackType.WAVE) return null;
   
   const wave = packet.data;
@@ -215,7 +261,7 @@ export function processWavePacket(packet) {
   };
 }
 
-export function processAddressPacket(packet) {
+export function processAddressPacket(packet: DecodedPacket | null): AddressData[] | null {
   if (!packet || !packet.data || packet.packType !== PackType.ADDR) return null;
   
   const addr = packet.data;
@@ -233,7 +279,7 @@ export function processAddressPacket(packet) {
   return addresses;
 }
 
-export function processMachinePacket(packet) {
+export function processMachinePacket(packet: DecodedPacket | null): MachineInfo | null {
   if (!packet || !packet.data || packet.packType !== PackType.MACHINE) return null;
   
   const machine = packet.data;
@@ -247,7 +293,7 @@ export function processMachinePacket(packet) {
   };
 }
 
-function getMachineTypeString(type) {
+function getMachineTypeString(type: number): string {
   switch(type) {
     case 0: return 'Node';
     case 1: return 'P905';
@@ -257,7 +303,7 @@ function getMachineTypeString(type) {
   }
 }
 
-function getOperatingMode(channel) {
+function getOperatingMode(channel: any): string {
   if (channel.type === 3) { // L1060
     switch(channel.statusLoad) {
       case 0: return 'CC';

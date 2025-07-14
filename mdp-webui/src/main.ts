@@ -6,7 +6,7 @@ import { initializeTimeseriesIntegration } from './lib/stores/timeseries-integra
 initializeTimeseriesIntegration()
 
 const app = mount(App, {
-  target: document.getElementById('app'),
+  target: document.getElementById('app')!,
 })
 
 export default app
