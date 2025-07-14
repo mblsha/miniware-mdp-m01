@@ -1,6 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { debugLog, debugError, debugWarn, logPacketData, getPacketTypeDisplay } from './debug-logger.js';
-import { decodePacket } from './packet-decoder.js';
+// Removed unused imports: debugLog, debugError, debugWarn, logPacketData, getPacketTypeDisplay, decodePacket
 
 export const ConnectionStatus = {
   DISCONNECTED: 'disconnected',
@@ -198,10 +197,10 @@ export class SerialConnection {
     const handlers = this.packetHandlers.get(packetType) || [];
     
     if (handlers.length > 0) {
-      handlers.forEach((handler, index) => {
+      handlers.forEach((handler) => {
         try {
           handler(packet);
-        } catch (error) {
+        } catch {
           // Silently ignore handler errors to prevent one handler from breaking others
         }
       });
