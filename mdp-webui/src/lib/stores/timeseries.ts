@@ -448,7 +448,7 @@ const activeSessionData: Readable<SessionDataEntry[]> = derived(activeSession, (
   if (!$session) return [];
   
   return Array.from($session.data.entries())
-    .map(([timestamp, data]) => ({ timestamp, ...data }))
+    .map(([timestamp, data]) => ({ timestamp, ...data } as SessionDataEntry))
     .sort((a, b) => a.timestamp - b.timestamp);
 });
 
