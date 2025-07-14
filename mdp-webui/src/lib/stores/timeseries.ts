@@ -441,11 +441,6 @@ const sessionList: Readable<Session[]> = derived(store, ($store: TimeseriesState
     .sort((a, b) => b.startTime - a.startTime);
 });
 
-interface TimestampedData {
-  timestamp: number;
-  [channelId: string]: ChannelDataPoint | number;
-}
-
 // Helper type to properly type the activeSessionData
 type SessionDataEntry = { timestamp: number } & Record<string, ChannelDataPoint>;
 
