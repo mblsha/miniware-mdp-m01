@@ -199,8 +199,8 @@ export function processWavePacket(packet) {
   const wave = packet.data;
   const points = [];
   
-  wave.groups.forEach((group, groupIndex) => {
-    group.items.forEach((item, pointIndex) => {
+  wave.groups.forEach((group) => {
+    group.items.forEach((item) => {
       points.push({
         timestamp: group.timestamp, // All items in a group share the same timestamp
         voltage: item.voltage, // Kaitai already converts to V
