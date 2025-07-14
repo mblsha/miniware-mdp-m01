@@ -131,22 +131,22 @@ declare module './MiniwareMdpM01.js' {
     addresses: SetAllAddr.AddressEntry[];
 
     constructor(_io: any, _parent: any, _root: any);
+  }
 
-    namespace SetAllAddr {
-      export class AddressEntry implements KaitaiObject {
-        _io: any;
-        _parent: any;
-        _root: any;
-        addrByte0: number;
-        addrByte1: number;
-        addrByte2: number;
-        addrByte3: number;
-        addrByte4: number;
-        frequencyOffset: number;
+  export namespace SetAllAddr {
+    export class AddressEntry implements KaitaiObject {
+      _io: any;
+      _parent: any;
+      _root: any;
+      addrByte0: number;
+      addrByte1: number;
+      addrByte2: number;
+      addrByte3: number;
+      addrByte4: number;
+      frequencyOffset: number;
 
-        constructor(_io: any, _parent: any, _root: any);
-        get address(): Uint8Array;
-      }
+      constructor(_io: any, _parent: any, _root: any);
+      get address(): Uint8Array;
     }
   }
 
@@ -160,42 +160,42 @@ declare module './MiniwareMdpM01.js' {
     channels: Synthesize.Chan[];
 
     constructor(_io: any, _parent: any, _root: any);
+  }
 
-    namespace Synthesize {
-      export class Chan implements KaitaiObject {
-        _io: any;
-        _parent: any;
-        _root: any;
-        num: number;
-        outVoltageRaw: number;
-        outCurrentRaw: number;
-        inVoltageRaw: number;
-        inCurrentRaw: number;
-        setVoltageRaw: number;
-        setCurrentRaw: number;
-        tempRaw: number;
-        online: number;
-        type: number;
-        lock: number;
-        statusLoad?: number;
-        statusPsu?: number;
-        outputOn: number;
-        color: Uint8Array;
-        error: number;
-        end: Uint8Array;
+  export namespace Synthesize {
+    export class Chan implements KaitaiObject {
+      _io: any;
+      _parent: any;
+      _root: any;
+      num: number;
+      outVoltageRaw: number;
+      outCurrentRaw: number;
+      inVoltageRaw: number;
+      inCurrentRaw: number;
+      setVoltageRaw: number;
+      setCurrentRaw: number;
+      tempRaw: number;
+      online: number;
+      type: number;
+      lock: number;
+      statusLoad?: number;
+      statusPsu?: number;
+      outputOn: number;
+      color: Uint8Array;
+      error: number;
+      end: Uint8Array;
 
-        constructor(_io: any, _parent: any, _root: any);
-        get inVoltage(): number;
-        get temperature(): number;
-        get inCurrent(): number;
-        get outVoltage(): number;
-        get outCurrent(): number;
-        get setVoltage(): number;
-        get setCurrent(): number;
-        get inPower(): number;
-        get outPower(): number;
-        get setPower(): number;
-      }
+      constructor(_io: any, _parent: any, _root: any);
+      get inVoltage(): number;
+      get temperature(): number;
+      get inCurrent(): number;
+      get outVoltage(): number;
+      get outCurrent(): number;
+      get setVoltage(): number;
+      get setCurrent(): number;
+      get inPower(): number;
+      get outPower(): number;
+      get setPower(): number;
     }
   }
 
@@ -209,30 +209,30 @@ declare module './MiniwareMdpM01.js' {
     groups: Wave.Group[];
 
     constructor(_io: any, _parent: any, _root: any);
+  }
 
-    namespace Wave {
-      export class Item implements KaitaiObject {
-        _io: any;
-        _parent: any;
-        _root: any;
-        voltageRaw: number;
-        currentRaw: number;
+  export namespace Wave {
+    export class Item implements KaitaiObject {
+      _io: any;
+      _parent: any;
+      _root: any;
+      voltageRaw: number;
+      currentRaw: number;
 
-        constructor(_io: any, _parent: any, _root: any);
-        get voltage(): number;
-        get current(): number;
-      }
+      constructor(_io: any, _parent: any, _root: any);
+      get voltage(): number;
+      get current(): number;
+    }
 
-      export class Group implements KaitaiObject {
-        _io: any;
-        _parent: any;
-        _root: any;
-        timestamp: number;
-        groupSize: number;
-        items: Item[];
+    export class Group implements KaitaiObject {
+      _io: any;
+      _parent: any;
+      _root: any;
+      timestamp: number;
+      groupSize: number;
+      items: Item[];
 
-        constructor(_io: any, _parent: any, _root: any);
-      }
+      constructor(_io: any, _parent: any, _root: any);
     }
   }
 
@@ -273,17 +273,17 @@ declare module './MiniwareMdpM01.js' {
     addresses: Addr.AddressInfo[];
 
     constructor(_io: any, _parent: any, _root: any);
+  }
 
-    namespace Addr {
-      export class AddressInfo implements KaitaiObject {
-        _io: any;
-        _parent: any;
-        _root: any;
-        address: Uint8Array;
-        frequencyOffset: number;
+  export namespace Addr {
+    export class AddressInfo implements KaitaiObject {
+      _io: any;
+      _parent: any;
+      _root: any;
+      address: Uint8Array;
+      frequencyOffset: number;
 
-        constructor(_io: any, _parent: any, _root: any);
-      }
+      constructor(_io: any, _parent: any, _root: any);
     }
   }
 
@@ -326,14 +326,13 @@ declare module './MiniwareMdpM01.js' {
   }
 
   // Default export
-  const MiniwareMdpM01: typeof MiniwareMdpM01;
-  export default MiniwareMdpM01;
+  const _MiniwareMdpM01: typeof MiniwareMdpM01;
+  export default _MiniwareMdpM01;
 }
 
 // Global declaration for UMD module
 declare global {
   interface Window {
-    MiniwareMdpM01: typeof import('./MiniwareMdpM01.js').MiniwareMdpM01;
+    MiniwareMdpM01: any;
   }
 }
-
