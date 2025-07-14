@@ -1,8 +1,8 @@
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { serialConnection } from '../serial';
-import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket, type ChannelData } from '../packet-decoder.ts';
-import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder.ts';
-import { debugError } from '../debug-logger.ts';
+import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket, type ChannelData } from '../packet-decoder.js';
+import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder.js';
+import { debugError } from '../debug-logger.js';
 import { timeseriesStore } from './timeseries';
 
 // Type definitions
@@ -329,7 +329,7 @@ export function createChannelStore(): ChannelStore {
     const processed = processMachinePacket(decoded);
     
     if (processed) {
-      serialConnection.deviceTypeStore.set(processed);
+      serialConnection.setDeviceType(processed.type);
     }
   }
 

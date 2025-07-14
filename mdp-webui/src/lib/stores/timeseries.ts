@@ -441,7 +441,12 @@ const sessionList: Readable<Session[]> = derived(store, ($store: TimeseriesState
     .sort((a, b) => b.startTime - a.startTime);
 });
 
-const activeSessionData: Readable<Array<{ timestamp: number } & Record<string, ChannelDataPoint>>> = derived(activeSession, ($session: Session | null) => {
+interface TimestampedData {
+  timestamp: number;
+  [channelId: string]: ChannelDataPoint | number;
+}
+
+const activeSessionData: Readable<TimestampedData[]> = derived(activeSession, ($session: Session | null) => {
   if (!$session) return [];
   
   return Array.from($session.data.entries())

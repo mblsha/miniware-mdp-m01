@@ -34,11 +34,11 @@ export class SerialConnection {
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private readPromise: Promise<void> | null = null;
-  private heartbeatInterval: number | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private statusStore: Writable<ConnectionStatusType>;
   private errorStore: Writable<string | null>;
   private deviceTypeStore: Writable<string | null>;
-  private packetHandlers: Map<number, PacketHandler>;
+  private packetHandlers: Map<number, PacketHandler[]>;
 
   constructor() {
     this.statusStore = writable(ConnectionStatus.DISCONNECTED);
@@ -60,6 +60,11 @@ export class SerialConnection {
   public readonly status: Readable<ConnectionStatusType>;
   public readonly error: Readable<string | null>;
   public readonly deviceType: Readable<string | null>;
+
+  // Public method to set device type
+  setDeviceType(deviceType: string): void {
+    this.deviceTypeStore.set(deviceType);
+  }
 
   async connect(): Promise<void> {
     try {

@@ -26,9 +26,24 @@ declare module 'kaitai-struct/KaitaiStream.js' {
 declare global {
   interface Navigator {
     serial?: {
-      requestPort(options?: any): Promise<any>;
-      getPorts(): Promise<any[]>;
+      requestPort(options?: any): Promise<SerialPort>;
+      getPorts(): Promise<SerialPort[]>;
     };
+  }
+
+  interface SerialPort {
+    open(options: { baudRate: number }): Promise<void>;
+    close(): Promise<void>;
+    readable: ReadableStream<Uint8Array> | null;
+    writable: WritableStream<Uint8Array> | null;
+    getInfo(): SerialPortInfo;
+    addEventListener(type: string, listener: EventListener): void;
+    removeEventListener(type: string, listener: EventListener): void;
+  }
+
+  interface SerialPortInfo {
+    usbVendorId?: number;
+    usbProductId?: number;
   }
 }
 

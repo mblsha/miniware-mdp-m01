@@ -1,5 +1,5 @@
 import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper.js';
-import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger.ts';
+import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger.js';
 import { get } from 'svelte/store';
 
 // Type definitions
@@ -8,7 +8,7 @@ interface DecodedPacket {
   data?: any;
 }
 
-interface ChannelData {
+export interface ChannelData {
   channel: number;
   online: boolean;
   machineType: string;
