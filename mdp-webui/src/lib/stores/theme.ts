@@ -1,4 +1,4 @@
-import { writable, derived, type Writable, type Readable } from 'svelte/store';
+import { writable, derived, type Readable } from 'svelte/store';
 
 // Type definitions
 type Theme = 'light' | 'dark';

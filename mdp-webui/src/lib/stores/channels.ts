@@ -1,6 +1,6 @@
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { serialConnection } from '../serial';
-import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket, type ChannelData, type WaveData, type MachineInfo } from '../packet-decoder.ts';
+import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket, type ChannelData } from '../packet-decoder.ts';
 import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder.ts';
 import { debugError } from '../debug-logger.ts';
 import { timeseriesStore } from './timeseries';
@@ -88,7 +88,7 @@ export function createChannelStore(): ChannelStore {
   const waitingSynthesize: Writable<boolean> = writable(true);
 
   // Channel validation functions
-  function validateChannelData(channelData: ChannelData, channelIndex?: number): ValidationResult {
+  function validateChannelData(channelData: ChannelData, _channelIndex?: number): ValidationResult {
     const warnings = [];
     let isValid = true;
 

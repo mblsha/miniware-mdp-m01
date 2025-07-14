@@ -1,5 +1,7 @@
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 
+// Type for timer - use any to avoid NodeJS dependency issues
+
 /**
  * Centralized time-series data store for all channel data
  * Stores data points with timestamp correlation across channels
@@ -106,7 +108,7 @@ function createInitialState(): TimeseriesState {
 const store: Writable<TimeseriesState> = writable(createInitialState());
 
 // Keep track of cleanup interval
-let cleanupTimer: NodeJS.Timeout | null = null;
+let cleanupTimer: any = null;
 
 /**
  * Create a new recording session
