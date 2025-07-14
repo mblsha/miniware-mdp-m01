@@ -27,6 +27,7 @@ export function createChannelStore() {
     address: [0, 0, 0, 0, 0],
     targetVoltage: 0,
     targetCurrent: 0,
+    targetPower: 0,
     recording: false,
     waveformData: []
   }));
@@ -301,6 +302,7 @@ export function createChannelStore() {
     channels.update(chs => {
       chs[channel].targetVoltage = voltage;
       chs[channel].targetCurrent = current;
+      chs[channel].targetPower = voltage * current;
       return chs;
     });
   }
@@ -312,6 +314,7 @@ export function createChannelStore() {
     channels.update(chs => {
       chs[channel].targetVoltage = voltage;
       chs[channel].targetCurrent = current;
+      chs[channel].targetPower = voltage * current;
       return chs;
     });
   }

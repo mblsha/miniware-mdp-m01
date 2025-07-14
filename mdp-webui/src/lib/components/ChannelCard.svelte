@@ -1,5 +1,6 @@
 <script>
   import OutputButton from './OutputButton.svelte';
+  import Sparkline from './Sparkline.svelte';
   
   export let channel;
   export let active = false;
@@ -28,21 +29,55 @@
         <div class="header-cell"></div>
         <div class="header-cell">ACTUAL</div>
         <div class="header-cell">TARGET</div>
+        <div class="header-cell">TREND</div>
       </div>
       <div class="table-row">
         <div class="label-cell">Voltage</div>
         <div class="value-cell">{channel.voltage.toFixed(3)} V</div>
         <div class="value-cell">{(channel.targetVoltage || 0).toFixed(3)} V</div>
+        <div class="sparkline-cell">
+          <Sparkline 
+            channel={channel.channel} 
+            metric="voltage" 
+            targetValue={channel.targetVoltage}
+            width={80} 
+            height={30} 
+            showAxes={false}
+            showTooltip={true}
+          />
+        </div>
       </div>
       <div class="table-row">
         <div class="label-cell">Current</div>
         <div class="value-cell">{channel.current.toFixed(3)} A</div>
         <div class="value-cell">{(channel.targetCurrent || 0).toFixed(3)} A</div>
+        <div class="sparkline-cell">
+          <Sparkline 
+            channel={channel.channel} 
+            metric="current" 
+            targetValue={channel.targetCurrent}
+            width={80} 
+            height={30} 
+            showAxes={false}
+            showTooltip={true}
+          />
+        </div>
       </div>
       <div class="table-row">
         <div class="label-cell">Power</div>
         <div class="value-cell">{channel.power.toFixed(3)} W</div>
         <div class="value-cell">{(channel.targetPower || 0).toFixed(3)} W</div>
+        <div class="sparkline-cell">
+          <Sparkline 
+            channel={channel.channel} 
+            metric="power" 
+            targetValue={channel.targetPower}
+            width={80} 
+            height={30} 
+            showAxes={false}
+            showTooltip={true}
+          />
+        </div>
       </div>
       <div class="temperature-row">
         <span class="temp-value">{channel.temperature.toFixed(1)} °C</span>
@@ -134,7 +169,7 @@
   
   .table-header {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 100px;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
     padding-bottom: 0.25rem;
@@ -154,7 +189,7 @@
   
   .table-row {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 100px;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
     align-items: center;
@@ -171,6 +206,13 @@
     font-weight: 600;
     color: #333;
     text-align: center;
+  }
+  
+  .sparkline-cell {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 30px;
   }
   
   .temperature-row {

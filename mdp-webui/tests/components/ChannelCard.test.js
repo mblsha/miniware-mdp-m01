@@ -1,8 +1,52 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
+import { writable } from 'svelte/store';
 import ChannelCard from '$lib/components/ChannelCard.svelte';
 
+// Mock Observable Plot
+vi.mock('@observablehq/plot', () => {
+  const mockPlot = vi.fn((options) => {
+    const element = document.createElement('svg');
+    element.setAttribute('width', options?.width || '80');
+    element.setAttribute('height', options?.height || '30');
+    element.setAttribute('class', 'plot-d6a7b5');
+    element.innerHTML = '<g class="plot-marks"></g>';
+    return element;
+  });
+
+  return {
+    plot: mockPlot,
+    lineY: vi.fn((data, options) => ({ type: 'lineY', data, options })),
+    dot: vi.fn((data, options) => ({ type: 'dot', data, options })),
+    ruleY: vi.fn((data, options) => ({ type: 'ruleY', data, options })),
+    default: {
+      plot: mockPlot,
+      lineY: vi.fn((data, options) => ({ type: 'lineY', data, options })),
+      dot: vi.fn((data, options) => ({ type: 'dot', data, options })),
+      ruleY: vi.fn((data, options) => ({ type: 'ruleY', data, options }))
+    }
+  };
+});
+
+// Mock theme store
+vi.mock('$lib/stores/theme.js', () => ({
+  theme: writable('light')
+}));
+
+// Mock sparkline store
+const mockSparklineData = writable([]);
+vi.mock('$lib/stores/sparkline.js', () => ({
+  sparklineStore: {
+    getChannelMetricData: vi.fn(() => mockSparklineData)
+  }
+}));
+
 describe('ChannelCard Component', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset mock data
+    mockSparklineData.set([]);
+  });
   const mockOnlineChannel = {
     channel: 0,
     online: true,
@@ -14,9 +58,9 @@ describe('ChannelCard Component', () => {
     isOutput: true,
     mode: 'CV',
     address: [0x01, 0x02, 0x03, 0x04, 0x05],
-    targetVoltage: 3.3,
-    targetCurrent: 0.5,
-    targetPower: 1.65
+    targetVoltage: 3.5,
+    targetCurrent: 0.6,
+    targetPower: 2.1
   };
 
   const mockOfflineChannel = {
@@ -64,15 +108,46 @@ describe('ChannelCard Component', () => {
     });
 
     it('should display measurements with correct formatting', () => {
-      const { getAllByText, getByText } = render(ChannelCard, {
+      const { getByText } = render(ChannelCard, {
         props: { channel: mockOnlineChannel, active: false }
       });
       
-      // We have actual and target values, so we'll have 2 of each
-      expect(getAllByText('3.300 V')).toHaveLength(2);
-      expect(getAllByText('0.500 A')).toHaveLength(2);
-      expect(getAllByText('1.650 W')).toHaveLength(2);
+      // Check actual values
+      expect(getByText('3.300 V')).toBeInTheDocument();
+      expect(getByText('0.500 A')).toBeInTheDocument();
+      expect(getByText('1.650 W')).toBeInTheDocument();
+      
+      // Check target values (different from actual)
+      expect(getByText('3.500 V')).toBeInTheDocument();
+      expect(getByText('0.600 A')).toBeInTheDocument();
+      expect(getByText('2.100 W')).toBeInTheDocument();
+      
       expect(getByText('25.5 °C')).toBeInTheDocument();
+    });
+
+    it('should display sparklines for each metric', () => {
+      // Provide mock data to trigger sparkline rendering
+      const mockData = [
+        { timestamp: Date.now() - 2000, value: 3.3 },
+        { timestamp: Date.now() - 1000, value: 3.4 }
+      ];
+      mockSparklineData.set(mockData);
+
+      const { container } = render(ChannelCard, {
+        props: { channel: mockOnlineChannel, active: false }
+      });
+      
+      // Check that sparkline cells are present
+      const sparklineCells = container.querySelectorAll('.sparkline-cell');
+      expect(sparklineCells).toHaveLength(3); // voltage, current, power
+    });
+
+    it('should display TREND header for sparklines', () => {
+      const { getByText } = render(ChannelCard, {
+        props: { channel: mockOnlineChannel, active: false }
+      });
+      
+      expect(getByText('TREND')).toBeInTheDocument();
     });
 
     it('should display output status', () => {
@@ -116,14 +191,18 @@ describe('ChannelCard Component', () => {
       expect(getByText('No device connected')).toBeInTheDocument();
     });
 
-    it('should not display measurements', () => {
-      const { queryByText } = render(ChannelCard, {
+    it('should not display measurements or sparklines', () => {
+      const { queryByText, container } = render(ChannelCard, {
         props: { channel: mockOfflineChannel, active: false }
       });
       
       expect(queryByText(/\d+\.\d+ V/)).not.toBeInTheDocument();
       expect(queryByText(/\d+\.\d+ A/)).not.toBeInTheDocument();
       expect(queryByText(/\d+\.\d+ W/)).not.toBeInTheDocument();
+      
+      // Should not have sparkline cells for offline channels
+      const sparklineCells = container.querySelectorAll('.sparkline-cell');
+      expect(sparklineCells).toHaveLength(0);
     });
   });
 
