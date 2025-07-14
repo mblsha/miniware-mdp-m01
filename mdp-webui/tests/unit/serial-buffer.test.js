@@ -94,7 +94,7 @@ describe('SerialConnection Buffer Management', () => {
 
       // Should have processed the complete packet
       expect(receivedPackets.length).toBe(1);
-      expect(receivedPackets[0]).toEqual(fullPacket);
+      expect(Array.from(receivedPackets[0])).toEqual(fullPacket);
       expect(serialConnection.receiveBuffer.length).toBe(0);
     });
 
@@ -124,7 +124,7 @@ describe('SerialConnection Buffer Management', () => {
 
       // Should have processed the complete packet
       expect(receivedPackets.length).toBe(1);
-      expect(receivedPackets[0]).toEqual(fullPacket);
+      expect(Array.from(receivedPackets[0])).toEqual(fullPacket);
       expect(serialConnection.receiveBuffer.length).toBe(0);
     });
 
@@ -193,7 +193,7 @@ describe('SerialConnection Buffer Management', () => {
       serialConnection.processIncomingData();
 
       expect(receivedPackets.length).toBe(1);
-      expect(receivedPackets[0]).toEqual(validPacket);
+      expect(Array.from(receivedPackets[0])).toEqual(validPacket);
       expect(serialConnection.receiveBuffer.length).toBe(0);
     });
 
@@ -268,7 +268,7 @@ describe('SerialConnection Buffer Management', () => {
       serialConnection.processIncomingData();
 
       expect(receivedPackets.length).toBe(1);
-      expect(receivedPackets[0]).toEqual(packet);
+      expect(Array.from(receivedPackets[0])).toEqual(packet);
       expect(serialConnection.receiveBuffer.length).toBe(0);
     });
   });
@@ -303,7 +303,7 @@ describe('SerialConnection Buffer Management', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(receivedPackets.length).toBe(1);
-      expect(receivedPackets[0]).toEqual(packet);
+      expect(Array.from(receivedPackets[0])).toEqual(packet);
     });
 
     it('should handle stream of mixed complete and split packets', async () => {
