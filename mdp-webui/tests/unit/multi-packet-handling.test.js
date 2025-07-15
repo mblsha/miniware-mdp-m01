@@ -104,9 +104,9 @@ describe('Multi-Packet Handling Analysis', () => {
       expect(serialConnection.receiveBuffer.length).toBe(0);
       
       // Verify individual packets are correct
-      expect(receivedPackets[0]).toEqual(heartbeat);
-      expect(receivedPackets[1]).toEqual(machine);
-      expect(receivedPackets[2]).toEqual(update);
+      expect(Array.from(receivedPackets[0])).toEqual(heartbeat);
+      expect(Array.from(receivedPackets[1])).toEqual(machine);
+      expect(Array.from(receivedPackets[2])).toEqual(update);
     });
 
     it('should handle packets with varying sizes correctly', () => {
