@@ -160,9 +160,9 @@ describe('SerialConnection Multiple Handlers', () => {
       expect(handler3).toHaveBeenCalledTimes(1);
 
       // Verify all handlers received the same packet
-      expect(handler1).toHaveBeenCalledWith(packet);
-      expect(handler2).toHaveBeenCalledWith(packet);
-      expect(handler3).toHaveBeenCalledWith(packet);
+      expect(Array.from(handler1.mock.calls[0][0])).toEqual(packet);
+      expect(Array.from(handler2.mock.calls[0][0])).toEqual(packet);
+      expect(Array.from(handler3.mock.calls[0][0])).toEqual(packet);
     });
 
     it('should call handlers in registration order', () => {
@@ -274,8 +274,8 @@ describe('SerialConnection Multiple Handlers', () => {
       // Both handlers should be called
       expect(timeseriesHandler).toHaveBeenCalledTimes(1);
       expect(channelsHandler).toHaveBeenCalledTimes(1);
-      expect(timeseriesHandler).toHaveBeenCalledWith(synthesizePacket);
-      expect(channelsHandler).toHaveBeenCalledWith(synthesizePacket);
+      expect(Array.from(timeseriesHandler.mock.calls[0][0])).toEqual(synthesizePacket);
+      expect(Array.from(channelsHandler.mock.calls[0][0])).toEqual(synthesizePacket);
     });
 
     it('should support mixed packet types with multiple handlers', () => {
@@ -306,10 +306,10 @@ describe('SerialConnection Multiple Handlers', () => {
       expect(machineHandler).toHaveBeenCalledTimes(1);
 
       // Verify packets were passed correctly
-      expect(synthesizeHandler1).toHaveBeenCalledWith(synthesizePacket);
-      expect(synthesizeHandler2).toHaveBeenCalledWith(synthesizePacket);
-      expect(waveHandler1).toHaveBeenCalledWith(wavePacket);
-      expect(machineHandler).toHaveBeenCalledWith(machinePacket);
+      expect(Array.from(synthesizeHandler1.mock.calls[0][0])).toEqual(synthesizePacket);
+      expect(Array.from(synthesizeHandler2.mock.calls[0][0])).toEqual(synthesizePacket);
+      expect(Array.from(waveHandler1.mock.calls[0][0])).toEqual(wavePacket);
+      expect(Array.from(machineHandler.mock.calls[0][0])).toEqual(machinePacket);
     });
   });
 
@@ -367,7 +367,7 @@ describe('SerialConnection Multiple Handlers', () => {
       // All handlers should be called
       handlers.forEach(handler => {
         expect(handler).toHaveBeenCalledTimes(1);
-        expect(handler).toHaveBeenCalledWith(packet);
+        expect(Array.from(handler.mock.calls[0][0])).toEqual(packet);
       });
     });
   });

@@ -14,7 +14,7 @@ import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket,
 
 // Hoist packet encoder functions for use in mocks
 const packetEncoders = vi.hoisted(() => {
-  const { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } = require('../../src/lib/packet-encoder');
+  const { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } = require('../../src/lib/packet-encoder.ts');
   return { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket };
 });
 

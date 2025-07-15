@@ -1,11 +1,11 @@
 // Debug logging utility with conditional logging and human-readable packet names
-import { writable } from 'svelte/store';
+import { writable, type Writable } from 'svelte/store';
 
 // Debug logging enabled state
-export const debugEnabled = writable(true); // Default enabled
+export const debugEnabled: Writable<boolean> = writable(true); // Default enabled
 
 // Packet type name mappings
-export const PACKET_TYPE_NAMES = {
+export const PACKET_TYPE_NAMES: Record<number, string> = {
   17: 'SYNTHESIZE',    // 0x11
   18: 'WAVE',          // 0x12  
   19: 'ADDR',          // 0x13
@@ -26,11 +26,11 @@ export const PACKET_TYPE_NAMES = {
   34: 'HEARTBEAT'         // 0x22
 };
 
-export function getPacketTypeName(typeNumber) {
+export function getPacketTypeName(typeNumber: number): string {
   return PACKET_TYPE_NAMES[typeNumber] || `UNKNOWN_${typeNumber}`;
 }
 
-export function getPacketTypeDisplay(typeNumber) {
+export function getPacketTypeDisplay(typeNumber: number): string {
   const name = getPacketTypeName(typeNumber);
   const hex = '0x' + typeNumber.toString(16).padStart(2, '0').toUpperCase();
   return `${name} (${hex}/${typeNumber})`;
@@ -44,28 +44,28 @@ debugEnabled.subscribe(value => {
   currentDebugState = value;
 });
 
-export function debugLog(category, message, ...args) {
+export function debugLog(category: string, message: string, ...args: any[]): void {
   if (!currentDebugState) return;
   
   const prefix = getLogPrefix(category);
   console.log(prefix + message, ...args);
 }
 
-export function debugWarn(category, message, ...args) {
+export function debugWarn(category: string, message: string, ...args: any[]): void {
   if (!currentDebugState) return;
   
   const prefix = getLogPrefix(category);
   console.warn(prefix + message, ...args);
 }
 
-export function debugError(category, message, ...args) {
+export function debugError(category: string, message: string, ...args: any[]): void {
   if (!currentDebugState) return;
   
   const prefix = getLogPrefix(category);
   console.error(prefix + message, ...args);
 }
 
-function getLogPrefix(category) {
+function getLogPrefix(category: string): string {
   const prefixes = {
     'raw-serial': '🔴 RAW SERIAL: ',
     'packet-parse': '🔵 PACKET PARSE: ',
@@ -81,8 +81,55 @@ function getLogPrefix(category) {
   return prefixes[category] || '🔍 DEBUG: ';
 }
 
+// Type definitions for packet data
+interface DecodedPacket {
+  packType: number;
+  data?: any;
+}
+
+interface ChannelData {
+  online: boolean;
+  outVoltage: number;
+  outCurrent: number;
+  temperature: number;
+  outputOn: boolean;
+  type: number;
+}
+
+interface SynthesizeData {
+  channels?: ChannelData[];
+}
+
+interface WavePoint {
+  voltage: number;
+  current: number;
+}
+
+interface WaveGroup {
+  timestamp: number;
+  items?: WavePoint[];
+}
+
+interface WaveData {
+  channel: number;
+  groups?: WaveGroup[];
+}
+
+interface AddressInfo {
+  address: Uint8Array;
+  frequencyOffset: number;
+}
+
+interface AddrData {
+  addresses?: AddressInfo[];
+}
+
+interface MachineData {
+  type: number;
+}
+
 // Enhanced packet data logging
-export function logPacketData(category, packet, decoded = null) {
+export function logPacketData(category: string, packet: Uint8Array, decoded: DecodedPacket | null = null): void {
   if (!currentDebugState) return;
   
   if (!packet || packet.length < 3) {
@@ -103,7 +150,7 @@ export function logPacketData(category, packet, decoded = null) {
 }
 
 // Log detailed Kaitai decoded data
-export function logDecodedKaitaiData(category, decoded) {
+export function logDecodedKaitaiData(category: string, decoded: DecodedPacket): void {
   if (!currentDebugState) return;
   
   debugLog(category, '  📋 DECODED KAITAI DATA:');
@@ -130,7 +177,7 @@ export function logDecodedKaitaiData(category, decoded) {
   }
 }
 
-function logSynthesizeData(category, data) {
+function logSynthesizeData(category: string, data: SynthesizeData): void {
   debugLog(category, `    📡 SYNTHESIZE DATA:`);
   debugLog(category, `      Channels available: ${data.channels?.length || 0}`);
   
@@ -149,7 +196,7 @@ function logSynthesizeData(category, data) {
   }
 }
 
-function logWaveData(category, data) {
+function logWaveData(category: string, data: WaveData): void {
   debugLog(category, `    📊 WAVE DATA:`);
   debugLog(category, `      Channel: ${data.channel}`);
   debugLog(category, `      Groups: ${data.groups?.length || 0}`);
@@ -164,7 +211,7 @@ function logWaveData(category, data) {
   }
 }
 
-function logAddrData(category, data) {
+function logAddrData(category: string, data: AddrData): void {
   debugLog(category, `    📍 ADDRESS DATA:`);
   if (data.addresses) {
     data.addresses.forEach((addr, i) => {
@@ -175,12 +222,12 @@ function logAddrData(category, data) {
   }
 }
 
-function logMachineData(category, data) {
+function logMachineData(category: string, data: MachineData): void {
   debugLog(category, `    🏭 MACHINE DATA:`);
   debugLog(category, `      Type: ${data.type} (${getMachineTypeString(data.type)})`);
 }
 
-function getMachineTypeString(type) {
+function getMachineTypeString(type: number): string {
   const types = {
     2: 'P906 PSU',
     3: 'L1060 Load',

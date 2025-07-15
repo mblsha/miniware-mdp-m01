@@ -7,17 +7,52 @@ import { decodePacket as kaitaiDecodePacket, PackType } from './packet-decoder.j
 
 export { PackType };
 
+// Type definitions
+interface ChannelData {
+  channel: number;
+  online: boolean;
+  machineType: string;
+  voltage: number;
+  current: number;
+  power: number;
+  temperature: number;
+  isOutput: boolean;
+  mode: string;
+}
+
+interface WavePoint {
+  timestamp: number;
+  voltage: number;
+  current: number;
+}
+
+interface WaveData {
+  channel: number;
+  points: WavePoint[];
+}
+
+interface AddressData {
+  channel: number;
+  address: number[];
+  frequency: number;
+}
+
+interface MachineData {
+  type: string;
+  hasLCD: boolean;
+}
+
 /**
  * Safe property getter with default value
  */
-function safeGet(obj, path, defaultValue) {
+function safeGet(obj: any, path: string, defaultValue: any): any {
   return path.split('.').reduce((acc, part) => acc?.[part], obj) ?? defaultValue;
 }
 
 /**
  * Decode packet with normalized output structure
  */
-export function decodePacket(data) {
+export function decodePacket(data: Uint8Array): NormalizedPacket | null {
   try {
     const packet = kaitaiDecodePacket(data);
     if (!packet) return null;
@@ -34,27 +69,29 @@ export function decodePacket(data) {
  * Normalized packet wrapper that provides consistent property access
  */
 class NormalizedPacket {
-  constructor(kaitaiPacket) {
+  private _packet: any;
+
+  constructor(kaitaiPacket: any) {
     this._packet = kaitaiPacket;
   }
   
-  get packType() {
+  get packType(): number {
     return this._packet.packType;
   }
   
-  get size() {
+  get size(): number {
     return this._packet.size;
   }
   
-  get channel() {
+  get channel(): number {
     return this._packet.channel;
   }
   
-  get data() {
+  get data(): any {
     return this._packet.data;
   }
   
-  get raw() {
+  get raw(): any {
     return this._packet;
   }
 }
@@ -62,7 +99,7 @@ class NormalizedPacket {
 /**
  * Process synthesize packet with defensive property access
  */
-export function processSynthesizePacket(packet) {
+export function processSynthesizePacket(packet: NormalizedPacket | null): ChannelData[] | null {
   if (!packet || packet.packType !== PackType.SYNTHESIZE) return null;
   
   const data = packet.data || packet.raw?.data;
@@ -111,7 +148,7 @@ export function processSynthesizePacket(packet) {
 /**
  * Process wave packet with defensive property access
  */
-export function processWavePacket(packet) {
+export function processWavePacket(packet: NormalizedPacket | null): WaveData | null {
   if (!packet || packet.packType !== PackType.WAVE) return null;
   
   const data = packet.data || packet.raw?.data;
@@ -149,7 +186,7 @@ export function processWavePacket(packet) {
 /**
  * Process address packet with defensive property access
  */
-export function processAddressPacket(packet) {
+export function processAddressPacket(packet: NormalizedPacket | null): AddressData[] | null {
   if (!packet || packet.packType !== PackType.ADDR) return null;
   
   const data = packet.data || packet.raw?.data;
@@ -198,7 +235,7 @@ export function processAddressPacket(packet) {
 /**
  * Process machine packet with defensive property access
  */
-export function processMachinePacket(packet) {
+export function processMachinePacket(packet: NormalizedPacket | null): MachineData | null {
   if (!packet || packet.packType !== PackType.MACHINE) return null;
   
   const data = packet.data || packet.raw?.data;
@@ -216,7 +253,7 @@ export function processMachinePacket(packet) {
 /**
  * Get machine type string from numeric type
  */
-function getMachineTypeString(type) {
+function getMachineTypeString(type: number): string {
   switch(type) {
     case 0: return 'Node';
     case 1: return 'P905';
@@ -229,7 +266,7 @@ function getMachineTypeString(type) {
 /**
  * Get operating mode based on channel type and status
  */
-function getOperatingMode(channel) {
+function getOperatingMode(channel: any): string {
   if (!channel) return 'Normal';
   
   const type = safeGet(channel, 'type', 0);
@@ -258,7 +295,7 @@ function getOperatingMode(channel) {
 /**
  * Create a mock packet for testing that matches Kaitai structure
  */
-export function createMockPacket(type, data) {
+export function createMockPacket(type: number, data: any): any {
   return {
     packType: type,
     size: 6,
