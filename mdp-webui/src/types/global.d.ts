@@ -10,7 +10,7 @@ declare global {
   declare function define(deps: string[], factory: (...args: any[]) => any): void;
   declare function define(factory: () => any): void;
   declare namespace define {
-    var amd: any;
+    let amd: any;
   }
 }
 

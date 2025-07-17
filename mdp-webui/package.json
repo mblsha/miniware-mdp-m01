@@ -21,6 +21,7 @@
     "prebuild": "npm run generate-kaitai"
   },
   "devDependencies": {
+    "@eslint/js": "^9.31.0",
     "@playwright/test": "^1.54.1",
     "@sveltejs/vite-plugin-svelte": "^6.0.0",
     "@testing-library/jest-dom": "^6.6.3",

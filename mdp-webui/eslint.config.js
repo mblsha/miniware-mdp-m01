@@ -76,10 +76,32 @@ export default [
   // Global rules for all files
   {
     rules: {
-      'no-console': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-debugger': 'error',
       'prefer-const': 'error',
       'no-var': 'warn', // Make this a warning instead of error for gradual adoption
+    },
+  },
+  
+  // Allow console in debug and development files
+  {
+    files: [
+      '**/debug-logger.js',
+      '**/packet-decoder.js',
+      '**/packet-decoder-adapter.js',
+      '**/serial.js',
+      '**/stores/*.js',
+    ],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  
+  // Type definition files - allow any types
+  {
+    files: ['**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
   

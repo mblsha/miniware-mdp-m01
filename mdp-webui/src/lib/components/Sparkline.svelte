@@ -69,7 +69,7 @@
   }
   
   // Transform data for Plot - use relative timestamps
-  $: plotData = metricData.map((point, index) => {
+  $: plotData = metricData.map((point) => {
     // Calculate seconds ago from now
     const now = Date.now();
     const secondsAgo = -(now - point.timestamp) / 1000;
