@@ -245,7 +245,7 @@ describe('Sparkline Component', () => {
         // Check that one of the lineY calls was for the target line
         const targetLineCalls = Plot.lineY.mock.calls.filter(call => {
           const data = call[0];
-          return Array.isArray(data) && data.length > 0 && data[0].value === 3.5;
+          return Array.isArray(data) && data.length > 0 && data[0].targetY === 3.5;
         });
         
         expect(targetLineCalls.length).toBeGreaterThan(0);
