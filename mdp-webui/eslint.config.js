@@ -76,13 +76,12 @@ export default [
   // Global rules for all files
   {
     rules: {
-      'no-console': 'off',
+      'no-console': 'warn',
       'no-debugger': 'error',
       'prefer-const': 'error',
       'no-var': 'warn', // Make this a warning instead of error for gradual adoption
     },
   },
-  
   
   // Ignore patterns
   {

@@ -2,78 +2,48 @@
 
 declare global {
   interface Window {
-    KaitaiStream: typeof KaitaiStream;
-    MiniwareMdpM01: typeof MiniwareMdpM01;
+    KaitaiStream: any;
+    MiniwareMdpM01: any;
   }
 
   // AMD/UMD module definition
-  declare function define(deps: string[], factory: (...args: unknown[]) => unknown): void;
-  declare function define(factory: () => unknown): void;
+  declare function define(deps: string[], factory: (...args: any[]) => any): void;
+  declare function define(factory: () => any): void;
   declare namespace define {
-    let amd: Record<string, unknown>;
+    var amd: any;
   }
 }
 
 // Kaitai Struct types
-declare class KaitaiStream {
-  constructor(buffer: ArrayBuffer | Uint8Array, offset?: number);
-  // Add other methods as needed
-}
-
-// This is an ambient declaration for a global runtime class
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-declare class MiniwareMdpM01 {
-  constructor(stream: KaitaiStream);
-  packets: Array<{
-    packType: number;
-    size: number;
-    channel: number;
-    data: unknown;
-  }>;
-  static readonly PackType: {
-    SYNTHESIZE: number;
-    WAVE: number;
-    ADDR: number;
-    UPDAT_CH: number;
-    MACHINE: number;
-    SET_ISOUTPUT: number;
-    ERR_240: number;
-  };
-}
-
 declare module 'kaitai-struct/KaitaiStream.js' {
-  export default KaitaiStream;
+  export default class KaitaiStream {
+    constructor(buffer: ArrayBuffer | Uint8Array, offset?: number);
+    // Add other methods as needed
+  }
 }
-
 
 // Web Serial API types (for modern browsers)
-interface SerialPortRequestOptions {
-  filters?: Array<{
-    usbVendorId?: number;
-    usbProductId?: number;
-  }>;
-}
-
-interface SerialPort {
-  open(options: {
-    baudRate: number;
-    dataBits?: number;
-    stopBits?: number;
-    parity?: 'none' | 'even' | 'odd';
-    bufferSize?: number;
-    flowControl?: 'none' | 'hardware';
-  }): Promise<void>;
-  close(): Promise<void>;
-  readable: ReadableStream<Uint8Array>;
-  writable: WritableStream<Uint8Array>;
-}
-
 declare global {
   interface Navigator {
     serial?: {
-      requestPort(options?: SerialPortRequestOptions): Promise<SerialPort>;
+      requestPort(options?: any): Promise<SerialPort>;
       getPorts(): Promise<SerialPort[]>;
     };
+  }
+
+  interface SerialPort {
+    open(options: { baudRate: number }): Promise<void>;
+    close(): Promise<void>;
+    readable: ReadableStream<Uint8Array> | null;
+    writable: WritableStream<Uint8Array> | null;
+    getInfo(): SerialPortInfo;
+    addEventListener(type: string, listener: EventListener): void;
+    removeEventListener(type: string, listener: EventListener): void;
+  }
+
+  interface SerialPortInfo {
+    usbVendorId?: number;
+    usbProductId?: number;
   }
 }
 

@@ -1,9 +1,61 @@
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { serialConnection } from '../serial';
-import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket } from '../packet-decoder';
-import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder';
-import { debugError } from '../debug-logger';
+import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket, type ChannelData } from '../packet-decoder.js';
+import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder.js';
+import { debugError } from '../debug-logger.js';
 import { timeseriesStore } from './timeseries';
+
+// Type definitions
+interface WaveformPoint {
+  timestamp: number;
+  voltage: number;
+  current: number;
+}
+
+interface ChannelState {
+  channel: number;
+  online: boolean;
+  machineType: string;
+  voltage: number;
+  current: number;
+  power: number;
+  temperature: number;
+  isOutput: boolean;
+  mode: string;
+  address: number[];
+  targetVoltage: number;
+  targetCurrent: number;
+  recording: boolean;
+  waveformData: WaveformPoint[];
+  runningTimeUs?: number;
+}
+
+interface ValidationResult {
+  isValid: boolean;
+  warnings: string[];
+}
+
+interface FilteredChannel {
+  channel: number;
+  data: ChannelData;
+  warnings: string[];
+}
+
+interface ChannelStore {
+  channels: Readable<ChannelState[]>;
+  activeChannel: Readable<number>;
+  waitingSynthesize: Readable<boolean>;
+  activeChannelData: Readable<ChannelState>;
+  recordingChannels: Readable<ChannelState[]>;
+  setActiveChannel: (channel: number) => Promise<void>;
+  setVoltage: (channel: number, voltage: number, current: number) => Promise<void>;
+  setCurrent: (channel: number, voltage: number, current: number) => Promise<void>;
+  setOutput: (channel: number, enabled: boolean) => Promise<void>;
+  startRecording: (channel: number) => void;
+  stopRecording: (channel: number) => void;
+  clearRecording: (channel: number) => void;
+  reset: () => void;
+}
 
 const PACKET_TYPES = {
   SYNTHESIZE: 17,  // 0x11
@@ -13,8 +65,8 @@ const PACKET_TYPES = {
   MACHINE: 21      // 0x15
 };
 
-export function createChannelStore() {
-  const getInitialState = () => Array(6).fill(null).map((_, i) => ({
+export function createChannelStore(): ChannelStore {
+  const getInitialState = (): ChannelState[] => Array(6).fill(null).map((_, i) => ({
     channel: i,
     online: false,
     machineType: 'Unknown',
@@ -27,17 +79,16 @@ export function createChannelStore() {
     address: [0, 0, 0, 0, 0],
     targetVoltage: 0,
     targetCurrent: 0,
-    targetPower: 0,
     recording: false,
     waveformData: []
   }));
 
-  const channels = writable(getInitialState());
-  const activeChannel = writable(0);
-  const waitingSynthesize = writable(true);
+  const channels: Writable<ChannelState[]> = writable(getInitialState());
+  const activeChannel: Writable<number> = writable(0);
+  const waitingSynthesize: Writable<boolean> = writable(true);
 
   // Channel validation functions
-  function validateChannelData(channelData) {
+  function validateChannelData(channelData: ChannelData, _channelIndex?: number): ValidationResult {
     const warnings = [];
     let isValid = true;
 
@@ -78,7 +129,7 @@ export function createChannelStore() {
   }
 
   // Register packet handlers
-  function synthesizeHandler(packet) {
+  function synthesizeHandler(packet: Uint8Array): void {
     const decoded = decodePacket(packet);
     
     if (!decoded) {
@@ -98,8 +149,8 @@ export function createChannelStore() {
 
     if (processed) {
       // Validate and filter channels
-      const validatedChannels = [];
-      const filteredChannels = [];
+      const validatedChannels: ChannelData[] = [];
+      const filteredChannels: FilteredChannel[] = [];
       let totalWarnings = 0;
 
       // console.log('🔍 CHANNEL VALIDATION ANALYSIS:');
@@ -180,7 +231,7 @@ export function createChannelStore() {
     }
   }
 
-  function waveHandler(packet) {
+  function waveHandler(packet: Uint8Array): void {
     const decoded = decodePacket(packet);
     if (!decoded) return;
 
@@ -253,7 +304,7 @@ export function createChannelStore() {
     }
   }
 
-  function updateChannelHandler(packet) {
+  function updateChannelHandler(packet: Uint8Array): void {
     const decoded = decodePacket(packet);
     if (!decoded) return;
     
@@ -263,7 +314,7 @@ export function createChannelStore() {
     }
   }
 
-  function addrHandler(packet) {
+  function addrHandler(packet: Uint8Array): void {
     const decoded = decodePacket(packet);
     if (!decoded) return;
     
@@ -271,14 +322,14 @@ export function createChannelStore() {
     // For now just decode it to see the data
   }
 
-  function machineHandler(packet) {
+  function machineHandler(packet: Uint8Array): void {
     const decoded = decodePacket(packet);
     if (!decoded) return;
     
     const processed = processMachinePacket(decoded);
     
     if (processed) {
-      serialConnection.deviceTypeStore.set(processed);
+      serialConnection.setDeviceType(processed.type);
     }
   }
 
@@ -289,42 +340,40 @@ export function createChannelStore() {
   serialConnection.registerPacketHandler(PACKET_TYPES.UPDATE_CH, updateChannelHandler);
   serialConnection.registerPacketHandler(PACKET_TYPES.MACHINE, machineHandler);
 
-  async function setActiveChannel(channel) {
+  async function setActiveChannel(channel: number): Promise<void> {
     const packet = createSetChannelPacket(channel);
     await serialConnection.sendPacket(packet);
     activeChannel.set(channel);
   }
 
-  async function setVoltage(channel, voltage, current) {
+  async function setVoltage(channel: number, voltage: number, current: number): Promise<void> {
     const packet = createSetVoltagePacket(channel, voltage, current);
     await serialConnection.sendPacket(packet);
     
     channels.update(chs => {
       chs[channel].targetVoltage = voltage;
       chs[channel].targetCurrent = current;
-      chs[channel].targetPower = voltage * current;
       return chs;
     });
   }
 
-  async function setCurrent(channel, voltage, current) {
+  async function setCurrent(channel: number, voltage: number, current: number): Promise<void> {
     const packet = createSetCurrentPacket(channel, voltage, current);
     await serialConnection.sendPacket(packet);
     
     channels.update(chs => {
       chs[channel].targetVoltage = voltage;
       chs[channel].targetCurrent = current;
-      chs[channel].targetPower = voltage * current;
       return chs;
     });
   }
 
-  async function setOutput(channel, enabled) {
+  async function setOutput(channel: number, enabled: boolean): Promise<void> {
     const packet = createSetOutputPacket(channel, enabled);
     await serialConnection.sendPacket(packet);
   }
 
-  function startRecording(channel) {
+  function startRecording(channel: number): void {
     channels.update(chs => {
       chs[channel].recording = true;
       chs[channel].waveformData = [];
@@ -333,32 +382,32 @@ export function createChannelStore() {
     });
   }
 
-  function stopRecording(channel) {
+  function stopRecording(channel: number): void {
     channels.update(chs => {
       chs[channel].recording = false;
       return chs;
     });
   }
 
-  function clearRecording(channel) {
+  function clearRecording(channel: number): void {
     channels.update(chs => {
       chs[channel].waveformData = [];
       return chs;
     });
   }
 
-  function reset() {
+  function reset(): void {
     channels.set(getInitialState());
     activeChannel.set(0);
     waitingSynthesize.set(true);
   }
 
-  const activeChannelData = derived(
+  const activeChannelData: Readable<ChannelState> = derived(
     [channels, activeChannel],
-    ([$channels, $activeChannel]) => $channels[$activeChannel]
+    ([$channels, $activeChannel]: [ChannelState[], number]) => $channels[$activeChannel]
   );
 
-  const recordingChannels = derived(channels, ($channels) =>
+  const recordingChannels: Readable<ChannelState[]> = derived(channels, ($channels: ChannelState[]) =>
     $channels.filter((ch) => ch.recording)
   );
 
@@ -379,4 +428,4 @@ export function createChannelStore() {
   };
 }
 
-export const channelStore = createChannelStore();
+export const channelStore: ChannelStore = createChannelStore();
