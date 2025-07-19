@@ -5,6 +5,32 @@
   export let channel;
   export let active = false;
   export let onclick = undefined;
+  
+  let showModeDetails = false;
+  
+  function getAvailableModes(machineType) {
+    if (machineType === 'L1060') {
+      return ['CC', 'CV', 'CR', 'CP'];
+    } else if (machineType === 'P906') {
+      return ['CC', 'CV'];
+    }
+    return [];
+  }
+  
+  function getModeDescription(mode) {
+    const descriptions = {
+      'CC': 'Constant Current - Device maintains set current',
+      'CV': 'Constant Voltage - Device maintains set voltage',
+      'CR': 'Constant Resistance - Device simulates fixed resistance',
+      'CP': 'Constant Power - Device maintains constant power'
+    };
+    return descriptions[mode] || 'Unknown mode';
+  }
+  
+  function toggleModeDetails(event) {
+    event.stopPropagation();
+    showModeDetails = !showModeDetails;
+  }
 </script>
 
 <div class="channel-card" class:active class:online={channel.online}
@@ -85,7 +111,16 @@
     </div>
     
     <div class="status-row">
-      <span class="mode-display">Mode: {channel.mode}</span>
+      <button 
+        class="mode-expand-btn"
+        onpointerup={toggleModeDetails}
+        onkeydown={(e) => e.key === 'Enter' && toggleModeDetails(e)}
+        aria-expanded={showModeDetails}
+        aria-label="Toggle mode details"
+      >
+        Mode: {channel.mode}
+        <span class="chevron" class:expanded={showModeDetails}>▼</span>
+      </button>
       <OutputButton 
         channel={channel.channel}
         isOutput={channel.isOutput}
@@ -93,6 +128,22 @@
         size="small"
       />
     </div>
+    
+    {#if showModeDetails}
+      <div class="mode-details">
+        <p class="mode-info">{getModeDescription(channel.mode)}</p>
+        <p class="mode-note">Mode is automatically determined by device</p>
+        
+        <div class="available-modes">
+          <span class="modes-label">Available modes:</span>
+          {#each getAvailableModes(channel.machineType) as mode}
+            <span class="mode-chip" class:current={mode === channel.mode}>
+              {mode}
+            </span>
+          {/each}
+        </div>
+      </div>
+    {/if}
   {:else}
     <div class="offline-message">
       No device connected
@@ -235,12 +286,97 @@
     gap: 1rem;
   }
   
-  .mode-display {
+  .mode-expand-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: none;
+    border: none;
+    padding: 0;
     font-size: 0.875rem;
+    color: #666;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+    user-select: none;
+  }
+  
+  .mode-expand-btn:hover {
+    color: #333;
+  }
+  
+  .chevron {
+    font-size: 0.75rem;
+    transition: transform 0.2s;
+  }
+  
+  .chevron.expanded {
+    transform: rotate(180deg);
+  }
+  
+  .mode-details {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f5f5f5;
+    border-radius: 4px;
+    animation: slideDown 0.2s ease-out;
+  }
+  
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .mode-info {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
+    color: #333;
+    line-height: 1.4;
+  }
+  
+  .mode-note {
+    margin: 0 0 1rem 0;
+    font-size: 0.8rem;
+    color: #666;
+    font-style: italic;
+  }
+  
+  .available-modes {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  
+  .modes-label {
+    font-size: 0.8rem;
     color: #666;
     font-weight: 500;
   }
   
+  .mode-chip {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #666;
+  }
+  
+  .mode-chip.current {
+    background: #2196f3;
+    color: white;
+    border-color: #2196f3;
+  }
   
   .offline-message {
     text-align: center;
