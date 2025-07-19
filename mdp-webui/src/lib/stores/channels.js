@@ -289,6 +289,12 @@ export function createChannelStore() {
   serialConnection.registerPacketHandler(PACKET_TYPES.UPDATE_CH, updateChannelHandler);
   serialConnection.registerPacketHandler(PACKET_TYPES.MACHINE, machineHandler);
 
+  function updateTargetValues(chs, channel, voltage, current) {
+    chs[channel].targetVoltage = voltage;
+    chs[channel].targetCurrent = current;
+    chs[channel].targetPower = voltage * current;
+  }
+
   async function setActiveChannel(channel) {
     const packet = createSetChannelPacket(channel);
     await serialConnection.sendPacket(packet);
@@ -298,11 +304,9 @@ export function createChannelStore() {
   async function setVoltage(channel, voltage, current) {
     const packet = createSetVoltagePacket(channel, voltage, current);
     await serialConnection.sendPacket(packet);
-    
+
     channels.update(chs => {
-      chs[channel].targetVoltage = voltage;
-      chs[channel].targetCurrent = current;
-      chs[channel].targetPower = voltage * current;
+      updateTargetValues(chs, channel, voltage, current);
       return chs;
     });
   }
@@ -310,11 +314,9 @@ export function createChannelStore() {
   async function setCurrent(channel, voltage, current) {
     const packet = createSetCurrentPacket(channel, voltage, current);
     await serialConnection.sendPacket(packet);
-    
+
     channels.update(chs => {
-      chs[channel].targetVoltage = voltage;
-      chs[channel].targetCurrent = current;
-      chs[channel].targetPower = voltage * current;
+      updateTargetValues(chs, channel, voltage, current);
       return chs;
     });
   }
