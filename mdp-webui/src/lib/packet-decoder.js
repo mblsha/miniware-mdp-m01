@@ -1,5 +1,6 @@
 import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper.js';
 import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger.js';
+import { getMachineTypeString } from './machine-utils.js';
 import { get } from 'svelte/store';
 
 export const PackType = MiniwareMdpM01?.PackType || {
@@ -247,15 +248,6 @@ export function processMachinePacket(packet) {
   };
 }
 
-function getMachineTypeString(type) {
-  switch(type) {
-    case 0: return 'Node';
-    case 1: return 'P905';
-    case 2: return 'P906';
-    case 3: return 'L1060';
-    default: return 'Unknown';
-  }
-}
 
 function getOperatingMode(channel) {
   if (channel.type === 3) { // L1060

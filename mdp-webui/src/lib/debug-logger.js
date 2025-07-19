@@ -1,5 +1,6 @@
 // Debug logging utility with conditional logging and human-readable packet names
 import { writable } from 'svelte/store';
+import { getMachineTypeString } from './machine-utils.js';
 
 // Debug logging enabled state
 export const debugEnabled = writable(true); // Default enabled
@@ -178,14 +179,4 @@ function logAddrData(category, data) {
 function logMachineData(category, data) {
   debugLog(category, `    🏭 MACHINE DATA:`);
   debugLog(category, `      Type: ${data.type} (${getMachineTypeString(data.type)})`);
-}
-
-function getMachineTypeString(type) {
-  const types = {
-    2: 'P906 PSU',
-    3: 'L1060 Load',
-    16: 'M01 with LCD', 
-    17: 'M02 without LCD'
-  };
-  return types[type] || `Unknown (${type})`;
 }
