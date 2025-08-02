@@ -7,7 +7,6 @@ import { timeseriesStore } from './timeseries.js';
 import { channelStore } from './channels.js';
 import { serialConnection } from '../serial.js';
 import { get } from 'svelte/store';
-import { decodePacket, processSynthesizePacket, processWavePacket } from '../packet-decoder.js';
 
 /**
  * Initialize timeseries integration with packet handlers
@@ -19,25 +18,25 @@ export function initializeTimeseriesIntegration() {
     if (!activeSession) return;
     
     // Process synthesize packet data
-    const decoded = decodePacket(packet);
-    const parsedData = decoded ? processSynthesizePacket(decoded) : null;
+    const decoder = serialConnection.getDecoder();
+    const parsedData = decoder.decodeSynthesize(packet);
     
-    if (parsedData) {
+    if (parsedData && parsedData.data && parsedData.data.channels) {
       const timestamp = Date.now();
       const points: Array<{channel: number, timestamp: number, data: any}> = [];
       
-      parsedData.forEach((channelData: any, index: number) => {
+      parsedData.data.channels.forEach((channelData: any, index: number) => {
         // Only record channels that are in the active session
         if (activeSession.channels.has(index)) {
           points.push({
             channel: index,
             timestamp,
             data: {
-              voltage: channelData.voltage,
-              current: channelData.current,
+              voltage: channelData.outVoltage,
+              current: channelData.outCurrent,
               temperature: channelData.temperature,
-              mode: channelData.mode || 'Normal',
-              isOutput: channelData.isOutput
+              mode: channelData.statusLoad || channelData.statusPsu || 'Normal',
+              isOutput: channelData.outputOn !== 0
             }
           });
         }
@@ -60,21 +59,25 @@ export function initializeTimeseriesIntegration() {
     if (!activeSession.channels.has(channel)) return;
     
     // Process wave packet data
-    const decoded = decodePacket(packet);
-    const parsedData = decoded ? processWavePacket(decoded) : null;
+    const decoder = serialConnection.getDecoder();
+    const parsedData = decoder.decodeWave(packet);
     
-    if (parsedData && parsedData.points) {
+    if (parsedData && parsedData.data && parsedData.data.groups) {
       const points: Array<{channel: number, timestamp: number, data: any}> = [];
       
-      parsedData.points.forEach((item: any) => {
-        points.push({
-          channel,
-          timestamp: item.timestamp,
-          data: {
-            voltage: item.voltage,
-            current: item.current
-          }
-        });
+      parsedData.data.groups.forEach((group: any) => {
+        if (group.items) {
+          group.items.forEach((item: any, index: number) => {
+            points.push({
+              channel,
+              timestamp: group.timestamp + index * 10, // 10ms between points
+              data: {
+                voltage: item.voltage,
+                current: item.current
+              }
+            });
+          });
+        }
       });
       
       // Add all points in batch

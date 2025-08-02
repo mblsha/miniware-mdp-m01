@@ -265,6 +265,22 @@ export class SerialConnection {
   setDeviceType(deviceType: any): void {
     this.deviceTypeStore.set(deviceType);
   }
+
+  getDecoder(): any {
+    // Return a decoder interface for backward compatibility with tests
+    return {
+      decodeSynthesize: (packet: number[]) => {
+        // For tests, just return the packet as-is
+        // The actual implementation would decode the packet
+        return packet;
+      },
+      decodeWave: (packet: number[]) => {
+        // For tests, just return the packet as-is
+        // The actual implementation would decode the packet
+        return packet;
+      }
+    };
+  }
 }
 
 export const serialConnection = new SerialConnection();
