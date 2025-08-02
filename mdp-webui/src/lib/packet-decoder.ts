@@ -1,6 +1,6 @@
-import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper.js';
-import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger.js';
-import { getMachineTypeString } from './machine-utils.js';
+import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper';
+import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger';
+import { getMachineTypeString } from './machine-utils';
 import { get } from 'svelte/store';
 
 export const PackType = MiniwareMdpM01?.PackType || {
@@ -13,7 +13,7 @@ export const PackType = MiniwareMdpM01?.PackType || {
   ERR_240: 0x23
 };
 
-export function decodePacket(data) {
+export function decodePacket(data: Uint8Array | number[] | null): any {
   const currentDebugState = get(debugEnabled);
   
   if (currentDebugState) {
@@ -52,7 +52,7 @@ export function decodePacket(data) {
     if (data.length !== expectedSize) {
       console.log('🚨 MALFORMED DATA: Packet size mismatch');
       console.log(`  Expected size: ${expectedSize}, Actual size: ${data.length}`);
-      console.log(`  Packet data (hex): ${Array.from(data.slice(0, Math.min(16, data.length))).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+      console.log(`  Packet data (hex): ${Array.from(data.slice(0, Math.min(16, data.length))).map((b: number) => b.toString(16).padStart(2, '0')).join(' ')}`);
       if (currentDebugState) {
         console.log('❌ decodePacket FAILED: Size mismatch, expected:', expectedSize, 'got:', data.length);
       }
@@ -65,7 +65,7 @@ export function decodePacket(data) {
 
     const buffer = new ArrayBuffer(data.length);
     const view = new Uint8Array(buffer);
-    data.forEach((byte, i) => view[i] = byte);
+    data.forEach((byte: number, i: number) => view[i] = byte);
     
     const stream = new KaitaiStream(buffer);
     const parsed = new MiniwareMdpM01(stream);
@@ -99,17 +99,19 @@ export function decodePacket(data) {
     }
     debugError('kaitai', '  ❌ No packets found in parsed result');
     return null;
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : 'No stack trace';
     if (currentDebugState) {
-      console.log('❌ decodePacket FAILED with exception:', error.message);
+      console.log('❌ decodePacket FAILED with exception:', errorMessage);
     }
-    debugError('packet-decode', `  ❌ Failed to decode packet: ${error.message}`);
-    debugError('packet-decode', `  Stack: ${error.stack}`);
+    debugError('packet-decode', `  ❌ Failed to decode packet: ${errorMessage}`);
+    debugError('packet-decode', `  Stack: ${errorStack}`);
     return null;
   }
 }
 
-export function processSynthesizePacket(packet) {
+export function processSynthesizePacket(packet: any): any {
   debugLog('synthesize', 'PROCESS SYNTHESIZE PACKET START');
   debugLog('synthesize', '  Packet:', packet);
   debugLog('synthesize', '  Packet type check:', packet ? packet.packType : 'no packet');
@@ -194,14 +196,14 @@ export function processSynthesizePacket(packet) {
   return channels;
 }
 
-export function processWavePacket(packet) {
+export function processWavePacket(packet: any): any {
   if (!packet || !packet.data || packet.packType !== PackType.WAVE) return null;
   
   const wave = packet.data;
-  const points = [];
+  const points: Array<{timestamp: number, voltage: number, current: number}> = [];
   
-  wave.groups.forEach((group) => {
-    group.items.forEach((item) => {
+  wave.groups.forEach((group: any) => {
+    group.items.forEach((item: any) => {
       points.push({
         timestamp: group.timestamp, // All items in a group share the same timestamp
         voltage: item.voltage, // Kaitai already converts to V
@@ -216,7 +218,7 @@ export function processWavePacket(packet) {
   };
 }
 
-export function processAddressPacket(packet) {
+export function processAddressPacket(packet: any): any {
   if (!packet || !packet.data || packet.packType !== PackType.ADDR) return null;
   
   const addr = packet.data;
@@ -234,7 +236,7 @@ export function processAddressPacket(packet) {
   return addresses;
 }
 
-export function processMachinePacket(packet) {
+export function processMachinePacket(packet: any): any {
   if (!packet || !packet.data || packet.packType !== PackType.MACHINE) return null;
   
   const machine = packet.data;
@@ -249,7 +251,7 @@ export function processMachinePacket(packet) {
 }
 
 
-function getOperatingMode(channel) {
+function getOperatingMode(channel: any): string {
   if (channel.type === 3) { // L1060
     switch(channel.statusLoad) {
       case 0: return 'CC';

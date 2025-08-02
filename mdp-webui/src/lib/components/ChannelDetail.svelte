@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import WaveformChart from './WaveformChart.svelte';
@@ -62,10 +62,10 @@
   }
   
   function exportData() {
-    if (!channelData || !channelData.waveformData.length) return;
+    if (!channelData || !channelData.waveformData || !channelData.waveformData.length) return;
     
     const csv = ['Timestamp (ms),Voltage (V),Current (A)'];
-    channelData.waveformData.forEach(point => {
+    channelData.waveformData.forEach((point: any) => {
       csv.push(`${point.timestamp},${point.voltage},${point.current}`);
     });
     
@@ -78,7 +78,7 @@
     URL.revokeObjectURL(url);
   }
   
-  function formatDuration(seconds) {
+  function formatDuration(seconds: number): string {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -174,7 +174,7 @@
             <div class="measurement">
               <span class="label">Efficiency</span>
               <span class="value">
-                {channelData.inputPower > 0 ? 
+                {channelData.inputPower && channelData.inputPower > 0 ? 
                   (channelData.power / channelData.inputPower * 100).toFixed(1) : '0.0'
                 }%
               </span>
@@ -219,7 +219,7 @@
                 Recording... {formatDuration(recordingDuration)}
               </span>
             {/if}
-            {#if channelData.waveformData.length > 0}
+            {#if channelData.waveformData && channelData.waveformData.length > 0}
               <button onpointerup={exportData}>Export Data</button>
               <span class="data-points">
                 {channelData.waveformData.length} points

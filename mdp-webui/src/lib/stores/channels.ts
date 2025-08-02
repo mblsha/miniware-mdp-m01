@@ -1,4 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
+import type { Channel } from '../types';
 import { serialConnection } from '../serial';
 import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket } from '../packet-decoder';
 import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder';
@@ -14,7 +15,7 @@ const PACKET_TYPES = {
 };
 
 export function createChannelStore() {
-  const getInitialState = () => Array(6).fill(null).map((_, i) => ({
+  const getInitialState = (): Channel[] => Array(6).fill(null).map((_, i) => ({
     channel: i,
     online: false,
     machineType: 'Unknown',
@@ -37,7 +38,7 @@ export function createChannelStore() {
   const waitingSynthesize = writable(true);
 
   // Channel validation functions
-  function validateChannelData(channelData) {
+  function validateChannelData(channelData: any): { isValid: boolean; warnings: string[] } {
     const warnings = [];
     let isValid = true;
 
@@ -78,7 +79,7 @@ export function createChannelStore() {
   }
 
   // Register packet handlers
-  function synthesizeHandler(packet) {
+  function synthesizeHandler(packet: number[]): void {
     const decoded = decodePacket(packet);
     
     if (!decoded) {
@@ -98,14 +99,14 @@ export function createChannelStore() {
 
     if (processed) {
       // Validate and filter channels
-      const validatedChannels = [];
-      const filteredChannels = [];
+      const validatedChannels: any[] = [];
+      const filteredChannels: any[] = [];
       let totalWarnings = 0;
 
       // console.log('🔍 CHANNEL VALIDATION ANALYSIS:');
       
-      processed.forEach((channelData, i) => {
-        const validation = validateChannelData(channelData, i);
+      processed.forEach((channelData: any, i: number) => {
+        const validation = validateChannelData(channelData);
         
         if (validation.isValid && channelData.online) {
           validatedChannels.push(channelData);
@@ -148,7 +149,7 @@ export function createChannelStore() {
         console.log(`   Total warnings: ${totalWarnings}`);
         
         console.log(`\n🚨 FILTERED CHANNEL BREAKDOWN:`);
-        filteredChannels.forEach(filtered => {
+        filteredChannels.forEach((filtered: any) => {
           console.log(`   Channel ${filtered.channel}: ${filtered.data.machineType}, ${filtered.data.voltage.toFixed(3)}V, ${filtered.data.current.toFixed(3)}A, ${filtered.data.temperature.toFixed(1)}°C`);
           console.log(`     Issues: ${filtered.warnings.join(', ')}`);
         });
@@ -156,9 +157,9 @@ export function createChannelStore() {
       
       // Update store with all processed channels (including filtered ones as offline)
       channels.update(chs => {
-        processed.forEach((data, i) => {
+        processed.forEach((data: any, i: number) => {
           // If channel was filtered, mark it as offline regardless of original online status
-          const validation = validateChannelData(data, i);
+          const validation = validateChannelData(data);
           const channelData = validation.isValid ? data : { ...data, online: false };
           
           chs[i] = { ...chs[i], ...channelData, waveformData: chs[i].waveformData };
@@ -180,7 +181,7 @@ export function createChannelStore() {
     }
   }
 
-  function waveHandler(packet) {
+  function waveHandler(packet: number[]): void {
     const decoded = decodePacket(packet);
     if (!decoded) return;
 
@@ -204,7 +205,7 @@ export function createChannelStore() {
           let currentPointIndex = 0;
           const wave = decoded.data;
           
-          wave.groups.forEach((group) => {
+          wave.groups.forEach((group: any) => {
             // Convert timestamp from 0.1µs (100ns) ticks to microseconds
             const groupElapsedTimeUs = group.timestamp / 10;
             
@@ -216,19 +217,21 @@ export function createChannelStore() {
               const point = processed.points[currentPointIndex];
               
               // Calculate absolute time for this sample
-              const sampleTimeUs = ch.runningTimeUs + (i * timePerSampleUs);
+              const sampleTimeUs = (ch.runningTimeUs || 0) + (i * timePerSampleUs);
               
-              ch.waveformData.push({
-                timestamp: sampleTimeUs / 1000, // Convert to milliseconds for display
-                voltage: point.voltage,
-                current: point.current
-              });
+              if (ch.waveformData) {
+                ch.waveformData.push({
+                  timestamp: sampleTimeUs / 1000, // Convert to milliseconds for display
+                  voltage: point.voltage,
+                  current: point.current
+                });
+              }
               
               currentPointIndex++;
             }
             
             // Update running time for next group
-            ch.runningTimeUs += groupElapsedTimeUs;
+            ch.runningTimeUs = (ch.runningTimeUs || 0) + groupElapsedTimeUs;
           });
         }
         return chs;
@@ -237,9 +240,9 @@ export function createChannelStore() {
       // Also update timeseries store with proper timestamps
       if (get(channels)[processed.channel]?.recording) {
         const ch = get(channels)[processed.channel];
-        const recentPoints = ch.waveformData.slice(-processed.points.length);
+        const recentPoints = ch.waveformData ? ch.waveformData.slice(-processed.points.length) : [];
         
-        const timeseriesPoints = recentPoints.map(point => ({
+        const timeseriesPoints = recentPoints.map((point: any) => ({
           channel: processed.channel,
           timestamp: point.timestamp,
           data: {
@@ -253,7 +256,7 @@ export function createChannelStore() {
     }
   }
 
-  function updateChannelHandler(packet) {
+  function updateChannelHandler(packet: number[]): void {
     const decoded = decodePacket(packet);
     if (!decoded) return;
     
@@ -263,7 +266,7 @@ export function createChannelStore() {
     }
   }
 
-  function addrHandler(packet) {
+  function addrHandler(packet: number[]): void {
     const decoded = decodePacket(packet);
     if (!decoded) return;
     
@@ -271,14 +274,14 @@ export function createChannelStore() {
     // For now just decode it to see the data
   }
 
-  function machineHandler(packet) {
+  function machineHandler(packet: number[]): void {
     const decoded = decodePacket(packet);
     if (!decoded) return;
     
     const processed = processMachinePacket(decoded);
     
     if (processed) {
-      serialConnection.deviceTypeStore.set(processed);
+      serialConnection.setDeviceType(processed);
     }
   }
 
@@ -289,19 +292,19 @@ export function createChannelStore() {
   serialConnection.registerPacketHandler(PACKET_TYPES.UPDATE_CH, updateChannelHandler);
   serialConnection.registerPacketHandler(PACKET_TYPES.MACHINE, machineHandler);
 
-  function updateTargetValues(chs, channel, voltage, current) {
+  function updateTargetValues(chs: Channel[], channel: number, voltage: number, current: number): void {
     chs[channel].targetVoltage = voltage;
     chs[channel].targetCurrent = current;
     chs[channel].targetPower = voltage * current;
   }
 
-  async function setActiveChannel(channel) {
+  async function setActiveChannel(channel: number): Promise<void> {
     const packet = createSetChannelPacket(channel);
     await serialConnection.sendPacket(packet);
     activeChannel.set(channel);
   }
 
-  async function setVoltage(channel, voltage, current) {
+  async function setVoltage(channel: number, voltage: number, current: number): Promise<void> {
     const packet = createSetVoltagePacket(channel, voltage, current);
     await serialConnection.sendPacket(packet);
 
@@ -311,7 +314,7 @@ export function createChannelStore() {
     });
   }
 
-  async function setCurrent(channel, voltage, current) {
+  async function setCurrent(channel: number, voltage: number, current: number): Promise<void> {
     const packet = createSetCurrentPacket(channel, voltage, current);
     await serialConnection.sendPacket(packet);
 
@@ -321,12 +324,12 @@ export function createChannelStore() {
     });
   }
 
-  async function setOutput(channel, enabled) {
+  async function setOutput(channel: number, enabled: boolean): Promise<void> {
     const packet = createSetOutputPacket(channel, enabled);
     await serialConnection.sendPacket(packet);
   }
 
-  function startRecording(channel) {
+  function startRecording(channel: number): void {
     channels.update(chs => {
       chs[channel].recording = true;
       chs[channel].waveformData = [];
@@ -335,14 +338,14 @@ export function createChannelStore() {
     });
   }
 
-  function stopRecording(channel) {
+  function stopRecording(channel: number): void {
     channels.update(chs => {
       chs[channel].recording = false;
       return chs;
     });
   }
 
-  function clearRecording(channel) {
+  function clearRecording(channel: number): void {
     channels.update(chs => {
       chs[channel].waveformData = [];
       return chs;

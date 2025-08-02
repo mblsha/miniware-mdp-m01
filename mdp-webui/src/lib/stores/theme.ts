@@ -19,7 +19,7 @@ function createThemeStore() {
     subscribe,
     
     // Set theme and persist to localStorage
-    setTheme(theme) {
+    setTheme(theme: string): void {
       if (isBrowser) {
         localStorage.setItem(STORAGE_KEY, theme);
         document.documentElement.classList.remove('light', 'dark');
@@ -29,7 +29,7 @@ function createThemeStore() {
     },
     
     // Toggle between light and dark
-    toggle() {
+    toggle(): void {
       update(t => {
         const newTheme = t === 'light' ? 'dark' : 'light';
         if (isBrowser) {
@@ -42,7 +42,7 @@ function createThemeStore() {
     },
     
     // Initialize theme on app start
-    init() {
+    init(): void {
       if (isBrowser) {
         const savedTheme = localStorage.getItem(STORAGE_KEY);
         const theme = savedTheme || (

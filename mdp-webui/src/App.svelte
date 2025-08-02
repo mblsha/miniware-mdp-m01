@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { serialConnection as defaultSerialConnection, ConnectionStatus } from './lib/serial.js';
   import { channelStore as defaultChannelStore } from './lib/stores/channels.js';
   import { debugEnabled } from './lib/debug-logger.js';
@@ -35,7 +35,7 @@
     await serialConnection.disconnect();
   }
   
-  export function showChannelDetail(channel) {
+  export function showChannelDetail(channel: number) {
     selectedChannel = channel;
     currentView = 'detail';
   }
@@ -65,7 +65,7 @@
         {:else if $status === ConnectionStatus.CONNECTED}
           <span class="status connected">Connected</span>
           {#if $deviceType}
-            <span class="device-type">({$deviceType.type})</span>
+            <span class="device-type">({typeof $deviceType === 'object' && $deviceType.type ? $deviceType.type : $deviceType})</span>
           {/if}
           <button onpointerup={handleDisconnect}>Disconnect</button>
         {:else if $status === ConnectionStatus.ERROR}

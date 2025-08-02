@@ -1,5 +1,5 @@
-export function getMachineTypeString(type) {
-  const types = {
+export function getMachineTypeString(type: number): string {
+  const types: Record<number, string> = {
     0: 'Node',
     1: 'P905',
     2: 'P906',

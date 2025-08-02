@@ -16,7 +16,7 @@ export const PacketType = {
   HEARTBEAT: 0x22
 };
 
-function calculateChecksum(data) {
+function calculateChecksum(data: number[]): number {
   let checksum = 0;
   for (const byte of data) {
     checksum ^= byte;
@@ -24,7 +24,7 @@ function calculateChecksum(data) {
   return checksum;
 }
 
-function createPacket(type, channel, data = []) {
+function createPacket(type: number, channel: number, data: number[] = []): number[] {
   const size = 6 + data.length;
   const packet = [0x5A, 0x5A, type, size, channel];
   
@@ -35,19 +35,19 @@ function createPacket(type, channel, data = []) {
   return packet;
 }
 
-export function createHeartbeatPacket() {
+export function createHeartbeatPacket(): number[] {
   return createPacket(PacketType.HEARTBEAT, 0xEE);
 }
 
-export function createGetMachinePacket() {
+export function createGetMachinePacket(): number[] {
   return createPacket(PacketType.GET_MACHINE, 0xEE);
 }
 
-export function createSetChannelPacket(channel) {
+export function createSetChannelPacket(channel: number): number[] {
   return createPacket(PacketType.SET_CH, channel);
 }
 
-function createVoltageCurrentPacket(type, channel, voltage, current) {
+function createVoltageCurrentPacket(type: number, channel: number, voltage: number, current: number): number[] {
   const voltageMv = Math.round(voltage * 1000);
   const currentMa = Math.round(current * 1000);
 
@@ -61,24 +61,24 @@ function createVoltageCurrentPacket(type, channel, voltage, current) {
   return createPacket(type, channel, data);
 }
 
-export function createSetVoltagePacket(channel, voltage, current) {
+export function createSetVoltagePacket(channel: number, voltage: number, current: number): number[] {
   return createVoltageCurrentPacket(PacketType.SET_V, channel, voltage, current);
 }
 
-export function createSetCurrentPacket(channel, voltage, current) {
+export function createSetCurrentPacket(channel: number, voltage: number, current: number): number[] {
   return createVoltageCurrentPacket(PacketType.SET_I, channel, voltage, current);
 }
 
-export function createSetOutputPacket(channel, enabled) {
+export function createSetOutputPacket(channel: number, enabled: boolean): number[] {
   const data = [enabled ? 1 : 0];
   return createPacket(PacketType.SET_ISOUTPUT, channel, data);
 }
 
-export function createGetAddressPacket() {
+export function createGetAddressPacket(): number[] {
   return createPacket(PacketType.GET_ADDR, 0xEE);
 }
 
-export function createSetAddressPacket(channel, address, frequencyOffset) {
+export function createSetAddressPacket(channel: number, address: number[], frequencyOffset: number): number[] {
   if (address.length !== 5) {
     throw new Error('Address must be 5 bytes');
   }
@@ -87,12 +87,12 @@ export function createSetAddressPacket(channel, address, frequencyOffset) {
   return createPacket(PacketType.SET_ADDR, channel, data);
 }
 
-export function createSetAllAddressPacket(addresses) {
+export function createSetAllAddressPacket(addresses: Array<{address: number[], frequencyOffset: number}>): number[] {
   if (addresses.length !== 6) {
     throw new Error('Must provide addresses for all 6 channels');
   }
   
-  const data = [];
+  const data: number[] = [];
   for (const addr of addresses) {
     if (addr.address.length !== 5) {
       throw new Error('Each address must be 5 bytes');
@@ -103,19 +103,19 @@ export function createSetAllAddressPacket(addresses) {
   return createPacket(PacketType.SET_ALL_ADDR, 0xEE, data);
 }
 
-export function createStartAutoMatchPacket() {
+export function createStartAutoMatchPacket(): number[] {
   return createPacket(PacketType.START_AUTO_MATCH, 0xEE);
 }
 
-export function createStopAutoMatchPacket() {
+export function createStopAutoMatchPacket(): number[] {
   return createPacket(PacketType.STOP_AUTO_MATCH, 0xEE);
 }
 
-export function createResetToDfuPacket() {
+export function createResetToDfuPacket(): number[] {
   return createPacket(PacketType.RESET_TO_DFU, 0xEE);
 }
 
-export function createRgbPacket(enabled) {
+export function createRgbPacket(enabled: boolean): number[] {
   const data = [enabled ? 1 : 0];
   return createPacket(PacketType.RGB, 0xEE, data);
 }

@@ -1,6 +1,6 @@
 // Debug logging utility with conditional logging and human-readable packet names
 import { writable } from 'svelte/store';
-import { getMachineTypeString } from './machine-utils.js';
+import { getMachineTypeString } from './machine-utils';
 
 // Debug logging enabled state
 export const debugEnabled = writable(true); // Default enabled
@@ -27,11 +27,11 @@ export const PACKET_TYPE_NAMES = {
   34: 'HEARTBEAT'         // 0x22
 };
 
-export function getPacketTypeName(typeNumber) {
-  return PACKET_TYPE_NAMES[typeNumber] || `UNKNOWN_${typeNumber}`;
+export function getPacketTypeName(typeNumber: number): string {
+  return PACKET_TYPE_NAMES[typeNumber as keyof typeof PACKET_TYPE_NAMES] || `UNKNOWN_${typeNumber}`;
 }
 
-export function getPacketTypeDisplay(typeNumber) {
+export function getPacketTypeDisplay(typeNumber: number): string {
   const name = getPacketTypeName(typeNumber);
   const hex = '0x' + typeNumber.toString(16).padStart(2, '0').toUpperCase();
   return `${name} (${hex}/${typeNumber})`;
@@ -45,29 +45,29 @@ debugEnabled.subscribe(value => {
   currentDebugState = value;
 });
 
-export function debugLog(category, message, ...args) {
+export function debugLog(category: string, message: string, ...args: any[]): void {
   if (!currentDebugState) return;
   
   const prefix = getLogPrefix(category);
   console.log(prefix + message, ...args);
 }
 
-export function debugWarn(category, message, ...args) {
+export function debugWarn(category: string, message: string, ...args: any[]): void {
   if (!currentDebugState) return;
   
   const prefix = getLogPrefix(category);
   console.warn(prefix + message, ...args);
 }
 
-export function debugError(category, message, ...args) {
+export function debugError(category: string, message: string, ...args: any[]): void {
   if (!currentDebugState) return;
   
   const prefix = getLogPrefix(category);
   console.error(prefix + message, ...args);
 }
 
-function getLogPrefix(category) {
-  const prefixes = {
+function getLogPrefix(category: string): string {
+  const prefixes: Record<string, string> = {
     'raw-serial': '🔴 RAW SERIAL: ',
     'packet-parse': '🔵 PACKET PARSE: ',
     'packet-handle': '🟢 PACKET HANDLE: ',
@@ -83,7 +83,7 @@ function getLogPrefix(category) {
 }
 
 // Enhanced packet data logging
-export function logPacketData(category, packet, decoded = null) {
+export function logPacketData(category: string, packet: number[] | Uint8Array, decoded: any = null): void {
   if (!currentDebugState) return;
   
   if (!packet || packet.length < 3) {
@@ -96,7 +96,8 @@ export function logPacketData(category, packet, decoded = null) {
   
   debugLog(category, `=== ${typeName} PACKET ===`);
   debugLog(category, `  Length: ${packet.length} bytes`);
-  debugLog(category, `  Hex: ${Array.from(packet.slice(0, Math.min(32, packet.length))).map(b => b.toString(16).padStart(2, '0')).join(' ')}${packet.length > 32 ? '...' : ''}`);
+  const packetArray = Array.from(packet);
+  debugLog(category, `  Hex: ${packetArray.slice(0, Math.min(32, packet.length)).map((b: number) => b.toString(16).padStart(2, '0')).join(' ')}${packet.length > 32 ? '...' : ''}`);
   
   if (decoded) {
     logDecodedKaitaiData(category, decoded);
@@ -104,7 +105,7 @@ export function logPacketData(category, packet, decoded = null) {
 }
 
 // Log detailed Kaitai decoded data
-export function logDecodedKaitaiData(category, decoded) {
+export function logDecodedKaitaiData(category: string, decoded: any): void {
   if (!currentDebugState) return;
   
   debugLog(category, '  📋 DECODED KAITAI DATA:');
@@ -131,12 +132,12 @@ export function logDecodedKaitaiData(category, decoded) {
   }
 }
 
-function logSynthesizeData(category, data) {
+function logSynthesizeData(category: string, data: any): void {
   debugLog(category, `    📡 SYNTHESIZE DATA:`);
   debugLog(category, `      Channels available: ${data.channels?.length || 0}`);
   
   if (data.channels) {
-    data.channels.forEach((ch, i) => {
+    data.channels.forEach((ch: any, i: number) => {
       if (ch.online) {
         debugLog(category, `      🟢 Channel ${i}: ONLINE`);
         debugLog(category, `        🔋 Voltage: ${ch.outVoltage}V, Current: ${ch.outCurrent}A`);
@@ -150,7 +151,7 @@ function logSynthesizeData(category, data) {
   }
 }
 
-function logWaveData(category, data) {
+function logWaveData(category: string, data: any): void {
   debugLog(category, `    📊 WAVE DATA:`);
   debugLog(category, `      Channel: ${data.channel}`);
   debugLog(category, `      Groups: ${data.groups?.length || 0}`);
@@ -165,18 +166,18 @@ function logWaveData(category, data) {
   }
 }
 
-function logAddrData(category, data) {
+function logAddrData(category: string, data: any): void {
   debugLog(category, `    📍 ADDRESS DATA:`);
   if (data.addresses) {
-    data.addresses.forEach((addr, i) => {
-      const addressBytes = Array.from(addr.address).map(b => b.toString(16).padStart(2, '0')).join(':');
+    data.addresses.forEach((addr: any, i: number) => {
+      const addressBytes = Array.from(addr.address as number[]).map((b: number) => b.toString(16).padStart(2, '0')).join(':');
       const frequency = 2400 + addr.frequencyOffset;
       debugLog(category, `      Channel ${i}: ${addressBytes} @ ${frequency}MHz`);
     });
   }
 }
 
-function logMachineData(category, data) {
+function logMachineData(category: string, data: any): void {
   debugLog(category, `    🏭 MACHINE DATA:`);
   debugLog(category, `      Type: ${data.type} (${getMachineTypeString(data.type)})`);
 }
