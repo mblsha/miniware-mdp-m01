@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
+import { get, writable, derived } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
-import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
+import { TestSerialConnection } from '../mocks/test-serial-connection.js';
 import { 
   createMachinePacket, 
   createSynthesizePacket, 
@@ -12,17 +15,19 @@ import {
 import { setupPacketHandlers } from '../helpers/setup-packet-handlers.js';
 import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '$lib/packet-encoder';
 
-// Hoist packet encoder functions for use in mocks
-const packetEncoders = vi.hoisted(() => {
-  const { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } = require('../../src/lib/packet-encoder.ts');
-  return { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket };
-});
+var sharedTestConnection;
 
-// Create factory functions for mock stores
-const createMockStores = vi.hoisted(() => {
-  return () => {
-    const { writable, derived } = require('svelte/store');
-    const channels = writable(Array(6).fill(null).map((_, i) => ({
+const packetEncoders = {
+  createSetChannelPacket,
+  createSetVoltagePacket,
+  createSetCurrentPacket,
+  createSetOutputPacket
+};
+
+function createInitialChannels() {
+  return Array(6)
+    .fill(null)
+    .map((_, i) => ({
       channel: i,
       online: false,
       machineType: 'Unknown',
@@ -35,23 +40,21 @@ const createMockStores = vi.hoisted(() => {
       address: [0, 0, 0, 0, 0],
       targetVoltage: 0,
       targetCurrent: 0,
+      targetPower: 0,
       recording: false,
       waveformData: []
-    })));
-    const activeChannel = writable(0);
-    const waitingSynthesize = writable(true);
-    return { channels, activeChannel, waitingSynthesize };
-  };
-});
+    }));
+}
 
-// Create hoisted test connection - single instance for all tests
-const sharedTestConnection = vi.hoisted(() => {
-  const { TestSerialConnection, ConnectionStatus } = require('../mocks/test-serial-connection.js');
-  return new TestSerialConnection();
-});
+function createMockStores() {
+  const channels = writable(createInitialChannels());
+  const activeChannel = writable(0);
+  const waitingSynthesize = writable(true);
+  return { channels, activeChannel, waitingSynthesize };
+}
 
-// Mock the serial connection module to use TestSerialConnection
-vi.mock('$lib/serial.js', () => {
+vi.mock('$lib/serial', () => {
+  sharedTestConnection = new TestSerialConnection();
   return {
     serialConnection: sharedTestConnection,
     ConnectionStatus: {
@@ -63,73 +66,60 @@ vi.mock('$lib/serial.js', () => {
   };
 });
 
-// Mock the channel store with proper packet sending
-vi.mock('$lib/stores/channels.js', () => {
+vi.mock('$lib/stores/channels', () => {
   const { channels, activeChannel, waitingSynthesize } = createMockStores();
-  
+
+  const resetState = () => {
+    channels.set(createInitialChannels());
+    activeChannel.set(0);
+    waitingSynthesize.set(true);
+  };
+
+  const updateTargetValues = (channel, voltage, current) => {
+    channels.update((chs) => {
+      const next = [...chs];
+      const currentChannel = { ...next[channel] };
+      currentChannel.targetVoltage = voltage;
+      currentChannel.targetCurrent = current;
+      currentChannel.targetPower = voltage * current;
+      next[channel] = currentChannel;
+      return next;
+    });
+  };
+
   return {
     channelStore: {
       channels,
-      activeChannel: derived(activeChannel, $active => $active),
-      waitingSynthesize, // Make this writable for tests
-      reset: vi.fn(() => {
-        channels.set(Array(6).fill(null).map((_, i) => ({
-          channel: i,
-          online: false,
-          machineType: 'Unknown',
-          voltage: 0,
-          current: 0,
-          power: 0,
-          temperature: 0,
-          isOutput: false,
-          mode: 'Normal',
-          address: [0, 0, 0, 0, 0],
-          targetVoltage: 0,
-          targetCurrent: 0,
-          recording: false,
-          waveformData: []
-        })));
-        activeChannel.set(0);
-        waitingSynthesize.set(true);
-      }),
+      activeChannel: derived(activeChannel, ($active) => $active),
+      waitingSynthesize,
+      reset: vi.fn(resetState),
       setActiveChannel: vi.fn(async (channel) => {
-        const packet = packetEncoders.createSetChannelPacket(channel);
-        await serialConnection.sendPacket(packet);
+        await sharedTestConnection.sendPacket(packetEncoders.createSetChannelPacket(channel));
         activeChannel.set(channel);
       }),
       setVoltage: vi.fn(async (channel, voltage, current) => {
-        const packet = packetEncoders.createSetVoltagePacket(channel, voltage, current);
-        await serialConnection.sendPacket(packet);
-        channels.update(chs => {
-          chs[channel].targetVoltage = voltage;
-          chs[channel].targetCurrent = current;
-          return chs;
-        });
+        await sharedTestConnection.sendPacket(packetEncoders.createSetVoltagePacket(channel, voltage, current));
+        updateTargetValues(channel, voltage, current);
       }),
       setCurrent: vi.fn(async (channel, voltage, current) => {
-        const packet = packetEncoders.createSetCurrentPacket(channel, voltage, current);
-        await serialConnection.sendPacket(packet);
-        channels.update(chs => {
-          chs[channel].targetVoltage = voltage;
-          chs[channel].targetCurrent = current;
-          return chs;
-        });
+        await sharedTestConnection.sendPacket(packetEncoders.createSetCurrentPacket(channel, voltage, current));
+        updateTargetValues(channel, voltage, current);
       }),
       setOutput: vi.fn(async (channel, enabled) => {
-        const packet = packetEncoders.createSetOutputPacket(channel, enabled);
-        await serialConnection.sendPacket(packet);
+        await sharedTestConnection.sendPacket(packetEncoders.createSetOutputPacket(channel, enabled));
       }),
       startRecording: vi.fn((channel) => {
-        channels.update(chs => {
-          chs[channel].recording = true;
-          chs[channel].waveformData = [];
-          return chs;
+        channels.update((chs) => {
+          const next = [...chs];
+          next[channel] = { ...next[channel], recording: true, waveformData: [] };
+          return next;
         });
       }),
       stopRecording: vi.fn((channel) => {
-        channels.update(chs => {
-          chs[channel].recording = false;
-          return chs;
+        channels.update((chs) => {
+          const next = [...chs];
+          next[channel] = { ...next[channel], recording: false };
+          return next;
         });
       }),
       clearRecording: vi.fn()
@@ -137,17 +127,9 @@ vi.mock('$lib/stores/channels.js', () => {
   };
 });
 
-// Import these after mocks are set up
-const { render, fireEvent, waitFor } = await import('@testing-library/svelte');
-const { tick } = await import('svelte');
-const { get, writable, derived } = await import('svelte/store');
-
-// Now import App after all mocks are in place
 const App = (await import('../../src/App.svelte')).default;
-
-// Use the mocked instances
-const serialConnection = sharedTestConnection;
 const { channelStore } = await import('$lib/stores/channels');
+const serialConnection = sharedTestConnection;
 
 describe('Serial Communication Flow Integration Test', () => {
   let mockSerial;

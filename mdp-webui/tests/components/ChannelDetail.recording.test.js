@@ -31,7 +31,6 @@ vi.mock('$lib/components/WaveformChart.svelte', async () => ({
 
 // Mock the channel store
 vi.mock('$lib/stores/channels.js', () => {
-  const { writable } = require('svelte/store');
   const channels = writable([]);
   const activeChannel = writable(0);
   

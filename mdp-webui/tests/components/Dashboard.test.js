@@ -8,11 +8,10 @@ vi.mock('$lib/components/ChannelCard.svelte', async () => ({
 }));
 
 // Create proper mock stores that behave like the real ones
-const mockChannelStore = vi.hoisted(() => {
-  const { writable } = require('svelte/store');
+function createMockChannelStore() {
   const channels = writable([]);
   const activeChannel = writable(0);
-  
+
   return {
     channels,
     activeChannel,
@@ -21,14 +20,17 @@ const mockChannelStore = vi.hoisted(() => {
       activeChannel.set(0);
     }
   };
+}
+
+var mockChannelStore;
+
+vi.mock('$lib/stores/channels', () => {
+  mockChannelStore = createMockChannelStore();
+  return { channelStore: mockChannelStore };
 });
 
-vi.mock('$lib/stores/channels.js', () => ({
-  channelStore: mockChannelStore
-}));
-
 import Dashboard from '$lib/components/Dashboard.svelte';
-import { channelStore } from '$lib/stores/channels.js';
+import { channelStore } from '$lib/stores/channels';
 
 describe('Dashboard Component', () => {
   beforeEach(() => {

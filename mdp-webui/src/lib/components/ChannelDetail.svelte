@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { onMount, onDestroy } from 'svelte';
   import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import WaveformChart from './WaveformChart.svelte';

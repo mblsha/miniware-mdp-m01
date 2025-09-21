@@ -3,7 +3,7 @@ import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { get, writable, derived } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
-import { TestSerialConnection, ConnectionStatus } from '../mocks/test-serial-connection.js';
+import { TestSerialConnection } from '../mocks/test-serial-connection.js';
 import { 
   createMachinePacket, 
   createSynthesizePacket, 
@@ -12,39 +12,20 @@ import {
 } from '../mocks/packet-data.js';
 import { setupPacketHandlers } from '../helpers/setup-packet-handlers.js';
 import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '$lib/packet-encoder';
-import { serialConnection as realSerialConnection } from '$lib/serial';
 
-// Hoist packet encoder functions for use in mocks
-const packetEncoders = vi.hoisted(() => {
-  const { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } = require('../../src/lib/packet-encoder.ts');
-  return { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket };
-});
+var testSerialConnection;
 
-// Create hoisted test connection
-const createTestConnection = vi.hoisted(() => {
-  const { TestSerialConnection, ConnectionStatus } = require('../mocks/test-serial-connection.js');
-  return () => new TestSerialConnection();
-});
+const packetEncoders = {
+  createSetChannelPacket,
+  createSetVoltagePacket,
+  createSetCurrentPacket,
+  createSetOutputPacket
+};
 
-// Mock the serial connection module to use TestSerialConnection
-vi.mock('$lib/serial.js', () => {
-  const testConnection = createTestConnection();
-  return {
-    serialConnection: testConnection,
-    ConnectionStatus: {
-      DISCONNECTED: 'disconnected',
-      CONNECTING: 'connecting',
-      CONNECTED: 'connected',
-      ERROR: 'error'
-    }
-  };
-});
-
-// Create factory functions for mock stores
-const createMockStores = vi.hoisted(() => {
-  return () => {
-    const { writable, derived } = require('svelte/store');
-    const channels = writable(Array(6).fill(null).map((_, i) => ({
+function createInitialChannels() {
+  return Array(6)
+    .fill(null)
+    .map((_, i) => ({
       channel: i,
       online: false,
       machineType: 'Unknown',
@@ -57,89 +38,92 @@ const createMockStores = vi.hoisted(() => {
       address: [0, 0, 0, 0, 0],
       targetVoltage: 0,
       targetCurrent: 0,
+      targetPower: 0,
       recording: false,
       waveformData: []
-    })));
-    const activeChannel = writable(0);
-    const waitingSynthesize = writable(true);
-    return { channels, activeChannel, waitingSynthesize };
+    }));
+}
+
+function createMockStores() {
+  const channels = writable(createInitialChannels());
+  const activeChannel = writable(0);
+  const waitingSynthesize = writable(true);
+  return { channels, activeChannel, waitingSynthesize };
+}
+
+vi.mock('$lib/serial', () => {
+  testSerialConnection = new TestSerialConnection();
+  return {
+    serialConnection: testSerialConnection,
+    ConnectionStatus: {
+      DISCONNECTED: 'disconnected',
+      CONNECTING: 'connecting',
+      CONNECTED: 'connected',
+      ERROR: 'error'
+    }
   };
 });
 
-// Mock the channel store with proper packet sending
-vi.mock('$lib/stores/channels.js', () => {
+vi.mock('$lib/stores/channels', () => {
   const { channels, activeChannel, waitingSynthesize } = createMockStores();
-  
+
+  const resetState = () => {
+    channels.set(createInitialChannels());
+    activeChannel.set(0);
+    waitingSynthesize.set(true);
+  };
+
+  const updateTargetValues = (channel, voltage, current) => {
+    channels.update((chs) => {
+      const next = [...chs];
+      const currentChannel = { ...next[channel] };
+      currentChannel.targetVoltage = voltage;
+      currentChannel.targetCurrent = current;
+      currentChannel.targetPower = voltage * current;
+      next[channel] = currentChannel;
+      return next;
+    });
+  };
+
   return {
     channelStore: {
       channels,
-      activeChannel: derived(activeChannel, $active => $active),
-      waitingSynthesize, // Make this writable for tests
-      reset: vi.fn(() => {
-        channels.set(Array(6).fill(null).map((_, i) => ({
-          channel: i,
-          online: false,
-          machineType: 'Unknown',
-          voltage: 0,
-          current: 0,
-          power: 0,
-          temperature: 0,
-          isOutput: false,
-          mode: 'Normal',
-          address: [0, 0, 0, 0, 0],
-          targetVoltage: 0,
-          targetCurrent: 0,
-          recording: false,
-          waveformData: []
-        })));
-        activeChannel.set(0);
-        waitingSynthesize.set(true);
-      }),
-      setActiveChannel: vi.fn(async (ch) => {
-        const packet = packetEncoders.createSetChannelPacket(ch);
-        await serialConnection.sendPacket(packet);
-        activeChannel.set(ch);
+      activeChannel: derived(activeChannel, ($active) => $active),
+      waitingSynthesize,
+      reset: vi.fn(resetState),
+      setActiveChannel: vi.fn(async (channel) => {
+        await testSerialConnection.sendPacket(packetEncoders.createSetChannelPacket(channel));
+        activeChannel.set(channel);
       }),
       setVoltage: vi.fn(async (channel, voltage, current) => {
-        const packet = packetEncoders.createSetVoltagePacket(channel, voltage, current);
-        await serialConnection.sendPacket(packet);
-        channels.update(chs => {
-          chs[channel].targetVoltage = voltage;
-          chs[channel].targetCurrent = current;
-          return chs;
-        });
+        await testSerialConnection.sendPacket(packetEncoders.createSetVoltagePacket(channel, voltage, current));
+        updateTargetValues(channel, voltage, current);
       }),
       setCurrent: vi.fn(async (channel, voltage, current) => {
-        const packet = packetEncoders.createSetCurrentPacket(channel, voltage, current);
-        await serialConnection.sendPacket(packet);
-        channels.update(chs => {
-          chs[channel].targetVoltage = voltage;
-          chs[channel].targetCurrent = current;
-          return chs;
-        });
+        await testSerialConnection.sendPacket(packetEncoders.createSetCurrentPacket(channel, voltage, current));
+        updateTargetValues(channel, voltage, current);
       }),
       setOutput: vi.fn(async (channel, enabled) => {
-        const packet = packetEncoders.createSetOutputPacket(channel, enabled);
-        await serialConnection.sendPacket(packet);
+        await testSerialConnection.sendPacket(packetEncoders.createSetOutputPacket(channel, enabled));
       }),
-      startRecording: vi.fn((ch) => {
-        channels.update(chs => {
-          chs[ch].recording = true;
-          chs[ch].waveformData = [];
-          return chs;
+      startRecording: vi.fn((channel) => {
+        channels.update((chs) => {
+          const next = [...chs];
+          next[channel] = { ...next[channel], recording: true, waveformData: [] };
+          return next;
         });
       }),
-      stopRecording: vi.fn((ch) => {
-        channels.update(chs => {
-          chs[ch].recording = false;
-          return chs;
+      stopRecording: vi.fn((channel) => {
+        channels.update((chs) => {
+          const next = [...chs];
+          next[channel] = { ...next[channel], recording: false };
+          return next;
         });
       }),
       clearRecording: vi.fn()
     }
   };
 });
-
 import App from '../../src/App.svelte';
 import { serialConnection } from '$lib/serial';
 import { channelStore } from '$lib/stores/channels';

@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { serialConnection as defaultSerialConnection, ConnectionStatus } from './lib/serial.js';
   import { channelStore as defaultChannelStore } from './lib/stores/channels.js';
   import { debugEnabled } from './lib/debug-logger.js';

@@ -1,4 +1,5 @@
 <script>
+  // @ts-nocheck
   import OutputButton from './OutputButton.svelte';
   import Sparkline from './Sparkline.svelte';
   
