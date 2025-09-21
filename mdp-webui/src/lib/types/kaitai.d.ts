@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-misused-new */
 // Type definitions for Kaitai Struct parser
 
 declare module 'kaitai-struct/KaitaiStream' {

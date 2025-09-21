@@ -57,6 +57,7 @@ export class SerialConnection {
       }
 
       // Filter for Miniware devices
+      // eslint-disable-next-line no-undef
       const filters: SerialPortRequestOptions = {
         filters: [
           { usbVendorId: 0x0416, usbProductId: 0xdc01 }  // Miniware MDP devices
