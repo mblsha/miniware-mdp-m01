@@ -160,9 +160,7 @@ jobs:
     steps:
     - name: Check job statuses
       run: |
-        if [[ "${{ needs.lint.result }}" != "success" || \
-              "${{ needs.type-check.result }}" != "success" || \
-              "${{ needs.unit-tests.result }}" != "success" ]]; then
+        if [[ "${{ needs.lint.result }}" != "success" || "${{ needs.type-check.result }}" != "success" || "${{ needs.unit-tests.result }}" != "success" ]]; then
           echo "One or more CI checks failed"
           echo "Lint: ${{ needs.lint.result }}"
           echo "Type Check: ${{ needs.type-check.result }}"
