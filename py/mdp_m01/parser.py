@@ -128,4 +128,4 @@ def process_packet(p):
                 )
             )
         return Synthesize(channels=channels)
-    assert ValueError(f"Unknown packet type: {p.pack_type}")
+    raise ValueError(f"Unknown packet type: {p.pack_type}")
