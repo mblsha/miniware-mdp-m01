@@ -147,7 +147,6 @@ def _(
         set_packets([])
         packets = []
 
-        start = datetime.datetime.now()
         buf = b''
         def parse_buf():
             nonlocal buf
