@@ -5,12 +5,12 @@ on:
     branches: [ main, master ]
     paths:
       - 'mdp-webui/**'
-      - '.github/workflows/mdp-webui-tests.yml'
+      - '.github/workflows/webui.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'mdp-webui/**'
-      - '.github/workflows/mdp-webui-tests.yml'
+      - '.github/workflows/webui.yml'
 
 jobs:
   lint:
