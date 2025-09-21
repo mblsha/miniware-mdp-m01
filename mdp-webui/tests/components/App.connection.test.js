@@ -5,7 +5,6 @@ import App from '../../src/App.svelte';
 
 // Mock serial connection
 vi.mock('$lib/serial.js', () => {
-  const { writable } = require('svelte/store');
   const mockStatus = writable('disconnected');
   const mockError = writable(null);
   const mockDeviceType = writable(null);
@@ -33,7 +32,6 @@ vi.mock('$lib/serial.js', () => {
 
 // Mock channel store
 vi.mock('$lib/stores/channels.js', () => {
-  const { writable } = require('svelte/store');
   const mockChannels = writable(Array(6).fill(null).map((_, i) => ({
     channel: i,
     online: false,

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
+import { writable } from 'svelte/store';
 import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
 import { createMachinePacket, createSynthesizePacket } from '../mocks/packet-data.js';
 
@@ -8,24 +9,21 @@ import { createMachinePacket, createSynthesizePacket } from '../mocks/packet-dat
 const mockConnect = vi.hoisted(() => vi.fn());
 const mockDisconnect = vi.hoisted(() => vi.fn());
 
-vi.mock('$lib/serial.js', () => {
-  const { writable } = require('svelte/store');
-  return {
-    serialConnection: {
-      status: writable('disconnected'),
-      error: writable(null),
-      deviceType: writable(null),
-      connect: mockConnect,
-      disconnect: mockDisconnect,
-    },
-    ConnectionStatus: {
-      DISCONNECTED: 'disconnected',
-      CONNECTING: 'connecting', 
-      CONNECTED: 'connected',
-      ERROR: 'error'
-    }
-  };
-});
+vi.mock('$lib/serial.js', () => ({
+  serialConnection: {
+    status: writable('disconnected'),
+    error: writable(null),
+    deviceType: writable(null),
+    connect: mockConnect,
+    disconnect: mockDisconnect,
+  },
+  ConnectionStatus: {
+    DISCONNECTED: 'disconnected',
+    CONNECTING: 'connecting', 
+    CONNECTED: 'connected',
+    ERROR: 'error'
+  }
+}));
 
 // Mock child components with proper Svelte components BEFORE other imports
 vi.mock('$lib/components/Dashboard.svelte', async () => ({
@@ -36,7 +34,6 @@ vi.mock('$lib/components/ChannelDetail.svelte', async () => ({
 }));
 
 vi.mock('$lib/stores/channels.js', () => {
-  const { writable } = require('svelte/store');
   const mockChannels = writable([
     { channel: 0, online: true, voltage: 3.3, current: 0.5, power: 1.65, temperature: 25, isOutput: false, machineType: 'P906', recording: false, waveformData: [] },
     { channel: 1, online: true, voltage: 5.0, current: 1.0, power: 5.0, temperature: 30, isOutput: true, machineType: 'P906', recording: false, waveformData: [] },

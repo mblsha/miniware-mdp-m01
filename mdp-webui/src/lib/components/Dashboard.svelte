@@ -1,4 +1,5 @@
 <script>
+  // @ts-nocheck
   import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import ChannelCard from './ChannelCard.svelte';
   

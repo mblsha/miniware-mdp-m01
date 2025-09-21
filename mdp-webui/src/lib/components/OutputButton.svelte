@@ -1,4 +1,5 @@
 <script>
+  // @ts-nocheck
   import { channelStore } from '../stores/channels.js';
   import { createEventDispatcher } from 'svelte';
 

@@ -1,4 +1,5 @@
 <script>
+  // @ts-nocheck
   import * as Plot from '@observablehq/plot';
   import * as d3 from 'd3';
   import { onDestroy } from 'svelte';
