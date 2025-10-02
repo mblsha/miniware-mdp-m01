@@ -33,7 +33,9 @@ def parse_buffer(buf):
         if parsed:
             assert len(parsed.packets) == 1
             p = parsed.packets[0]
-            packets.append(process_packet(p))
+            packets.append(
+                process_packet(p, timestamp_received=datetime.datetime.now())
+            )
         if len(memorybuf) == last_len:
             break
     return packets, bytes(memorybuf)
@@ -86,14 +88,14 @@ class Wave:
     groups: List[WaveGroup]
 
 
-def process_packet(p):
+def process_packet(p, *, timestamp_received: datetime.datetime):
     if p.pack_type == PackType.wave:
         wave_groups = []
         for g in p.data.groups:
             wave_groups.append(
                 WaveGroup(
                     timestamp=g.timestamp,
-                    timestamp_received=datetime.datetime.now(),
+                    timestamp_received=timestamp_received,
                     items=[
                         WaveItem(voltage=i.voltage, current=i.current) for i in g.items
                     ],
@@ -109,7 +111,7 @@ def process_packet(p):
             channels.append(
                 Channel(
                     channel_index=index,
-                    timestamp_received=datetime.datetime.now(),
+                    timestamp_received=timestamp_received,
                     temperature=c.temperature,
                     out_voltage=c.out_voltage,
                     out_current=c.out_current,
