@@ -1,5 +1,5 @@
 import io
-from kaitaistruct import KaitaiStream
+from kaitaistruct import KaitaiStream, KaitaiStructError
 import mdp_m01.miniware_mdp_m01
 from dataclasses import dataclass
 from typing import List, Optional
@@ -20,7 +20,7 @@ def parse_buffer(buf):
                 packet = io.BytesIO(buf[i : i + size])
                 try:
                     p = mdp_m01.miniware_mdp_m01.MiniwareMdpM01(KaitaiStream(packet))
-                except Exception:
+                except (KaitaiStructError, EOFError):
                     return buf[i + 2 :], None
                 return buf[i + size :], p
         return buf, None
