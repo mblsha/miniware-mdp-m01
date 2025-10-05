@@ -37,6 +37,18 @@ export function createChannelStore() {
   const activeChannel = writable(0);
   const waitingSynthesize = writable(true);
 
+  function markChannelsOffline(): void {
+    channels.update(chs =>
+      chs.map(channel => ({
+        ...channel,
+        online: false,
+        power: 0,
+        current: 0,
+        voltage: 0
+      }))
+    );
+  }
+
   // Channel validation functions
   function validateChannelData(channelData: any): { isValid: boolean; warnings: string[] } {
     const warnings = [];
@@ -84,13 +96,7 @@ export function createChannelStore() {
     
     if (!decoded) {
       debugError('channel-store', 'Decoding failed for SYNTHESIZE packet');
-      // Emergency fix: Force channels online when we get any synthesize packet
-      channels.update(chs => {
-        chs[0].online = true;
-        chs[1].online = true;
-        debugError('emergency', 'EMERGENCY: Forced channels 0,1 online due to decode failure');
-        return chs;
-      });
+      markChannelsOffline();
       waitingSynthesize.set(false);
       return;
     }
@@ -170,13 +176,7 @@ export function createChannelStore() {
       waitingSynthesize.set(false);
     } else {
       debugError('channel-store', 'Processing failed for SYNTHESIZE packet');
-      // Emergency fix: Force channels online when processing fails
-      channels.update(chs => {
-        chs[0].online = true;
-        chs[1].online = true;
-        debugError('emergency', 'EMERGENCY: Forced channels 0,1 online due to processing failure');
-        return chs;
-      });
+      markChannelsOffline();
       waitingSynthesize.set(false);
     }
   }
