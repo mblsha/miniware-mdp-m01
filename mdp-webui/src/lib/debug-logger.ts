@@ -66,20 +66,21 @@ export function debugError(category: string, message: string, ...args: any[]): v
   console.error(prefix + message, ...args);
 }
 
+const LOG_PREFIXES: Readonly<Record<string, string>> = {
+  'raw-serial': '🔴 RAW SERIAL: ',
+  'packet-parse': '🔵 PACKET PARSE: ',
+  'packet-handle': '🟢 PACKET HANDLE: ',
+  'packet-register': '📋 PACKET REGISTER: ',
+  'packet-decode': '🔧 PACKET DECODE: ',
+  'synthesize': '⚙️ SYNTHESIZE: ',
+  'channel-store': '📊 CHANNEL STORE: ',
+  'packet-send': '📤 PACKET SEND: ',
+  'kaitai': '🔬 KAITAI: ',
+  'emergency': '🚨 EMERGENCY: '
+};
+
 function getLogPrefix(category: string): string {
-  const prefixes: Record<string, string> = {
-    'raw-serial': '🔴 RAW SERIAL: ',
-    'packet-parse': '🔵 PACKET PARSE: ',
-    'packet-handle': '🟢 PACKET HANDLE: ',
-    'packet-register': '📋 PACKET REGISTER: ',
-    'packet-decode': '🔧 PACKET DECODE: ',
-    'synthesize': '⚙️ SYNTHESIZE: ',
-    'channel-store': '📊 CHANNEL STORE: ',
-    'packet-send': '📤 PACKET SEND: ',
-    'kaitai': '🔬 KAITAI: ',
-    'emergency': '🚨 EMERGENCY: '
-  };
-  return prefixes[category] || '🔍 DEBUG: ';
+  return LOG_PREFIXES[category] || '🔍 DEBUG: ';
 }
 
 // Enhanced packet data logging
