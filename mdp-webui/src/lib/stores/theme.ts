@@ -14,33 +14,33 @@ function createThemeStore() {
   ) : 'dark';
   
   const { subscribe, set, update } = writable(initial);
+
+  const applyThemeToDocument = (theme: string): void => {
+    if (!isBrowser) return;
+
+    localStorage.setItem(STORAGE_KEY, theme);
+    document.documentElement.classList.remove('light', 'dark');
+    document.documentElement.classList.add(theme);
+  };
   
   return {
     subscribe,
     
     // Set theme and persist to localStorage
     setTheme(theme: string): void {
-      if (isBrowser) {
-        localStorage.setItem(STORAGE_KEY, theme);
-        document.documentElement.classList.remove('light', 'dark');
-        document.documentElement.classList.add(theme);
-      }
+      applyThemeToDocument(theme);
       set(theme);
     },
-    
+
     // Toggle between light and dark
     toggle(): void {
       update(t => {
         const newTheme = t === 'light' ? 'dark' : 'light';
-        if (isBrowser) {
-          localStorage.setItem(STORAGE_KEY, newTheme);
-          document.documentElement.classList.remove('light', 'dark');
-          document.documentElement.classList.add(newTheme);
-        }
+        applyThemeToDocument(newTheme);
         return newTheme;
       });
     },
-    
+
     // Initialize theme on app start
     init(): void {
       if (isBrowser) {
@@ -48,8 +48,7 @@ function createThemeStore() {
         const theme = savedTheme || (
           window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
         );
-        document.documentElement.classList.remove('light', 'dark');
-        document.documentElement.classList.add(theme);
+        applyThemeToDocument(theme);
         set(theme);
       }
     }
