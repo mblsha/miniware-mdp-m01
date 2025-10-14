@@ -104,31 +104,35 @@ export function createChannelStore() {
     const processed = processSynthesizePacket(decoded);
 
     if (processed) {
-      // Validate and filter channels
-      const validatedChannels: any[] = [];
+      // Validate and filter channels once so we can reuse the results
+      const channelValidations = processed.map((channelData: any, index: number) => ({
+        index,
+        data: channelData,
+        validation: validateChannelData(channelData)
+      }));
+
       const filteredChannels: any[] = [];
+      let validOnlineCount = 0;
       let totalWarnings = 0;
 
-      // console.log('🔍 CHANNEL VALIDATION ANALYSIS:');
-      
-      processed.forEach((channelData: any, i: number) => {
-        const validation = validateChannelData(channelData);
-        
-        if (validation.isValid && channelData.online) {
-          validatedChannels.push(channelData);
-          // console.log(`✅ Channel ${i}: VALID and ONLINE`);
-        } else if (!validation.isValid) {
-          filteredChannels.push({ channel: i, data: channelData, warnings: validation.warnings });
+      channelValidations.forEach(({ index, data, validation }) => {
+        if (validation.isValid && data.online) {
+          validOnlineCount += 1;
+          return;
+        }
+
+        if (!validation.isValid) {
+          filteredChannels.push({ channel: index, data, warnings: validation.warnings });
           totalWarnings += validation.warnings.length;
-          
-          console.log(`❌ Channel ${i}: FILTERED (${validation.warnings.length} issues)`);
+
+          console.log(`❌ Channel ${index}: FILTERED (${validation.warnings.length} issues)`);
           validation.warnings.forEach(warning => {
             console.log(`   ⚠️  ${warning}`);
           });
-          
+
           // Show the problematic raw data for this channel
-          if (decoded.data.channels && decoded.data.channels[i]) {
-            const rawCh = decoded.data.channels[i];
+          if (decoded.data.channels && decoded.data.channels[index]) {
+            const rawCh = decoded.data.channels[index];
             console.log(`   📊 Raw channel data:`, {
               num: rawCh.num,
               online: rawCh.online,
@@ -140,39 +144,34 @@ export function createChannelStore() {
               outputOn: rawCh.outputOn
             });
           }
-        } else {
-          // console.log(`ℹ️  Channel ${i}: VALID but OFFLINE`);
         }
       });
 
-      const validOnlineCount = validatedChannels.length;
-      
       // Only show debug output if there are filtered channels
       if (filteredChannels.length > 0) {
         console.log(`\n📊 VALIDATION SUMMARY:`);
         console.log(`   Valid online channels: ${validOnlineCount}`);
         console.log(`   Filtered channels: ${filteredChannels.length}`);
         console.log(`   Total warnings: ${totalWarnings}`);
-        
+
         console.log(`\n🚨 FILTERED CHANNEL BREAKDOWN:`);
         filteredChannels.forEach((filtered: any) => {
           console.log(`   Channel ${filtered.channel}: ${filtered.data.machineType}, ${filtered.data.voltage.toFixed(3)}V, ${filtered.data.current.toFixed(3)}A, ${filtered.data.temperature.toFixed(1)}°C`);
           console.log(`     Issues: ${filtered.warnings.join(', ')}`);
         });
       }
-      
+
       // Update store with all processed channels (including filtered ones as offline)
       channels.update(chs => {
-        processed.forEach((data: any, i: number) => {
+        channelValidations.forEach(({ index, data, validation }) => {
           // If channel was filtered, mark it as offline regardless of original online status
-          const validation = validateChannelData(data);
           const channelData = validation.isValid ? data : { ...data, online: false };
-          
-          chs[i] = { ...chs[i], ...channelData, waveformData: chs[i].waveformData };
+
+          chs[index] = { ...chs[index], ...channelData, waveformData: chs[index].waveformData };
         });
         return chs;
       });
-      
+
       waitingSynthesize.set(false);
     } else {
       debugError('channel-store', 'Processing failed for SYNTHESIZE packet');
