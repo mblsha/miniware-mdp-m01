@@ -45,25 +45,27 @@ debugEnabled.subscribe(value => {
   currentDebugState = value;
 });
 
-export function debugLog(category: string, message: string, ...args: any[]): void {
-  if (!currentDebugState) return;
-  
+type ConsoleLevel = 'log' | 'warn' | 'error';
+
+function logWithLevel(level: ConsoleLevel, category: string, message: string, args: any[]): void {
+  if (!currentDebugState) {
+    return;
+  }
+
   const prefix = getLogPrefix(category);
-  console.log(prefix + message, ...args);
+  console[level](prefix + message, ...args);
+}
+
+export function debugLog(category: string, message: string, ...args: any[]): void {
+  logWithLevel('log', category, message, args);
 }
 
 export function debugWarn(category: string, message: string, ...args: any[]): void {
-  if (!currentDebugState) return;
-  
-  const prefix = getLogPrefix(category);
-  console.warn(prefix + message, ...args);
+  logWithLevel('warn', category, message, args);
 }
 
 export function debugError(category: string, message: string, ...args: any[]): void {
-  if (!currentDebugState) return;
-  
-  const prefix = getLogPrefix(category);
-  console.error(prefix + message, ...args);
+  logWithLevel('error', category, message, args);
 }
 
 const LOG_PREFIXES: Readonly<Record<string, string>> = {
