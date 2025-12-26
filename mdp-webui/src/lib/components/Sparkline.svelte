@@ -105,7 +105,7 @@
       yDomain = [minY - padding, maxY + padding];
     }
     
-    const marks: any[] = [];
+    const marks: Plot.Markish[] = [];
     
     // Add target value line FIRST if provided and not zero
     if (targetValue !== null && typeof targetValue === 'number' && targetValue !== 0) {
@@ -153,7 +153,7 @@
       );
     }
     
-    const plotConfig: any = {
+    const plotConfig: Plot.PlotOptions = {
       width,
       height,
       marginTop: showAxes ? 20 : 2,
@@ -171,8 +171,6 @@
         axis: showAxes ? "bottom" : null,
         label: showAxes ? "Seconds ago" : null,
         tickFormat: showAxes ? ((d: number) => `${Math.abs(d)}s`) : null,
-        labelColor: chartColors.text,
-        tickColor: chartColors.text,
         grid: false,
         domain: [-60, 0]
       },
@@ -180,8 +178,6 @@
         axis: showAxes ? "left" : null,
         label: showAxes ? metricConfig.unit : null,
         tickFormat: showAxes ? ((d: number) => d.toFixed(metricConfig.decimals)) : null,
-        labelColor: chartColors.text,
-        tickColor: chartColors.text,
         grid: false,
         domain: yDomain,
         nice: false,

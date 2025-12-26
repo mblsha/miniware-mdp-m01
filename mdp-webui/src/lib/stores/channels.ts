@@ -1,7 +1,8 @@
 import { writable, derived, get } from 'svelte/store';
-import type { Channel } from '../types';
+import type { Channel, WaveformPoint } from '../types';
 import { serialConnection } from '../serial';
-import { decodePacket, processSynthesizePacket, processWavePacket, processMachinePacket } from '../packet-decoder';
+import { decodePacket, isSynthesizePacket, isWavePacket, processSynthesizePacket, processWavePacket, processMachinePacket } from '../packet-decoder';
+import type { ChannelUpdate } from '../packet-decoder';
 import { createSetChannelPacket, createSetVoltagePacket, createSetCurrentPacket, createSetOutputPacket } from '../packet-encoder';
 import { debugError } from '../debug-logger';
 import { timeseriesStore } from './timeseries';
@@ -15,6 +16,9 @@ const PACKET_TYPES = {
 };
 
 export function createChannelStore() {
+  type TimeSeriesPoint = Parameters<typeof timeseriesStore.addDataPoints>[0][number];
+  type FilteredChannel = { channel: number; data: ChannelUpdate; warnings: string[] };
+
   const getInitialState = (): Channel[] => Array(6).fill(null).map((_, i) => ({
     channel: i,
     online: false,
@@ -50,8 +54,8 @@ export function createChannelStore() {
   }
 
   // Channel validation functions
-  function validateChannelData(channelData: any): { isValid: boolean; warnings: string[] } {
-    const warnings = [];
+  function validateChannelData(channelData: ChannelUpdate): { isValid: boolean; warnings: string[] } {
+    const warnings: string[] = [];
     let isValid = true;
 
     // Validate online flag (accept boolean or 0/1)
@@ -63,27 +67,30 @@ export function createChannelStore() {
     }
 
     // Validate temperature range (reasonable for electronics: -10°C to 85°C)
-    if (channelData.temperature < -10 || channelData.temperature > 85) {
-      warnings.push(`Temperature out of range: ${channelData.temperature.toFixed(1)}°C (should be -10°C to 85°C)`);
+    const temperature = typeof channelData.temperature === 'number' ? channelData.temperature : Number.NaN;
+    if (!Number.isFinite(temperature) || temperature < -10 || temperature > 85) {
+      warnings.push(`Temperature out of range: ${Number.isFinite(temperature) ? temperature.toFixed(1) : 'NaN'}°C (should be -10°C to 85°C)`);
       isValid = false;
     }
 
     // Validate voltage range (0-50V reasonable for these devices)
-    if (channelData.voltage < 0 || channelData.voltage > 50) {
-      warnings.push(`Voltage out of range: ${channelData.voltage.toFixed(3)}V (should be 0V to 50V)`);
+    const voltage = typeof channelData.voltage === 'number' ? channelData.voltage : Number.NaN;
+    if (!Number.isFinite(voltage) || voltage < 0 || voltage > 50) {
+      warnings.push(`Voltage out of range: ${Number.isFinite(voltage) ? voltage.toFixed(3) : 'NaN'}V (should be 0V to 50V)`);
       isValid = false;
     }
 
     // Validate current range (0-10A reasonable for these devices)
-    if (channelData.current < 0 || channelData.current > 10) {
-      warnings.push(`Current out of range: ${channelData.current.toFixed(3)}A (should be 0A to 10A)`);
+    const current = typeof channelData.current === 'number' ? channelData.current : Number.NaN;
+    if (!Number.isFinite(current) || current < 0 || current > 10) {
+      warnings.push(`Current out of range: ${Number.isFinite(current) ? current.toFixed(3) : 'NaN'}A (should be 0A to 10A)`);
       isValid = false;
     }
 
     // Validate machine type
     const validTypes = ['Node', 'P905', 'P906', 'L1060', 'Unknown'];
-    if (!validTypes.includes(channelData.machineType)) {
-      warnings.push(`Invalid machine type: ${channelData.machineType}`);
+    if (typeof channelData.machineType !== 'string' || !validTypes.includes(channelData.machineType)) {
+      warnings.push(`Invalid machine type: ${String(channelData.machineType)}`);
       isValid = false;
     }
 
@@ -101,38 +108,38 @@ export function createChannelStore() {
       return;
     }
 
-    const processed = processSynthesizePacket(decoded);
+	    const processed = processSynthesizePacket(decoded);
 
-    if (processed) {
-      // Validate and filter channels
-      const validatedChannels: any[] = [];
-      const filteredChannels: any[] = [];
-      let totalWarnings = 0;
+	    if (processed) {
+	      // Validate and filter channels
+	      const validatedChannels: ChannelUpdate[] = [];
+	      const filteredChannels: FilteredChannel[] = [];
+	      let totalWarnings = 0;
 
       // console.log('🔍 CHANNEL VALIDATION ANALYSIS:');
       
-      processed.forEach((channelData: any, i: number) => {
-        const validation = validateChannelData(channelData);
-        
-        if (validation.isValid && channelData.online) {
-          validatedChannels.push(channelData);
-          // console.log(`✅ Channel ${i}: VALID and ONLINE`);
-        } else if (!validation.isValid) {
-          filteredChannels.push({ channel: i, data: channelData, warnings: validation.warnings });
-          totalWarnings += validation.warnings.length;
+	      processed.forEach((channelData, i: number) => {
+	        const validation = validateChannelData(channelData);
+	        
+	        if (validation.isValid && Boolean(channelData.online)) {
+	          validatedChannels.push(channelData);
+	          // console.log(`✅ Channel ${i}: VALID and ONLINE`);
+	        } else if (!validation.isValid) {
+	          filteredChannels.push({ channel: i, data: channelData, warnings: validation.warnings });
+	          totalWarnings += validation.warnings.length;
           
           console.log(`❌ Channel ${i}: FILTERED (${validation.warnings.length} issues)`);
           validation.warnings.forEach(warning => {
             console.log(`   ⚠️  ${warning}`);
-          });
-          
-          // Show the problematic raw data for this channel
-          if (decoded.data.channels && decoded.data.channels[i]) {
-            const rawCh = decoded.data.channels[i];
-            console.log(`   📊 Raw channel data:`, {
-              num: rawCh.num,
-              online: rawCh.online,
-              type: rawCh.type,
+	          });
+	          
+	          // Show the problematic raw data for this channel
+	          if (isSynthesizePacket(decoded) && decoded.data.channels[i]) {
+	            const rawCh = decoded.data.channels[i];
+	            console.log(`   📊 Raw channel data:`, {
+	              num: rawCh.num,
+	              online: rawCh.online,
+	              type: rawCh.type,
               outVoltageRaw: rawCh.outVoltageRaw,
               outCurrentRaw: rawCh.outCurrentRaw,
               tempRaw: rawCh.tempRaw,
@@ -148,25 +155,28 @@ export function createChannelStore() {
       const validOnlineCount = validatedChannels.length;
       
       // Only show debug output if there are filtered channels
-      if (filteredChannels.length > 0) {
+	      if (filteredChannels.length > 0) {
         console.log(`\n📊 VALIDATION SUMMARY:`);
         console.log(`   Valid online channels: ${validOnlineCount}`);
         console.log(`   Filtered channels: ${filteredChannels.length}`);
         console.log(`   Total warnings: ${totalWarnings}`);
         
-        console.log(`\n🚨 FILTERED CHANNEL BREAKDOWN:`);
-        filteredChannels.forEach((filtered: any) => {
-          console.log(`   Channel ${filtered.channel}: ${filtered.data.machineType}, ${filtered.data.voltage.toFixed(3)}V, ${filtered.data.current.toFixed(3)}A, ${filtered.data.temperature.toFixed(1)}°C`);
-          console.log(`     Issues: ${filtered.warnings.join(', ')}`);
-        });
-      }
-      
-      // Update store with all processed channels (including filtered ones as offline)
-      channels.update(chs => {
-        processed.forEach((data: any, i: number) => {
-          // If channel was filtered, mark it as offline regardless of original online status
-          const validation = validateChannelData(data);
-          const channelData = validation.isValid ? data : { ...data, online: false };
+	        console.log(`\n🚨 FILTERED CHANNEL BREAKDOWN:`);
+	        filteredChannels.forEach((filtered) => {
+	          const voltage = typeof filtered.data.voltage === 'number' ? filtered.data.voltage.toFixed(3) : 'NaN';
+	          const current = typeof filtered.data.current === 'number' ? filtered.data.current.toFixed(3) : 'NaN';
+	          const temperature = typeof filtered.data.temperature === 'number' ? filtered.data.temperature.toFixed(1) : 'NaN';
+	          console.log(`   Channel ${filtered.channel}: ${filtered.data.machineType}, ${voltage}V, ${current}A, ${temperature}°C`);
+	          console.log(`     Issues: ${filtered.warnings.join(', ')}`);
+	        });
+	      }
+	      
+	      // Update store with all processed channels (including filtered ones as offline)
+	      channels.update(chs => {
+	        processed.forEach((data, i: number) => {
+	          // If channel was filtered, mark it as offline regardless of original online status
+	          const validation = validateChannelData(data);
+	          const channelData = validation.isValid ? data : { ...data, online: false };
           
           chs[i] = { ...chs[i], ...channelData, waveformData: chs[i].waveformData };
         });
@@ -185,12 +195,12 @@ export function createChannelStore() {
     const decoded = decodePacket(packet);
     if (!decoded) return;
 
-    const processed = processWavePacket(decoded);
-    
-    if (processed && processed.points.length > 0) {
-      channels.update(chs => {
-        const ch = chs[processed.channel];
-        if (ch && ch.recording) {
+	    const processed = processWavePacket(decoded);
+	    
+	    if (processed && processed.points.length > 0 && isWavePacket(decoded)) {
+	      channels.update(chs => {
+	        const ch = chs[processed.channel];
+	        if (ch && ch.recording) {
           // Initialize running time if this is the first data for this channel
           if (!ch.runningTimeUs) {
             ch.runningTimeUs = 0;
@@ -201,13 +211,13 @@ export function createChannelStore() {
           const packetLength = packet.length;
           const samplesPerGroup = packetLength === 126 ? 2 : 4;
           
-          // Process each group's worth of points
-          let currentPointIndex = 0;
-          const wave = decoded.data;
-          
-          wave.groups.forEach((group: any) => {
-            // Convert timestamp from 0.1µs (100ns) ticks to microseconds
-            const groupElapsedTimeUs = group.timestamp / 10;
+	          // Process each group's worth of points
+	          let currentPointIndex = 0;
+	          const wave = decoded.data;
+	          
+	          wave.groups.forEach((group) => {
+	            // Convert timestamp from 0.1µs (100ns) ticks to microseconds
+	            const groupElapsedTimeUs = group.timestamp / 10;
             
             // Time per sample in this group
             const timePerSampleUs = groupElapsedTimeUs / samplesPerGroup;
@@ -237,16 +247,16 @@ export function createChannelStore() {
         return chs;
       });
       
-      // Also update timeseries store with proper timestamps
-      if (get(channels)[processed.channel]?.recording) {
-        const ch = get(channels)[processed.channel];
-        const recentPoints = ch.waveformData ? ch.waveformData.slice(-processed.points.length) : [];
-        
-        const timeseriesPoints = recentPoints.map((point: any) => ({
-          channel: processed.channel,
-          timestamp: point.timestamp,
-          data: {
-            voltage: point.voltage,
+	      // Also update timeseries store with proper timestamps
+	      if (get(channels)[processed.channel]?.recording) {
+	        const ch = get(channels)[processed.channel];
+	        const recentPoints: WaveformPoint[] = ch.waveformData ? ch.waveformData.slice(-processed.points.length) : [];
+	        
+	        const timeseriesPoints: TimeSeriesPoint[] = recentPoints.map((point) => ({
+	          channel: processed.channel,
+	          timestamp: point.timestamp,
+	          data: {
+	            voltage: point.voltage,
             current: point.current
           }
         }));

@@ -40,11 +40,11 @@ interface Navigator {
   serial?: Serial;
 }
 
-interface ReadableStreamDefaultReader<R = any> {
+interface ReadableStreamDefaultReader<R = unknown> {
   read(): Promise<ReadableStreamDefaultReadResult<R>>;
   releaseLock(): void;
   readonly closed: Promise<void>;
-  cancel(reason?: any): Promise<void>;
+  cancel(reason?: unknown): Promise<void>;
 }
 
 interface ReadableStreamDefaultReadResult<T> {
@@ -52,10 +52,10 @@ interface ReadableStreamDefaultReadResult<T> {
   value: T;
 }
 
-interface WritableStreamDefaultWriter<W = any> {
+interface WritableStreamDefaultWriter<W = unknown> {
   write(chunk: W): Promise<void>;
   close(): Promise<void>;
-  abort(reason?: any): Promise<void>;
+  abort(reason?: unknown): Promise<void>;
   releaseLock(): void;
   readonly closed: Promise<void>;
   readonly desiredSize: number | null;

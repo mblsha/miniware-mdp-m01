@@ -30,8 +30,8 @@ export interface WaveformPoint {
 
 export interface SerialConfig {
   baudRate: number;
-  dataBits: number;
-  stopBits: number;
+  dataBits: 7 | 8;
+  stopBits: 1 | 2;
   parity: 'none' | 'even' | 'odd';
   flowControl: 'none' | 'hardware';
 }
@@ -68,9 +68,9 @@ export enum PackType {
 export interface Packet {
   packType: number;
   size: number;
-  channel: number;
-  checksum: number;
-  data: any;
+  channel?: number;
+  checksum?: number;
+  data: unknown;
 }
 
 export interface SparklineDataPoint {

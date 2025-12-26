@@ -1,6 +1,8 @@
 // Debug logging utility with conditional logging and human-readable packet names
 import { writable } from 'svelte/store';
 import { getMachineTypeString } from './machine-utils';
+import type { DecodedPacket } from './packet-decoder';
+import type { AddressData, AddressEntry, MachineData, SynthesizeChannel, SynthesizeData, WaveData } from './types/kaitai';
 
 // Debug logging enabled state
 export const debugEnabled = writable(true); // Default enabled
@@ -47,7 +49,7 @@ debugEnabled.subscribe(value => {
 
 type ConsoleLevel = 'log' | 'warn' | 'error';
 
-function logWithLevel(level: ConsoleLevel, category: string, message: string, args: any[]): void {
+function logWithLevel(level: ConsoleLevel, category: string, message: string, args: unknown[]): void {
   if (!currentDebugState) {
     return;
   }
@@ -56,15 +58,15 @@ function logWithLevel(level: ConsoleLevel, category: string, message: string, ar
   console[level](prefix + message, ...args);
 }
 
-export function debugLog(category: string, message: string, ...args: any[]): void {
+export function debugLog(category: string, message: string, ...args: unknown[]): void {
   logWithLevel('log', category, message, args);
 }
 
-export function debugWarn(category: string, message: string, ...args: any[]): void {
+export function debugWarn(category: string, message: string, ...args: unknown[]): void {
   logWithLevel('warn', category, message, args);
 }
 
-export function debugError(category: string, message: string, ...args: any[]): void {
+export function debugError(category: string, message: string, ...args: unknown[]): void {
   logWithLevel('error', category, message, args);
 }
 
@@ -86,7 +88,7 @@ function getLogPrefix(category: string): string {
 }
 
 // Enhanced packet data logging
-export function logPacketData(category: string, packet: number[] | Uint8Array, decoded: any = null): void {
+export function logPacketData(category: string, packet: number[] | Uint8Array, decoded: DecodedPacket | null = null): void {
   if (!currentDebugState) return;
   
   if (!packet || packet.length < 3) {
@@ -108,26 +110,68 @@ export function logPacketData(category: string, packet: number[] | Uint8Array, d
 }
 
 // Log detailed Kaitai decoded data
-export function logDecodedKaitaiData(category: string, decoded: any): void {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isSynthesizeData(data: unknown): data is SynthesizeData {
+  return isRecord(data) && Array.isArray(data.channels);
+}
+
+function isWaveData(data: unknown): data is WaveData {
+  return isRecord(data) && typeof data.channel === 'number' && Array.isArray(data.groups);
+}
+
+function isAddressData(data: unknown): data is AddressData {
+  return isRecord(data) && Array.isArray(data.addresses);
+}
+
+function isMachineData(data: unknown): data is MachineData {
+  return isRecord(data) && typeof data.machineTypeRaw === 'number';
+}
+
+function getDataObjectTypeName(data: unknown): string {
+  if (!isRecord(data)) return 'Unknown';
+  const ctor = (data as { constructor?: { name?: string } }).constructor;
+  return ctor?.name || 'Unknown';
+}
+
+export function logDecodedKaitaiData(category: string, decoded: DecodedPacket): void {
   if (!currentDebugState) return;
   
   debugLog(category, '  📋 DECODED KAITAI DATA:');
   debugLog(category, `    Pack Type: ${getPacketTypeDisplay(decoded.packType)}`);
-  debugLog(category, `    Data Object Type: ${decoded.data?.constructor?.name || 'Unknown'}`);
+  debugLog(category, `    Data Object Type: ${getDataObjectTypeName(decoded.data)}`);
   
   if (decoded.data) {
     switch (decoded.packType) {
       case 17: // SYNTHESIZE
-        logSynthesizeData(category, decoded.data);
+        if (isSynthesizeData(decoded.data)) {
+          logSynthesizeData(category, decoded.data);
+        } else {
+          debugLog(category, `    Data: ${JSON.stringify(decoded.data, null, 2)}`);
+        }
         break;
       case 18: // WAVE  
-        logWaveData(category, decoded.data);
+        if (isWaveData(decoded.data)) {
+          logWaveData(category, decoded.data);
+        } else {
+          debugLog(category, `    Data: ${JSON.stringify(decoded.data, null, 2)}`);
+        }
         break;
       case 19: // ADDR
-        logAddrData(category, decoded.data);
+        if (isAddressData(decoded.data)) {
+          logAddrData(category, decoded.data);
+        } else {
+          debugLog(category, `    Data: ${JSON.stringify(decoded.data, null, 2)}`);
+        }
         break;
       case 21: // MACHINE
-        logMachineData(category, decoded.data);
+        if (isMachineData(decoded.data)) {
+          logMachineData(category, decoded.data);
+        } else {
+          debugLog(category, `    Data: ${JSON.stringify(decoded.data, null, 2)}`);
+        }
         break;
       default:
         debugLog(category, `    Data: ${JSON.stringify(decoded.data, null, 2)}`);
@@ -135,31 +179,29 @@ export function logDecodedKaitaiData(category: string, decoded: any): void {
   }
 }
 
-function logSynthesizeData(category: string, data: any): void {
+function logSynthesizeData(category: string, data: SynthesizeData): void {
   debugLog(category, `    📡 SYNTHESIZE DATA:`);
-  debugLog(category, `      Channels available: ${data.channels?.length || 0}`);
+  debugLog(category, `      Channels available: ${data.channels.length || 0}`);
   
-  if (data.channels) {
-    data.channels.forEach((ch: any, i: number) => {
-      if (ch.online) {
-        debugLog(category, `      🟢 Channel ${i}: ONLINE`);
-        debugLog(category, `        🔋 Voltage: ${ch.outVoltage}V, Current: ${ch.outCurrent}A`);
-        debugLog(category, `        🌡️ Temperature: ${ch.temperature}°C`);
-        debugLog(category, `        ⚡ Output: ${ch.outputOn ? 'ON' : 'OFF'}`);
-        debugLog(category, `        🏭 Machine Type: ${ch.type} (${getMachineTypeString(ch.type)})`);
-      } else {
-        debugLog(category, `      ⚫ Channel ${i}: OFFLINE`);
-      }
-    });
-  }
+  data.channels.forEach((ch: SynthesizeChannel, i: number) => {
+    if (ch.online) {
+      debugLog(category, `      🟢 Channel ${i}: ONLINE`);
+      debugLog(category, `        🔋 Voltage: ${ch.outVoltage}V, Current: ${ch.outCurrent}A`);
+      debugLog(category, `        🌡️ Temperature: ${ch.temperature}°C`);
+      debugLog(category, `        ⚡ Output: ${ch.outputOn ? 'ON' : 'OFF'}`);
+      debugLog(category, `        🏭 Machine Type: ${ch.type} (${getMachineTypeString(ch.type)})`);
+    } else {
+      debugLog(category, `      ⚫ Channel ${i}: OFFLINE`);
+    }
+  });
 }
 
-function logWaveData(category: string, data: any): void {
+function logWaveData(category: string, data: WaveData): void {
   debugLog(category, `    📊 WAVE DATA:`);
   debugLog(category, `      Channel: ${data.channel}`);
-  debugLog(category, `      Groups: ${data.groups?.length || 0}`);
+  debugLog(category, `      Groups: ${data.groups.length || 0}`);
   
-  if (data.groups && data.groups.length > 0) {
+  if (data.groups.length > 0) {
     const firstGroup = data.groups[0];
     debugLog(category, `      First Group - Timestamp: ${firstGroup.timestamp}, Points: ${firstGroup.items?.length || 0}`);
     if (firstGroup.items && firstGroup.items.length > 0) {
@@ -169,18 +211,25 @@ function logWaveData(category: string, data: any): void {
   }
 }
 
-function logAddrData(category: string, data: any): void {
-  debugLog(category, `    📍 ADDRESS DATA:`);
-  if (data.addresses) {
-    data.addresses.forEach((addr: any, i: number) => {
-      const addressBytes = Array.from(addr.address as number[]).map((b: number) => b.toString(16).padStart(2, '0')).join(':');
-      const frequency = 2400 + addr.frequencyOffset;
-      debugLog(category, `      Channel ${i}: ${addressBytes} @ ${frequency}MHz`);
-    });
-  }
+function formatAddressBytes(entry: AddressEntry): number[] {
+  if ('address' in entry) return Array.from(entry.address);
+  return [entry.addrByte4, entry.addrByte3, entry.addrByte2, entry.addrByte1, entry.addrByte0];
 }
 
-function logMachineData(category: string, data: any): void {
+function logAddrData(category: string, data: AddressData): void {
+  debugLog(category, `    📍 ADDRESS DATA:`);
+  data.addresses.forEach((addr, i: number) => {
+    const addressBytes = formatAddressBytes(addr).map((b: number) => b.toString(16).padStart(2, '0')).join(':');
+    const frequency = 2400 + addr.frequencyOffset;
+    debugLog(category, `      Channel ${i}: ${addressBytes} @ ${frequency}MHz`);
+  });
+}
+
+function logMachineData(category: string, data: MachineData): void {
   debugLog(category, `    🏭 MACHINE DATA:`);
-  debugLog(category, `      Type: ${data.type} (${getMachineTypeString(data.type)})`);
+  debugLog(category, `      machineTypeRaw: ${data.machineTypeRaw}`);
+  debugLog(category, `      hasLcd: ${data.hasLcd ?? (data.machineTypeRaw === 0x10)}`);
+  if (data.machineName) {
+    debugLog(category, `      name: ${data.machineName}`);
+  }
 }
