@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-misused-new */
 // Type definitions for Kaitai Struct parser
 
 declare module 'kaitai-struct/KaitaiStream' {
@@ -20,16 +19,22 @@ declare module 'kaitai-struct/KaitaiStream' {
 
 // MiniwareMdpM01 parser types
 export interface MiniwareMdpM01 {
-  new (io: any): MiniwareMdpM01;
   packets: MiniwareMdpM01Packet[];
 }
 
-export interface MiniwareMdpM01Packet {
+export interface MiniwareMdpM01Constructor {
+  // Kaitai classes accept a stream-like object; keep loose here to avoid
+  // depending on a specific KaitaiStream module format (UMD/ESM).
+  new (io: unknown): MiniwareMdpM01;
+}
+
+export interface MiniwareMdpM01Packet<TData = unknown> {
   packType: number;
   size: number;
-  channel: number;
-  checksum: number;
-  data: any;
+  // These exist in some mocks/test parsers but not in the generated Kaitai JS.
+  channel?: number;
+  checksum?: number;
+  data: TData;
 }
 
 export interface SynthesizeData {
@@ -50,7 +55,7 @@ export interface SynthesizeChannel {
   online: number;
   type: number;
   lock: number;
-  statusLoad: number;
+  statusLoad?: number;
   statusPsu?: number;
   outputOn: number;
   color: Uint8Array;
@@ -68,6 +73,7 @@ export interface SynthesizeChannel {
 export interface WaveData {
   groups: WaveGroup[];
   channel: number;
+  dummy?: number;
 }
 
 export interface WaveGroup {
@@ -83,52 +89,93 @@ export interface WaveItem {
 }
 
 export interface AddressData {
+  channel?: number;
+  dummy?: number;
   addresses: AddressEntry[];
 }
 
-export interface AddressEntry {
+export type AddressEntry = AddressEntryBytes | AddressEntryFields;
+
+export interface AddressEntryBytes {
   address: Uint8Array;
   frequencyOffset: number;
-  frequency: number;
-  isEmpty: boolean;
+  frequency?: number;
+  isEmpty?: boolean;
+}
+
+export interface AddressEntryFields {
+  addrByte0: number;
+  addrByte1: number;
+  addrByte2: number;
+  addrByte3: number;
+  addrByte4: number;
+  frequencyOffset: number;
+  frequency?: number;
+  isEmpty?: boolean;
 }
 
 export interface MachineData {
   channel: number;
   dummy: number;
   machineTypeRaw: number;
+  hasLcd?: boolean;
+  machineName?: string;
 }
 
 export interface UpdateChannelData {
+  channel: number;
+  dummy: number;
   targetChannel: number;
 }
 
 export interface SetIsOutputData {
-  isOutputRaw: number;
+  channel: number;
+  dummy: number;
+  outputState: number;
   isOutputOn: boolean;
 }
 
 export interface SetVData {
+  channel: number;
+  dummy: number;
+  voltageRaw: number;
+  currentRaw: number;
   voltage: number;
   current: number;
 }
 
 export interface SetIData {
+  channel: number;
+  dummy: number;
+  voltageRaw: number;
+  currentRaw: number;
   voltage: number;
   current: number;
 }
 
 export interface SetAddrData {
-  address: Uint8Array;
+  channel: number;
+  dummy: number;
+  addrByte0: number;
+  addrByte1: number;
+  addrByte2: number;
+  addrByte3: number;
+  addrByte4: number;
   frequencyOffset: number;
+  frequency?: number;
+  isEmpty?: boolean;
 }
 
 export interface SetAllAddrData {
+  channel: number;
+  dummy: number;
   addresses: AddressEntry[];
 }
 
 export interface RgbData {
-  rgbRaw: number;
+  channel: number;
+  dummy: number;
+  rgbState: number;
   isRgbOn: boolean;
 }
 

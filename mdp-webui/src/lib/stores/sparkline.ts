@@ -100,7 +100,7 @@ export function createSparklineStore() {
   // Subscribe to channel updates to automatically populate sparkline data
   function subscribeToChannelUpdates(): () => void {
     return channelStore.channels.subscribe($channels => {
-      $channels.forEach((channel: any, index: number) => {
+      $channels.forEach((channel, index: number) => {
         if (channel.online) {
           const now = Date.now();
           

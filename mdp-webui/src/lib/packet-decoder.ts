@@ -3,8 +3,10 @@ import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDis
 import { getMachineTypeString } from './machine-utils';
 import { get } from 'svelte/store';
 import type { DeviceInfo } from './serial.js';
+import type { Channel, WaveformPoint } from './types';
+import type { AddressData, AddressEntry, MachineData, SynthesizeChannel, SynthesizeData, WaveData } from './types/kaitai';
 
-export const PackType = MiniwareMdpM01?.PackType || {
+export const PackType = {
   SYNTHESIZE: 0x11,
   WAVE: 0x12,
   ADDR: 0x13,
@@ -12,9 +14,71 @@ export const PackType = MiniwareMdpM01?.PackType || {
   MACHINE: 0x15,
   SET_ISOUTPUT: 0x16,
   ERR_240: 0x23
+} as const;
+
+type PacketBase<TData> = {
+  packType: number;
+  size: number;
+  data: TData;
+  channel?: number;
+  checksum?: number;
 };
 
-export function decodePacket(data: Uint8Array | number[] | null): any {
+export type DecodedPacket = PacketBase<unknown>;
+export type SynthesizePacket = PacketBase<SynthesizeData> & { packType: typeof PackType.SYNTHESIZE };
+export type WavePacket = PacketBase<WaveData> & { packType: typeof PackType.WAVE };
+export type AddressPacket = PacketBase<AddressData> & { packType: typeof PackType.ADDR };
+export type MachinePacket = PacketBase<MachineData> & { packType: typeof PackType.MACHINE };
+
+export type ChannelUpdate = Partial<Channel> & Pick<Channel, 'channel'>;
+
+function isPacketBase(value: unknown): value is DecodedPacket {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.packType === 'number' && typeof record.size === 'number' && 'data' in record;
+}
+
+function isSynthesizeData(data: unknown): data is SynthesizeData {
+  if (typeof data !== 'object' || data === null) return false;
+  const record = data as Record<string, unknown>;
+  return Array.isArray(record.channels);
+}
+
+function isWaveData(data: unknown): data is WaveData {
+  if (typeof data !== 'object' || data === null) return false;
+  const record = data as Record<string, unknown>;
+  return typeof record.channel === 'number' && Array.isArray(record.groups);
+}
+
+function isAddressData(data: unknown): data is AddressData {
+  if (typeof data !== 'object' || data === null) return false;
+  const record = data as Record<string, unknown>;
+  return Array.isArray(record.addresses);
+}
+
+function isMachineData(data: unknown): data is MachineData {
+  if (typeof data !== 'object' || data === null) return false;
+  const record = data as Record<string, unknown>;
+  return typeof record.machineTypeRaw === 'number';
+}
+
+export function isSynthesizePacket(packet: DecodedPacket): packet is SynthesizePacket {
+  return packet.packType === PackType.SYNTHESIZE && isSynthesizeData(packet.data);
+}
+
+export function isWavePacket(packet: DecodedPacket): packet is WavePacket {
+  return packet.packType === PackType.WAVE && isWaveData(packet.data);
+}
+
+export function isAddressPacket(packet: DecodedPacket): packet is AddressPacket {
+  return packet.packType === PackType.ADDR && isAddressData(packet.data);
+}
+
+export function isMachinePacket(packet: DecodedPacket): packet is MachinePacket {
+  return packet.packType === PackType.MACHINE && isMachineData(packet.data);
+}
+
+export function decodePacket(data: Uint8Array | number[] | null): DecodedPacket | null {
   const currentDebugState = get(debugEnabled);
   
   if (currentDebugState) {
@@ -77,7 +141,11 @@ export function decodePacket(data: Uint8Array | number[] | null): any {
     
     // The parser creates a packets array, get the first (and only) packet
     if (parsed.packets && parsed.packets.length > 0) {
-      const packet = parsed.packets[0];
+      const packet = parsed.packets[0] as unknown;
+      if (!isPacketBase(packet)) {
+        debugError('kaitai', '  ❌ Parsed packet has unexpected shape');
+        return null;
+      }
       
       if (currentDebugState) {
         console.log('✅ decodePacket SUCCESS for packet type:', getPacketTypeDisplay(packet.packType));
@@ -87,7 +155,7 @@ export function decodePacket(data: Uint8Array | number[] | null): any {
       
       debugLog('kaitai', `✅ Got packet from Kaitai`);
       debugLog('kaitai', `  Pack type: ${getPacketTypeDisplay(packet.packType)}`);
-      debugLog('kaitai', `  Data object type: ${packet.data?.constructor?.name || 'Unknown'}`);
+      debugLog('kaitai', `  Data object type: ${(typeof packet.data === 'object' && packet.data !== null) ? (packet.data as { constructor?: { name?: string } }).constructor?.name : 'Unknown'}`);
       
       // Log detailed decoded data
       logDecodedKaitaiData('kaitai', packet);
@@ -112,22 +180,15 @@ export function decodePacket(data: Uint8Array | number[] | null): any {
   }
 }
 
-export function processSynthesizePacket(packet: any): any {
+export function processSynthesizePacket(packet: DecodedPacket | null): ChannelUpdate[] | null {
   debugLog('synthesize', 'PROCESS SYNTHESIZE PACKET START');
   debugLog('synthesize', '  Packet:', packet);
   debugLog('synthesize', '  Packet type check:', packet ? packet.packType : 'no packet');
   debugLog('synthesize', '  Expected type (PackType.SYNTHESIZE):', PackType.SYNTHESIZE);
   debugLog('synthesize', '  PackType object:', PackType);
   
-  if (!packet || !packet.data) {
+  if (!packet || !isSynthesizePacket(packet)) {
     debugError('synthesize', '  ❌ No packet or no data');
-    return null;
-  }
-  
-  if (packet.packType !== PackType.SYNTHESIZE) {
-    debugError('synthesize', '  ❌ Wrong packet type. Got:', packet.packType, 'Expected:', PackType.SYNTHESIZE);
-    debugLog('synthesize', '  PackType === 17?', PackType.SYNTHESIZE === 17);
-    debugLog('synthesize', '  packet.packType === 17?', packet.packType === 17);
     return null;
   }
   
@@ -136,12 +197,12 @@ export function processSynthesizePacket(packet: any): any {
   debugLog('synthesize', '  Channels array:', synthesize.channels);
   debugLog('synthesize', '  Channels length:', synthesize.channels ? synthesize.channels.length : 'no channels');
   
-  const channels = [];
+  const channels: ChannelUpdate[] = [];
   
   for (let i = 0; i < 6; i++) {
     debugLog('synthesize', `  🔍 Processing channel ${i}:`);
     
-    if (!synthesize.channels || !synthesize.channels[i]) {
+    if (!synthesize.channels[i]) {
       debugWarn('synthesize', `    ❌ No data for channel ${i}`);
       channels.push({
         channel: i,
@@ -167,7 +228,7 @@ export function processSynthesizePacket(packet: any): any {
     debugLog('synthesize', `    OutputOn:`, ch.outputOn);
     debugLog('synthesize', `    Type:`, ch.type);
     
-    const channelData = {
+    const channelData: ChannelUpdate = {
       channel: i,
       online: ch.online !== 0,
       machineType: getMachineTypeString(ch.type),
@@ -197,14 +258,14 @@ export function processSynthesizePacket(packet: any): any {
   return channels;
 }
 
-export function processWavePacket(packet: any): any {
-  if (!packet || !packet.data || packet.packType !== PackType.WAVE) return null;
+export function processWavePacket(packet: DecodedPacket | null): { channel: number; points: WaveformPoint[] } | null {
+  if (!packet || !isWavePacket(packet)) return null;
   
   const wave = packet.data;
-  const points: Array<{timestamp: number, voltage: number, current: number}> = [];
+  const points: WaveformPoint[] = [];
   
-  wave.groups.forEach((group: any) => {
-    group.items.forEach((item: any) => {
+  wave.groups.forEach((group) => {
+    group.items.forEach((item) => {
       points.push({
         timestamp: group.timestamp, // All items in a group share the same timestamp
         voltage: item.voltage, // Kaitai already converts to V
@@ -214,44 +275,50 @@ export function processWavePacket(packet: any): any {
   });
   
   return {
-    channel: packet.data.channel,
+    channel: wave.channel,
     points
   };
 }
 
-export function processAddressPacket(packet: any): any {
-  if (!packet || !packet.data || packet.packType !== PackType.ADDR) return null;
+export type ProcessedAddress = { channel: number; address: number[]; frequency: number };
+
+function getAddressBytes(entry: AddressEntry | undefined): number[] {
+  if (!entry) return [0, 0, 0, 0, 0];
+  if ('address' in entry) return Array.from(entry.address);
+  // For ADDR packets, the schema reads bytes into addrByte4..0 in order.
+  return [entry.addrByte4, entry.addrByte3, entry.addrByte2, entry.addrByte1, entry.addrByte0];
+}
+
+export function processAddressPacket(packet: DecodedPacket | null): ProcessedAddress[] | null {
+  if (!packet || !isAddressPacket(packet)) return null;
   
   const addr = packet.data;
-  const addresses = [];
+  const addresses: ProcessedAddress[] = [];
   
   for (let i = 0; i < 6; i++) {
     const ch = addr.addresses[i];
     addresses.push({
       channel: i,
-      address: Array.from(ch.address), // Keep as is for tests
-      frequency: 2400 + ch.frequencyOffset // MHz
+      address: getAddressBytes(ch), // Keep as is for tests
+      frequency: 2400 + (ch?.frequencyOffset ?? 0) // MHz
     });
   }
   
   return addresses;
 }
 
-export function processMachinePacket(packet: any): DeviceInfo | null {
-  if (!packet || !packet.data || packet.packType !== PackType.MACHINE) return null;
+export function processMachinePacket(packet: DecodedPacket | null): DeviceInfo | null {
+  if (!packet || !isMachinePacket(packet)) return null;
   
   const machine = packet.data;
   
-  // Use machineTypeRaw if available, otherwise fall back to deviceType
-  const machineTypeValue = machine.machineTypeRaw || machine.deviceType;
-  
-  const type = machineTypeValue === 0x10 ? 'M01' : 'M02';
-  const hasLCD = machineTypeValue === 0x10;
+  const type = machine.machineTypeRaw === 0x10 ? 'M01' : 'M02';
+  const hasLCD = machine.hasLcd ?? (machine.machineTypeRaw === 0x10);
   return { type, hasLCD } satisfies DeviceInfo;
 }
 
 
-function getOperatingMode(channel: any): string {
+function getOperatingMode(channel: SynthesizeChannel): string {
   if (channel.type === 3) { // L1060
     switch(channel.statusLoad) {
       case 0: return 'CC';

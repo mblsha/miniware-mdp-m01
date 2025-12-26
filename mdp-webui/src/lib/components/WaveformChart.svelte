@@ -41,13 +41,13 @@
       displayData = plotData.filter(d => d.timestamp >= startTime);
     }
     
-    const plotConfig: any = {
+    const plotConfig: Plot.PlotOptions = {
       width: containerWidth,
       height: 400,
       marginLeft: 60,
       marginRight: 60,
       title: "Voltage & Current vs Time",
-      grid: true,
+      grid: chartColors.grid,
       style: {
         color: chartColors.text,
         fontFamily: 'inherit',
@@ -56,18 +56,11 @@
       },
       x: {
         label: "Time (ms)",
-        nice: true,
-        labelColor: chartColors.text,
-        tickColor: chartColors.text,
-        gridColor: chartColors.grid
+        nice: true
       },
       y: {
         label: "Voltage (V)",
-        nice: true,
-        grid: true,
-        labelColor: chartColors.text,
-        tickColor: chartColors.text,
-        gridColor: chartColors.grid
+        nice: true
       },
       color: {
         legend: true,

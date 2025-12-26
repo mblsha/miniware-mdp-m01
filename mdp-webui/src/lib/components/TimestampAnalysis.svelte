@@ -3,7 +3,7 @@
   import { onDestroy, onMount } from 'svelte';
   
   import { serialConnection } from '../serial';
-  import { decodePacket } from '../packet-decoder';
+  import { decodePacket, isWavePacket } from '../packet-decoder';
   import { theme } from '$lib/stores/theme.js';
   import type { PacketHandler } from '$lib/types';
   
@@ -62,14 +62,14 @@
       if (!isRecording) return;
       
       const decoded = decodePacket(packet);
-      if (!decoded || !decoded.data) return;
+      if (!decoded || !isWavePacket(decoded)) return;
       
       const wave = decoded.data;
       if (wave.channel !== channel) return;
       
       // Extract timestamp data from groups
       let timestampSum = 0;
-      wave.groups.forEach((group: any, groupIndex: number) => {
+      wave.groups.forEach((group, groupIndex: number) => {
         packetData.push({
           packetIndex: packetIndex,
           groupIndex: groupIndex,
@@ -136,7 +136,7 @@
   function createPlot(containerWidth = 800): ReturnType<typeof Plot.plot> | null {
     if (packetData.length === 0) return null;
     
-    const plotConfig: any = {
+    const plotConfig: Plot.PlotOptions = {
       width: containerWidth,
       height: 300,
       marginLeft: 60,
@@ -144,7 +144,7 @@
       marginBottom: 40,
       title: "Timestamp Analysis",
       subtitle: "Device timestamps by packet index (Group 100 = sum, Group 200 = ms between packets)",
-      grid: true,
+      grid: chartColors.grid,
       style: {
         color: chartColors.text,
         fontFamily: 'inherit',
@@ -153,17 +153,11 @@
       },
       x: {
         label: "Packet Index",
-        nice: true,
-        labelColor: chartColors.text,
-        tickColor: chartColors.text,
-        gridColor: chartColors.grid
+        nice: true
       },
       y: {
         label: "Device Timestamp",
-        nice: true,
-        labelColor: chartColors.text,
-        tickColor: chartColors.text,
-        gridColor: chartColors.grid
+        nice: true
       },
       color: {
         type: "ordinal",

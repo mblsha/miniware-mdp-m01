@@ -1,5 +1,6 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
 import type { SerialConfig, PacketHandler } from './types';
+import { decodePacket, isSynthesizePacket, isWavePacket, type SynthesizePacket, type WavePacket } from './packet-decoder';
 /// <reference path="./types/web-serial.d.ts" />
 
 export const ConnectionStatus = {
@@ -84,7 +85,7 @@ export class SerialConnection {
           throw error;
         }
       }
-      await this.port.open(SERIAL_CONFIG as any);  // Cast needed due to strict typing
+      await this.port.open(SERIAL_CONFIG);
 
       this.reader = this.port.readable.getReader();
       this.writer = this.port.writable.getWriter();
@@ -287,18 +288,19 @@ export class SerialConnection {
     };
   }
 
-  getDecoder(): any {
-    // Return a decoder interface for backward compatibility with tests
+  getDecoder(): {
+    decodeSynthesize: (packet: number[] | Uint8Array) => SynthesizePacket | null;
+    decodeWave: (packet: number[] | Uint8Array) => WavePacket | null;
+  } {
+    // Decoder interface used by timeseries integration and tests.
     return {
-      decodeSynthesize: (packet: number[]) => {
-        // For tests, just return the packet as-is
-        // The actual implementation would decode the packet
-        return packet;
+      decodeSynthesize: (packet: number[] | Uint8Array) => {
+        const decoded = decodePacket(packet);
+        return decoded && isSynthesizePacket(decoded) ? decoded : null;
       },
-      decodeWave: (packet: number[]) => {
-        // For tests, just return the packet as-is
-        // The actual implementation would decode the packet
-        return packet;
+      decodeWave: (packet: number[] | Uint8Array) => {
+        const decoded = decodePacket(packet);
+        return decoded && isWavePacket(decoded) ? decoded : null;
       }
     };
   }

@@ -438,7 +438,7 @@ const activeSessionData = derived(activeSession, $session => {
   
   return Array.from($session.data.entries())
     .map(([timestamp, data]: [number, Record<string, ChannelData>]) => ({ timestamp, ...data }))
-    .sort((a: any, b: any) => a.timestamp - b.timestamp);
+    .sort((a, b) => a.timestamp - b.timestamp);
 });
 
 // Don't auto-start cleanup - let consumers decide

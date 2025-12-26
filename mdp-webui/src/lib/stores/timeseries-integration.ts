@@ -8,6 +8,33 @@ import { channelStore } from './channels.js';
 import { serialConnection } from '../serial.js';
 import { get } from 'svelte/store';
 
+type TimeSeriesPoint = Parameters<typeof timeseriesStore.addDataPoints>[0][number];
+type SynthesizeChannel = NonNullable<ReturnType<ReturnType<typeof serialConnection.getDecoder>['decodeSynthesize']>>['data']['channels'][number];
+
+function getOperatingMode(channel: SynthesizeChannel): string {
+  // L1060
+  if (channel.type === 3) {
+    switch (channel.statusLoad) {
+      case 0: return 'CC';
+      case 1: return 'CV';
+      case 2: return 'CR';
+      case 3: return 'CP';
+      default: return 'Normal';
+    }
+  }
+
+  // P906
+  if (channel.type === 2) {
+    switch (channel.statusPsu) {
+      case 1: return 'CC';
+      case 2: return 'CV';
+      default: return 'Normal';
+    }
+  }
+
+  return 'Normal';
+}
+
 /**
  * Initialize timeseries integration with packet handlers
  */
@@ -20,32 +47,31 @@ export function initializeTimeseriesIntegration() {
     // Process synthesize packet data
     const decoder = serialConnection.getDecoder();
     const parsedData = decoder.decodeSynthesize(packet);
+    if (!parsedData) return;
     
-    if (parsedData && parsedData.data && parsedData.data.channels) {
-      const timestamp = Date.now();
-      const points: Array<{channel: number, timestamp: number, data: any}> = [];
-      
-      parsedData.data.channels.forEach((channelData: any, index: number) => {
-        // Only record channels that are in the active session
-        if (activeSession.channels.has(index)) {
-          points.push({
-            channel: index,
-            timestamp,
-            data: {
-              voltage: channelData.outVoltage,
-              current: channelData.outCurrent,
-              temperature: channelData.temperature,
-              mode: channelData.statusLoad || channelData.statusPsu || 'Normal',
-              isOutput: channelData.outputOn !== 0
-            }
-          });
-        }
-      });
-      
-      // Add all points in batch for efficiency
-      if (points.length > 0) {
-        timeseriesStore.addDataPoints(points);
+    const timestamp = Date.now();
+    const points: TimeSeriesPoint[] = [];
+    
+    parsedData.data.channels.forEach((channelData, index: number) => {
+      // Only record channels that are in the active session
+      if (activeSession.channels.has(index)) {
+        points.push({
+          channel: index,
+          timestamp,
+          data: {
+            voltage: channelData.outVoltage,
+            current: channelData.outCurrent,
+            temperature: channelData.temperature,
+            mode: getOperatingMode(channelData),
+            isOutput: channelData.outputOn !== 0
+          }
+        });
       }
+    });
+    
+    // Add all points in batch for efficiency
+    if (points.length > 0) {
+      timeseriesStore.addDataPoints(points);
     }
   });
   
@@ -61,29 +87,26 @@ export function initializeTimeseriesIntegration() {
     // Process wave packet data
     const decoder = serialConnection.getDecoder();
     const parsedData = decoder.decodeWave(packet);
+    if (!parsedData) return;
     
-    if (parsedData && parsedData.data && parsedData.data.groups) {
-      const points: Array<{channel: number, timestamp: number, data: any}> = [];
-      
-      parsedData.data.groups.forEach((group: any) => {
-        if (group.items) {
-          group.items.forEach((item: any, index: number) => {
-            points.push({
-              channel,
-              timestamp: group.timestamp + index * 10, // 10ms between points
-              data: {
-                voltage: item.voltage,
-                current: item.current
-              }
-            });
-          });
-        }
+    const points: TimeSeriesPoint[] = [];
+    
+    parsedData.data.groups.forEach((group) => {
+      group.items.forEach((item, index: number) => {
+        points.push({
+          channel,
+          timestamp: group.timestamp + index * 10, // 10ms between points
+          data: {
+            voltage: item.voltage,
+            current: item.current
+          }
+        });
       });
-      
-      // Add all points in batch
-      if (points.length > 0) {
-        timeseriesStore.addDataPoints(points);
-      }
+    });
+    
+    // Add all points in batch
+    if (points.length > 0) {
+      timeseriesStore.addDataPoints(points);
     }
   });
 }
@@ -130,7 +153,7 @@ export function stopRecording() {
  * @param {Array<number>} channels - Channels to include (null for all)
  * @returns {string} CSV data
  */
-export function exportSessionToCSV(sessionId = null, channels = null) {
+export function exportSessionToCSV(sessionId: string | null = null, channels: number[] | null = null): string {
   const targetSessionId = sessionId || get(timeseriesStore.activeSession)?.id;
   if (!targetSessionId) return '';
   
@@ -231,7 +254,20 @@ export function getChartData(channel: number, duration: number = 10000): {timest
  * @param {string} sessionId - Session ID (null for active)
  * @returns {Object} Statistics object
  */
-export function getSessionStats(sessionId: string | null = null): any {
+type MetricStats = { min: number; max: number; avg: number };
+type ChannelStats = { voltage: MetricStats; current: MetricStats; power: MetricStats; sampleCount: number };
+type SessionStats = {
+  sessionId: string;
+  startTime: number;
+  endTime: number | null;
+  duration: number;
+  channels: number[];
+  pointCount: number;
+  sampleRate: number | null;
+  channelStats: Record<number, ChannelStats>;
+};
+
+export function getSessionStats(sessionId: string | null = null): SessionStats | null {
   const targetSessionId = sessionId || get(timeseriesStore.activeSession)?.id;
   if (!targetSessionId) return null;
   
@@ -239,7 +275,7 @@ export function getSessionStats(sessionId: string | null = null): any {
   const session = sessions.find(s => s.id === targetSessionId);
   if (!session) return null;
   
-  const stats = {
+  const stats: SessionStats = {
     sessionId: session.id,
     startTime: session.startTime,
     endTime: session.endTime,
@@ -260,7 +296,7 @@ export function getSessionStats(sessionId: string | null = null): any {
   
   // Initialize channel stats
   stats.channels.forEach((ch: number) => {
-    (stats.channelStats as any)[ch] = {
+    stats.channelStats[ch] = {
       voltage: { min: Infinity, max: -Infinity, avg: 0 },
       current: { min: Infinity, max: -Infinity, avg: 0 },
       power: { min: Infinity, max: -Infinity, avg: 0 },
@@ -271,9 +307,9 @@ export function getSessionStats(sessionId: string | null = null): any {
   // Calculate statistics
   data.forEach(point => {
     stats.channels.forEach((ch: number) => {
-      const chData = (point.data as any)[`ch${ch}`];
+      const chData = point.data[`ch${ch}`];
       if (chData) {
-        const chStats = (stats.channelStats as any)[ch];
+        const chStats = stats.channelStats[ch];
         
         // Voltage stats
         if (chData.voltage !== undefined) {
@@ -303,7 +339,7 @@ export function getSessionStats(sessionId: string | null = null): any {
   
   // Calculate averages
   stats.channels.forEach((ch: number) => {
-    const chStats = (stats.channelStats as any)[ch];
+    const chStats = stats.channelStats[ch];
     if (chStats.sampleCount > 0) {
       chStats.voltage.avg /= chStats.sampleCount;
       chStats.current.avg /= chStats.sampleCount;
