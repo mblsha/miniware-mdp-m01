@@ -1,25 +1,43 @@
-<script>
-  // @ts-nocheck
+<script lang="ts">
   import * as Plot from '@observablehq/plot';
-  import * as d3 from 'd3';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   
   import { serialConnection } from '../serial';
   import { decodePacket } from '../packet-decoder';
   import { theme } from '$lib/stores/theme.js';
+  import type { PacketHandler } from '$lib/types';
   
   export let channel = 0;
   export let isRecording = false;
   
-  let chartContainer;
-  let resizeObserver;
-  let packetData = [];
+  type PacketDataPoint = {
+    packetIndex: number;
+    groupIndex: number;
+    timestamp: number;
+    itemCount: number;
+  };
+
+  let chartContainer: HTMLDivElement | null = null;
+  let resizeObserver: ResizeObserver | null = null;
+  let packetData: PacketDataPoint[] = [];
   let packetIndex = 0;
   let currentTheme;
-  let lastWavePacketTime = null; // Track time of last wave packet
+  let lastWavePacketTime: number | null = null; // Track time of last wave packet
   
   // Store packet handlers
-  let waveHandler;
+  let unregisterWaveHandler: (() => void) | null = null;
+  const CATEGORY10 = [
+    '#1f77b4',
+    '#ff7f0e',
+    '#2ca02c',
+    '#d62728',
+    '#9467bd',
+    '#8c564b',
+    '#e377c2',
+    '#7f7f7f',
+    '#bcbd22',
+    '#17becf'
+  ] as const;
   
   // Subscribe to theme changes
   $: currentTheme = $theme;
@@ -31,17 +49,16 @@
     background: currentTheme === 'dark' ? '#242424' : '#ffffff'
   };
   
-  // Initialize packet tracking when component mounts
-  $: if (typeof window !== 'undefined') {
+  onMount(() => {
     setupPacketHandlers();
-  }
+  });
   
   function setupPacketHandlers() {
     // Clean up old handlers
-    cleanupHandlers();
+    unregisterWaveHandler?.();
     
     // Create new handlers
-    waveHandler = (packet) => {
+    const waveHandler: PacketHandler = (packet) => {
       if (!isRecording) return;
       
       const decoded = decodePacket(packet);
@@ -52,7 +69,7 @@
       
       // Extract timestamp data from groups
       let timestampSum = 0;
-      wave.groups.forEach((group, groupIndex) => {
+      wave.groups.forEach((group: any, groupIndex: number) => {
         packetData.push({
           packetIndex: packetIndex,
           groupIndex: groupIndex,
@@ -106,12 +123,7 @@
     };
     
     // Register handlers
-    serialConnection.registerPacketHandler(0x12, waveHandler); // WAVE
-  }
-  
-  function cleanupHandlers() {
-    // Note: We need a way to unregister handlers - this is a limitation
-    // For now, handlers will check isRecording flag
+    unregisterWaveHandler = serialConnection.registerPacketHandler(0x12, waveHandler); // WAVE
   }
   
   // Clear data when recording starts
@@ -121,10 +133,10 @@
     lastWavePacketTime = null; // Reset timing
   }
   
-  function createPlot(containerWidth = 800) {
+  function createPlot(containerWidth = 800): ReturnType<typeof Plot.plot> | null {
     if (packetData.length === 0) return null;
     
-    return Plot.plot({
+    const plotConfig: any = {
       width: containerWidth,
       height: 300,
       marginLeft: 60,
@@ -158,11 +170,11 @@
         label: "Group",
         legend: true,
         domain: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 200],
-        range: [...d3.schemeCategory10, '#ff00ff', '#00ff00'] // Magenta for 100, green for 200
+        range: [...CATEGORY10, '#ff00ff', '#00ff00'] // Magenta for 100, green for 200
       },
       marks: [
         // Lines connecting timestamps for each group (including synthetic groups)
-        ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 200].map(groupIndex => {
+        ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 200].map((groupIndex) => {
           const groupData = packetData.filter(d => d.groupIndex === groupIndex);
           if (groupData.length === 0) return null;
           
@@ -172,9 +184,9 @@
             stroke: groupIndex,
             strokeWidth: groupIndex >= 100 ? 3 : 2, // Thicker line for synthetic groups
             opacity: groupIndex >= 100 ? 1 : 0.8,
-            strokeDasharray: groupIndex === 100 ? "5,5" : groupIndex === 200 ? "2,2" : null // Different dash patterns
+            strokeDasharray: groupIndex === 100 ? "5,5" : groupIndex === 200 ? "2,2" : undefined // Different dash patterns
           });
-        }).filter(mark => mark !== null),
+        }).filter((mark): mark is NonNullable<typeof mark> => mark !== null),
         
         // Points for each timestamp
         Plot.dot(packetData, {
@@ -203,7 +215,9 @@
           }
         )
       ]
-    });
+    };
+
+    return Plot.plot(plotConfig);
   }
   
   function updatePlot() {
@@ -242,18 +256,18 @@
     if (resizeObserver) {
       resizeObserver.disconnect();
     }
-    cleanupHandlers();
+    unregisterWaveHandler?.();
   });
   
   // Analyze patterns in collected data
   $: timestampPatterns = analyzePatterns(packetData);
   
-  function analyzePatterns(data) {
+  function analyzePatterns(data: PacketDataPoint[]) {
     if (data.length === 0) return null;
     
     // Group by packet
-    const packets = {};
-    data.forEach(d => {
+    const packets: Record<number, number[]> = {};
+    data.forEach((d) => {
       if (!packets[d.packetIndex]) {
         packets[d.packetIndex] = [];
       }
@@ -265,7 +279,7 @@
     let nonMonotonicCount = 0;
     let sameTimestampCount = 0;
     
-    Object.values(packets).forEach(timestamps => {
+    Object.values(packets).forEach((timestamps) => {
       const sorted = [...timestamps].sort((a, b) => a - b);
       const isMonotonic = JSON.stringify(timestamps) === JSON.stringify(sorted);
       const hasSameTimestamps = new Set(timestamps).size < timestamps.length;

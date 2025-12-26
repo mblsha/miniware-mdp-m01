@@ -1,14 +1,18 @@
-<script>
-  // @ts-nocheck
+<script lang="ts">
+  import type { Readable } from 'svelte/store';
+  import type { Channel } from '$lib/types';
   import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import ChannelCard from './ChannelCard.svelte';
   
   export let channelStore = defaultChannelStore;
-  export let onselectchannel = undefined;
+  export let onselectchannel: ((_channel: number) => void) | undefined = undefined;
+  
+  let channels: Readable<Channel[]>;
+  let activeChannel: Readable<number>;
   
   $: ({ channels, activeChannel } = channelStore);
   
-  function selectChannel(channel) {
+  function selectChannel(channel: number) {
     onselectchannel?.(channel);
   }
 </script>

@@ -1,6 +1,6 @@
 <script lang="ts">
-  // @ts-nocheck
-  import { serialConnection as defaultSerialConnection, ConnectionStatus } from './lib/serial.js';
+  import type { Readable } from 'svelte/store';
+  import { serialConnection as defaultSerialConnection, ConnectionStatus, type DeviceInfo } from './lib/serial.js';
   import { channelStore as defaultChannelStore } from './lib/stores/channels.js';
   import { debugEnabled } from './lib/debug-logger.js';
   import Dashboard from './lib/components/Dashboard.svelte';
@@ -15,6 +15,9 @@
 
   let currentView = 'dashboard';
   let selectedChannel = 0;
+  let status: Readable<string>;
+  let error: Readable<string | null>;
+  let deviceType: Readable<DeviceInfo | null>;
 
   // Initialize theme on mount
   onMount(() => {
@@ -27,8 +30,8 @@
   async function handleConnect() {
     try {
       await serialConnection.connect();
-    } catch (error) {
-      console.error('Connection failed:', error);
+    } catch (err: unknown) {
+      console.error('Connection failed:', err);
     }
   }
   
@@ -66,7 +69,7 @@
         {:else if $status === ConnectionStatus.CONNECTED}
           <span class="status connected">Connected</span>
           {#if $deviceType}
-            <span class="device-type">({typeof $deviceType === 'object' && $deviceType.type ? $deviceType.type : $deviceType})</span>
+            <span class="device-type">({$deviceType.type})</span>
           {/if}
           <button onpointerup={handleDisconnect}>Disconnect</button>
         {:else if $status === ConnectionStatus.ERROR}

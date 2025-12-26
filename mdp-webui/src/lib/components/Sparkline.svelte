@@ -1,26 +1,28 @@
-<script>
-  // @ts-nocheck
+<script lang="ts">
   import * as Plot from '@observablehq/plot';
   import { onDestroy } from 'svelte';
   import { theme } from '$lib/stores/theme.js';
   import { sparklineStore } from '$lib/stores/sparkline.js';
+  import type { Readable } from 'svelte/store';
+  import type { SparklineDataPoint, SparklineOptions } from '$lib/types';
   
   export let channel = 0;
-  export let metric = 'voltage'; // 'voltage', 'current', or 'power'
-  export let targetValue = null; // Optional target value for reference line
+  export let metric: SparklineOptions['metric'] = 'voltage';
+  export let targetValue: number | null = null; // Optional target value for reference line
   export let width = 200;
   export let height = 60;
   export let showAxes = false; // Minimal sparkline by default
   export let showTooltip = true;
   
-  let chartContainer;
+  let chartContainer: HTMLDivElement | null = null;
   let currentTheme;
-  let metricData = [];
+  let metricData: SparklineDataPoint[] = [];
   
   // Subscribe to theme changes
   $: currentTheme = $theme;
   
   // Subscribe to sparkline data for this channel and metric
+  let dataStore: Readable<SparklineDataPoint[]>;
   $: dataStore = sparklineStore.getChannelMetricData(channel, metric);
   $: metricData = $dataStore;
   
@@ -30,7 +32,7 @@
   // Get metric-specific configuration
   $: metricConfig = getMetricConfig(metric);
   
-  function getChartColors(theme, metric) {
+  function getChartColors(theme: string, metric: SparklineOptions['metric']) {
     const isDark = theme === 'dark';
     
     const colors = {
@@ -47,7 +49,7 @@
     };
   }
   
-  function getMetricConfig(metric) {
+  function getMetricConfig(metric: SparklineOptions['metric']) {
     const configs = {
       voltage: {
         label: 'V',
@@ -83,7 +85,7 @@
   });
   
   // Create the sparkline plot
-  function createSparkline() {
+  function createSparkline(): ReturnType<typeof Plot.plot> | null {
     if (plotData.length === 0) return null;
     
     
@@ -103,12 +105,12 @@
       yDomain = [minY - padding, maxY + padding];
     }
     
-    const marks = [];
+    const marks: any[] = [];
     
     // Add target value line FIRST if provided and not zero
     if (targetValue !== null && typeof targetValue === 'number' && targetValue !== 0) {
       // Create synthetic data points for the target line across the full time range
-      const targetData = [];
+      const targetData: Array<{ time: number; targetY: number }> = [];
       for (let t = -60; t <= 0; t += 5) {
         targetData.push({ time: t, targetY: targetValue });
       }
@@ -151,7 +153,7 @@
       );
     }
     
-    const plotConfig = {
+    const plotConfig: any = {
       width,
       height,
       marginTop: showAxes ? 20 : 2,
@@ -168,7 +170,7 @@
       x: {
         axis: showAxes ? "bottom" : null,
         label: showAxes ? "Seconds ago" : null,
-        tickFormat: showAxes ? (d => `${Math.abs(d)}s`) : null,
+        tickFormat: showAxes ? ((d: number) => `${Math.abs(d)}s`) : null,
         labelColor: chartColors.text,
         tickColor: chartColors.text,
         grid: false,
@@ -177,7 +179,7 @@
       y: {
         axis: showAxes ? "left" : null,
         label: showAxes ? metricConfig.unit : null,
-        tickFormat: showAxes ? (d => d.toFixed(metricConfig.decimals)) : null,
+        tickFormat: showAxes ? ((d: number) => d.toFixed(metricConfig.decimals)) : null,
         labelColor: chartColors.text,
         tickColor: chartColors.text,
         grid: false,

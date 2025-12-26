@@ -1,15 +1,15 @@
-<script>
-  // @ts-nocheck
+<script lang="ts">
+  import type { Channel } from '$lib/types';
   import OutputButton from './OutputButton.svelte';
   import Sparkline from './Sparkline.svelte';
   
-  export let channel;
+  export let channel: Channel;
   export let active = false;
-  export let onclick = undefined;
+  export let onclick: (() => void) | undefined = undefined;
   
   let showModeDetails = false;
   
-  function getAvailableModes(machineType) {
+  function getAvailableModes(machineType: string) {
     if (machineType === 'L1060') {
       return ['CC', 'CV', 'CR', 'CP'];
     } else if (machineType === 'P906') {
@@ -18,17 +18,17 @@
     return [];
   }
   
-  function getModeDescription(mode) {
+  function getModeDescription(mode: string): string {
     const descriptions = {
       'CC': 'Constant Current - Device maintains set current',
       'CV': 'Constant Voltage - Device maintains set voltage',
       'CR': 'Constant Resistance - Device simulates fixed resistance',
       'CP': 'Constant Power - Device maintains constant power'
     };
-    return descriptions[mode] || 'Unknown mode';
+    return descriptions[mode as keyof typeof descriptions] || 'Unknown mode';
   }
   
-  function toggleModeDetails(event) {
+  function toggleModeDetails(event: Event) {
     event.stopPropagation();
     showModeDetails = !showModeDetails;
   }

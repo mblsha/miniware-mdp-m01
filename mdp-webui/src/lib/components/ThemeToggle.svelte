@@ -1,7 +1,7 @@
-<script>
+<script lang="ts">
   import { theme } from '$lib/stores/theme.js';
   
-  function toggleTheme() {
+  function toggleTheme(): void {
     theme.toggle();
   }
 </script>

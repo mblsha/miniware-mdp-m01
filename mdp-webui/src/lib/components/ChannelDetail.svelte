@@ -1,22 +1,27 @@
 <script lang="ts">
-  // @ts-nocheck
   import { onMount, onDestroy } from 'svelte';
   import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import WaveformChart from './WaveformChart.svelte';
   import TimestampAnalysis from './TimestampAnalysis.svelte';
   import OutputButton from './OutputButton.svelte';
+  import type { Readable } from 'svelte/store';
+  import type { Channel, WaveformPoint } from '$lib/types';
   
   export let channelStore = defaultChannelStore;
   export let channel = 0;
-  export let onback = undefined;
+  export let onback: (() => void) | undefined = undefined;
   
+  let channels: Readable<Channel[]>;
+  let channelData: Channel | undefined;
+  let isRecording: boolean;
+
   $: channels = channelStore.channels;
   $: channelData = $channels[channel];
-  $: isRecording = channelData?.recording || false;
+  $: isRecording = channelData?.recording ?? false;
   
   let targetVoltage = 0;
   let targetCurrent = 0;
-  let recordingTimer = null;
+  let recordingTimer: ReturnType<typeof setInterval> | null = null;
   let recordingDuration = 0;
   
   onMount(() => {
@@ -66,7 +71,7 @@
     if (!channelData || !channelData.waveformData || !channelData.waveformData.length) return;
     
     const csv = ['Timestamp (ms),Voltage (V),Current (A)'];
-    channelData.waveformData.forEach((point: any) => {
+    channelData.waveformData.forEach((point: WaveformPoint) => {
       csv.push(`${point.timestamp},${point.voltage},${point.current}`);
     });
     

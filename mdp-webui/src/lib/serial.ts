@@ -9,6 +9,13 @@ export const ConnectionStatus = {
   ERROR: 'error'
 } as const;
 
+export type DeviceType = 'M01' | 'M02';
+
+export type DeviceInfo = {
+  type: DeviceType;
+  hasLCD: boolean;
+};
+
 const SERIAL_CONFIG: SerialConfig = {
   baudRate: 115200,
   dataBits: 8,
@@ -24,13 +31,13 @@ export class SerialConnection {
   private heartbeatInterval: number | null = null;
   private statusStore: Writable<string>;
   private errorStore: Writable<string | null>;
-  private deviceTypeStore: Writable<string | null>;
+  private deviceTypeStore: Writable<DeviceInfo | null>;
   private packetHandlers: Map<number, PacketHandler[]>;
   private receiveBuffer: Uint8Array;
   
   public readonly status: Readable<string>;
   public readonly error: Readable<string | null>;
-  public readonly deviceType: Readable<string | null>;
+  public readonly deviceType: Readable<DeviceInfo | null>;
   
   constructor() {
     this.statusStore = writable(ConnectionStatus.DISCONNECTED);
@@ -221,16 +228,6 @@ export class SerialConnection {
     }
   }
 
-  registerPacketHandler(packetType: number, handler: PacketHandler): void {
-    if (!this.packetHandlers.has(packetType)) {
-      this.packetHandlers.set(packetType, []);
-    }
-    const handlers = this.packetHandlers.get(packetType);
-    if (handlers) {
-      handlers.push(handler);
-    }
-  }
-
   async sendPacket(packet: number[] | Uint8Array): Promise<void> {
     if (!this.writer) {
       throw new Error('Not connected');
@@ -263,8 +260,31 @@ export class SerialConnection {
     await this.sendPacket(packet);
   }
 
-  setDeviceType(deviceType: any): void {
+  setDeviceType(deviceType: DeviceInfo | null): void {
     this.deviceTypeStore.set(deviceType);
+  }
+
+  registerPacketHandler(packetType: number, handler: PacketHandler): () => void {
+    if (!this.packetHandlers.has(packetType)) {
+      this.packetHandlers.set(packetType, []);
+    }
+
+    const handlers = this.packetHandlers.get(packetType);
+    handlers?.push(handler);
+
+    return () => {
+      const list = this.packetHandlers.get(packetType);
+      if (!list) return;
+
+      const index = list.indexOf(handler);
+      if (index >= 0) {
+        list.splice(index, 1);
+      }
+
+      if (list.length === 0) {
+        this.packetHandlers.delete(packetType);
+      }
+    };
   }
 
   getDecoder(): any {
