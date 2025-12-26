@@ -2,6 +2,7 @@ import { KaitaiStream, MiniwareMdpM01 } from './kaitai-wrapper';
 import { debugLog, debugError, debugWarn, logDecodedKaitaiData, getPacketTypeDisplay, debugEnabled } from './debug-logger';
 import { getMachineTypeString } from './machine-utils';
 import { get } from 'svelte/store';
+import type { DeviceInfo } from './serial.js';
 
 export const PackType = MiniwareMdpM01?.PackType || {
   SYNTHESIZE: 0x11,
@@ -236,7 +237,7 @@ export function processAddressPacket(packet: any): any {
   return addresses;
 }
 
-export function processMachinePacket(packet: any): any {
+export function processMachinePacket(packet: any): DeviceInfo | null {
   if (!packet || !packet.data || packet.packType !== PackType.MACHINE) return null;
   
   const machine = packet.data;
@@ -244,10 +245,9 @@ export function processMachinePacket(packet: any): any {
   // Use machineTypeRaw if available, otherwise fall back to deviceType
   const machineTypeValue = machine.machineTypeRaw || machine.deviceType;
   
-  return {
-    type: machineTypeValue === 0x10 ? 'M01' : 'M02',
-    hasLCD: machineTypeValue === 0x10
-  };
+  const type = machineTypeValue === 0x10 ? 'M01' : 'M02';
+  const hasLCD = machineTypeValue === 0x10;
+  return { type, hasLCD } satisfies DeviceInfo;
 }
 
 

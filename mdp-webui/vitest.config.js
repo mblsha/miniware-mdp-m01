@@ -11,7 +11,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.{js,svelte}'],
+      include: ['src/**/*.{js,ts,svelte}'],
       exclude: ['src/lib/kaitai/**'],
       branches: 80,
       functions: 80,

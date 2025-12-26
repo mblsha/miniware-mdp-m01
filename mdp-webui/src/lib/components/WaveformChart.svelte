@@ -1,14 +1,14 @@
-<script>
-  // @ts-nocheck
+<script lang="ts">
   import * as Plot from '@observablehq/plot';
   import { onDestroy } from 'svelte';
   import { theme } from '$lib/stores/theme.js';
+  import type { WaveformPoint } from '$lib/types';
   
-  export let data = [];
+  export let data: WaveformPoint[] = [];
   export let isRecording = false;
   
-  let chartContainer;
-  let resizeObserver;
+  let chartContainer: HTMLDivElement | null = null;
+  let resizeObserver: ResizeObserver | null = null;
   let currentTheme;
   
   // Subscribe to theme changes
@@ -23,25 +23,25 @@
   };
   
   // Transform data for Plot
-  $: plotData = data.map(d => ({
+  $: plotData = data.map((d) => ({
     timestamp: d.timestamp, // Already in milliseconds
     voltage: d.voltage,
     current: d.current
   }));
   
   // Create the plot configuration
-  function createPlot(containerWidth = 800) {
+  function createPlot(containerWidth = 800): ReturnType<typeof Plot.plot> | null {
     if (plotData.length === 0) return null;
     
     // If recording and lots of data, show only last 10000 ms (10 seconds)
     let displayData = plotData;
     if (isRecording && plotData.length > 100) {
-      const lastTimestamp = plotData[plotData.length - 1].timestamp;
+      const lastTimestamp = plotData[plotData.length - 1]?.timestamp ?? 0;
       const startTime = lastTimestamp - 10000; // 10000 ms = 10 seconds ago
       displayData = plotData.filter(d => d.timestamp >= startTime);
     }
     
-    return Plot.plot({
+    const plotConfig: any = {
       width: containerWidth,
       height: 400,
       marginLeft: 60,
@@ -107,7 +107,9 @@
           })
         ] : [])
       ]
-    });
+    };
+
+    return Plot.plot(plotConfig);
   }
   
   // Update plot when data or theme changes

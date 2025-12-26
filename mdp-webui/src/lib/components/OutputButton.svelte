@@ -1,33 +1,32 @@
-<script>
-  // @ts-nocheck
+<script lang="ts">
   import { channelStore } from '../stores/channels.js';
   import { createEventDispatcher } from 'svelte';
 
-  export let channel;
-  export let isOutput;
-  export let machineType;
+  export let channel: number;
+  export let isOutput: boolean;
+  export let machineType: string;
   export let disabled = false;
-  export let size = 'normal'; // 'small' or 'normal'
+  export let size: 'small' | 'normal' = 'normal';
 
-  const dispatch = createEventDispatcher();
+  const dispatch = createEventDispatcher<{ toggle: { channel: number; newState: boolean } }>();
 
   // State for optimistic updates
-  let optimisticState = null;
+  let optimisticState: boolean | null = null;
   let isWaitingForAck = false;
-  let timeoutId = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Get button text based on device type
   $: buttonText = getButtonText(machineType);
   $: displayState = optimisticState !== null ? optimisticState : isOutput;
 
-  function getButtonText(type) {
+  function getButtonText(type: string): string {
     if (type === 'L1060 Load' || type === 'L1060') {
       return 'Input';
     }
     return 'Output';
   }
 
-  async function toggleOutput(event) {
+  async function toggleOutput(event: Event) {
     if (event) {
       event.stopPropagation();
     }
@@ -48,7 +47,7 @@
     }
     
     // Set timeout to revert if no acknowledgement
-    timeoutId = setTimeout(() => {
+    timeoutId = setTimeout((): void => {
       optimisticState = null;
       isWaitingForAck = false;
       console.warn(`Output toggle timeout for channel ${channel} - reverting to actual state`);
@@ -61,8 +60,8 @@
       // The actual state will be updated by the synthesize packet handler
       dispatch('toggle', { channel, newState });
       
-    } catch (error) {
-      console.error(`Failed to toggle output for channel ${channel}:`, error);
+    } catch (err: unknown) {
+      console.error(`Failed to toggle output for channel ${channel}:`, err);
       
       // Revert optimistic state on error
       optimisticState = null;

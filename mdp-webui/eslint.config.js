@@ -56,9 +56,12 @@ export default [
     },
     plugins: {
       svelte,
+      '@typescript-eslint': typescript,
     },
     rules: {
       ...svelte.configs.recommended.rules,
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'svelte/no-at-debug-tags': 'warn',
       'svelte/no-target-blank': 'error',
       'svelte/no-at-html-tags': 'warn',
