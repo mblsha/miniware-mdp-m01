@@ -28,23 +28,23 @@ vi.mock('$lib/components/WaveformChart.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockWaveformChart.svelte')).default
 }));
 
-vi.mock('$lib/stores/channels.js', () => ({
-  channelStore: {
-    channels: writable([]),
-    activeChannel: writable(0),
-    setActiveChannel: vi.fn(),
-    setVoltage: vi.fn(),
-    setCurrent: vi.fn(),
-    setOutput: vi.fn(),
-    startRecording: vi.fn(),
-    stopRecording: vi.fn(),
-    clearRecording: vi.fn()
-  }
-}));
-
-// Import component after mocks
-import { channelStore } from '$lib/stores/channels.js';
 import ChannelDetail from '$lib/components/ChannelDetail.svelte';
+
+const channelStore = {
+  channels: writable([]),
+  activeChannel: writable(0),
+  setActiveChannel: vi.fn(),
+  setVoltage: vi.fn(),
+  setCurrent: vi.fn(),
+  setOutput: vi.fn(),
+  startRecording: vi.fn(),
+  stopRecording: vi.fn(),
+  clearRecording: vi.fn(),
+};
+
+function renderChannelDetail(props) {
+  return render(ChannelDetail, { props: { channelStore, ...props } });
+}
 
 describe('ChannelDetail Component', () => {
   let mockChannelData;
@@ -86,7 +86,7 @@ describe('ChannelDetail Component', () => {
 
   describe('Header and Navigation', () => {
     it('should display channel number and machine type', () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('Channel 1 - P906')).toBeInTheDocument();
       expect(getByText('← Back')).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe('ChannelDetail Component', () => {
 
     it('should call onback prop when back button clicked', async () => {
       const backHandler = vi.fn();
-      const { getByText } = render(ChannelDetail, { props: { channel: 0, onback: backHandler } });
+      const { getByText } = renderChannelDetail({ channel: 0, onback: backHandler });
       
       await fireEvent.pointerDown(getByText('← Back'));
       await fireEvent.pointerUp(getByText('← Back'));
@@ -106,7 +106,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[2].online = false;
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 2 } });
+      const { getByText } = renderChannelDetail({ channel: 2 });
       
       expect(getByText('Channel 3 is offline')).toBeInTheDocument();
     });
@@ -114,7 +114,7 @@ describe('ChannelDetail Component', () => {
 
   describe('Output Control', () => {
     it('should display output status', () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       const button = getByText('Output: ON');
       expect(button).toBeInTheDocument();
@@ -122,7 +122,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should toggle output when clicked', async () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       await fireEvent.pointerDown(getByText('Output: ON'));
       await fireEvent.pointerUp(getByText('Output: ON'));
@@ -134,7 +134,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].isOutput = false;
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       const button = getByText('Output: OFF');
       expect(button).not.toHaveClass('on');
@@ -143,7 +143,7 @@ describe('ChannelDetail Component', () => {
 
   describe('Parameter Configuration', () => {
     it('should display voltage and current inputs', () => {
-      const { getByLabelText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByLabelText } = renderChannelDetail({ channel: 0 });
       
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       const currentInput = getByLabelText(/Current \(A\)/);
@@ -153,7 +153,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should set voltage when Set V clicked', async () => {
-      const { getByLabelText, getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByLabelText, getByText } = renderChannelDetail({ channel: 0 });
       
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       await fireEvent.input(voltageInput, { target: { value: '5' } });
@@ -165,7 +165,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should set current when Set I clicked', async () => {
-      const { getByLabelText, getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByLabelText, getByText } = renderChannelDetail({ channel: 0 });
       
       const currentInput = getByLabelText(/Current \(A\)/);
       await fireEvent.input(currentInput, { target: { value: '1.5' } });
@@ -177,7 +177,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should validate input ranges', () => {
-      const { getByLabelText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByLabelText } = renderChannelDetail({ channel: 0 });
       
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       const currentInput = getByLabelText(/Current \(A\)/);
@@ -192,7 +192,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should handle decimal inputs', async () => {
-      const { getByLabelText, getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByLabelText, getByText } = renderChannelDetail({ channel: 0 });
       
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       await fireEvent.input(voltageInput, { target: { value: '12.345' } });
@@ -206,7 +206,7 @@ describe('ChannelDetail Component', () => {
 
   describe('Output Measurements Display', () => {
     it('should display all measurements', () => {
-      const { getAllByText, getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getAllByText, getByText } = renderChannelDetail({ channel: 0 });
       
       // Check that voltage, current, and power values are displayed (may appear multiple times)
       expect(getAllByText('3.300 V').length).toBeGreaterThan(0);
@@ -216,7 +216,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should update when channel data changes', async () => {
-      const { getByText, rerender } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText, rerender } = renderChannelDetail({ channel: 0 });
       
       // Update channel data
       mockChannelData[0].voltage = 5.123;
@@ -225,7 +225,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].temperature = 30.7;
       setMockChannels([...mockChannelData]);
       
-      await rerender({ channel: 0 });
+      await rerender({ channelStore, channel: 0 });
       
       expect(getByText('5.123 V')).toBeInTheDocument();
       expect(getByText('1.234 A')).toBeInTheDocument();
@@ -236,13 +236,13 @@ describe('ChannelDetail Component', () => {
 
   describe('Recording Functionality', () => {
     it('should show start recording button when not recording', () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('Start Recording')).toBeInTheDocument();
     });
 
     it('should start recording when button clicked', async () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       await fireEvent.pointerDown(getByText('Start Recording'));
       await fireEvent.pointerUp(getByText('Start Recording'));
@@ -254,14 +254,14 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].recording = true;
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('Stop Recording')).toBeInTheDocument();
       expect(getByText('Recording... 0:00')).toBeInTheDocument();
     });
 
     it('should update timer during recording', async () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       // Start recording by clicking the button
       await fireEvent.pointerDown(getByText('Start Recording'));
@@ -283,7 +283,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].recording = true;
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       await fireEvent.pointerDown(getByText('Stop Recording'));
       await fireEvent.pointerUp(getByText('Stop Recording'));
@@ -298,7 +298,7 @@ describe('ChannelDetail Component', () => {
       ];
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('Export Data')).toBeInTheDocument();
       expect(getByText('2 points')).toBeInTheDocument();
@@ -314,7 +314,7 @@ describe('ChannelDetail Component', () => {
       ];
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       await fireEvent.pointerDown(getByText('Export Data'));
       await fireEvent.pointerUp(getByText('Export Data'));
@@ -335,7 +335,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should not show export for empty data', () => {
-      const { queryByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { queryByText } = renderChannelDetail({ channel: 0 });
       
       expect(queryByText('Export Data')).not.toBeInTheDocument();
     });
@@ -351,7 +351,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].waveformData = largeData;
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('1000 points')).toBeInTheDocument();
       
@@ -365,7 +365,7 @@ describe('ChannelDetail Component', () => {
 
   describe('Component Lifecycle', () => {
     it('should set active channel on mount', () => {
-      render(ChannelDetail, { props: { channel: 3 } });
+      renderChannelDetail({ channel: 3 });
       
       expect(channelStore.setActiveChannel).toHaveBeenCalledWith(3);
     });
@@ -381,7 +381,7 @@ describe('ChannelDetail Component', () => {
       };
       setMockChannels(mockChannelData);
       
-      const { getByLabelText } = render(ChannelDetail, { props: { channel: 2 } });
+      const { getByLabelText } = renderChannelDetail({ channel: 2 });
       
       // Should use actual values when targets are 0
       expect(getByLabelText(/Voltage \(V\)/)).toHaveValue(12);
@@ -392,7 +392,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].recording = true;
       setMockChannels(mockChannelData);
       
-      const { unmount } = render(ChannelDetail, { props: { channel: 0 } });
+      const { unmount } = renderChannelDetail({ channel: 0 });
       
       // Start timer
       vi.advanceTimersByTime(1000);
@@ -410,7 +410,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].machineType = 'P905';
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('Channel 1 - P905')).toBeInTheDocument();
     });
@@ -420,7 +420,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].mode = 'CC';
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('Channel 1 - L1060')).toBeInTheDocument();
       // Future: Add mode selection UI for L1060
@@ -430,7 +430,7 @@ describe('ChannelDetail Component', () => {
       mockChannelData[0].machineType = 'Unknown';
       setMockChannels(mockChannelData);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('Channel 1 - Unknown')).toBeInTheDocument();
     });
@@ -438,19 +438,19 @@ describe('ChannelDetail Component', () => {
 
   describe('Edge Cases', () => {
     it('should handle channel index out of bounds', () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 10 } });
+      const { getByText } = renderChannelDetail({ channel: 10 });
       
       expect(getByText('Channel 11 is offline')).toBeInTheDocument();
     });
 
     it('should handle negative channel index', () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: -1 } });
+      const { getByText } = renderChannelDetail({ channel: -1 });
       
       expect(getByText('Channel 0 is offline')).toBeInTheDocument();
     });
 
     it('should handle very long recording sessions', async () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       // Start recording by clicking the button
       await fireEvent.pointerDown(getByText('Start Recording'));
@@ -471,7 +471,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should handle rapid parameter changes', async () => {
-      const { getByLabelText, getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByLabelText, getByText } = renderChannelDetail({ channel: 0 });
       
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       
@@ -486,7 +486,7 @@ describe('ChannelDetail Component', () => {
     });
 
     it('should handle NaN or invalid inputs gracefully', async () => {
-      const { getByLabelText, getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByLabelText, getByText } = renderChannelDetail({ channel: 0 });
       
       const voltageInput = getByLabelText(/Voltage \(V\)/);
       await fireEvent.input(voltageInput, { target: { value: 'abc' } });
@@ -502,14 +502,14 @@ describe('ChannelDetail Component', () => {
 
   describe('Accessibility', () => {
     it('should have proper labels for inputs', () => {
-      const { getByLabelText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByLabelText } = renderChannelDetail({ channel: 0 });
       
       expect(getByLabelText(/Voltage \(V\)/)).toBeInTheDocument();
       expect(getByLabelText(/Current \(A\)/)).toBeInTheDocument();
     });
 
     it('should have semantic headings', () => {
-      const { container } = render(ChannelDetail, { props: { channel: 0 } });
+      const { container } = renderChannelDetail({ channel: 0 });
       
       const headings = container.querySelectorAll('h2, h3');
       expect(headings.length).toBeGreaterThan(0);

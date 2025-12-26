@@ -130,6 +130,13 @@ vi.mock('$lib/stores/channels', () => {
 const App = (await import('../../src/App.svelte')).default;
 const { channelStore } = await import('$lib/stores/channels');
 const serialConnection = sharedTestConnection;
+const runtime = {
+  serial: serialConnection,
+  channels: channelStore,
+  timeseries: {},
+  timeseriesIntegration: {},
+  destroy: vi.fn(),
+};
 
 describe('Serial Communication Flow Integration Test', () => {
   let mockSerial;
@@ -160,14 +167,9 @@ describe('Serial Communication Flow Integration Test', () => {
     serialConnection.clearPacketHandlers();
   });
 
-  describe('Full Connection Flow', () => {
-    it('should complete connection handshake sequence', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	  describe('Full Connection Flow', () => {
+	    it('should complete connection handshake sequence', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -215,16 +217,11 @@ describe('Serial Communication Flow Integration Test', () => {
       });
     });
 
-    it('should maintain heartbeat during connection', async () => {
+	    it('should maintain heartbeat during connection', async () => {
       // This test needs fake timers to control heartbeat timing
       vi.useFakeTimers();
       
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -252,14 +249,9 @@ describe('Serial Communication Flow Integration Test', () => {
     });
   });
 
-  describe('Command and Response Flow', () => {
-    it('should send commands and process responses', async () => {
-      const { getByText, getByTestId } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	  describe('Command and Response Flow', () => {
+	    it('should send commands and process responses', async () => {
+	      const { getByText, getByTestId } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -323,13 +315,8 @@ describe('Serial Communication Flow Integration Test', () => {
       }
     });
 
-    it('should handle channel switching via device', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	    it('should handle channel switching via device', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -404,13 +391,8 @@ describe('Serial Communication Flow Integration Test', () => {
       expect(receivedDeviceType).toEqual({ type: 'M01', haveLcd: true });
     });
 
-    it('should handle error 240 packet', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	    it('should handle error 240 packet', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -430,13 +412,8 @@ describe('Serial Communication Flow Integration Test', () => {
       expect(getByText('Connected')).toBeInTheDocument();
     });
 
-    it('should recover from disconnection', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	    it('should recover from disconnection', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -476,14 +453,9 @@ describe('Serial Communication Flow Integration Test', () => {
     });
   });
 
-  describe('Packet Buffering and Processing', () => {
-    it('should handle multiple packets in one read', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	  describe('Packet Buffering and Processing', () => {
+	    it('should handle multiple packets in one read', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -508,13 +480,8 @@ describe('Serial Communication Flow Integration Test', () => {
       });
     });
 
-    it('should handle partial packet reception', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	    it('should handle partial packet reception', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -545,13 +512,8 @@ describe('Serial Communication Flow Integration Test', () => {
       });
     });
 
-    it('should skip garbage data and find valid packets', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	    it('should skip garbage data and find valid packets', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -581,14 +543,9 @@ describe('Serial Communication Flow Integration Test', () => {
     });
   });
 
-  describe('Address Configuration Flow', () => {
-    it('should receive and process address information', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	  describe('Address Configuration Flow', () => {
+	    it('should receive and process address information', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -615,14 +572,9 @@ describe('Serial Communication Flow Integration Test', () => {
     });
   });
 
-  describe('Performance and Stress Testing', () => {
-    it('should handle rapid packet reception', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	  describe('Performance and Stress Testing', () => {
+	    it('should handle rapid packet reception', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -646,13 +598,8 @@ describe('Serial Communication Flow Integration Test', () => {
       });
     });
 
-    it('should handle very large single packet', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	    it('should handle very large single packet', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);
@@ -688,14 +635,9 @@ describe('Serial Communication Flow Integration Test', () => {
     });
   });
 
-  describe('State Synchronization', () => {
-    it('should maintain consistent state between device and UI', async () => {
-      const { getByText } = render(App, {
-        props: {
-          serialConnection,
-          channelStore
-        }
-      });
+	  describe('State Synchronization', () => {
+	    it('should maintain consistent state between device and UI', async () => {
+	      const { getByText } = render(App, { props: { runtime } });
       
       mockPort = new MockSerialPort();
       mockSerial.setNextPort(mockPort);

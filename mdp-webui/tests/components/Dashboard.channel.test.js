@@ -3,23 +3,10 @@ import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 import Dashboard from '$lib/components/Dashboard.svelte';
 
-// Mock channel store
-vi.mock('$lib/stores/channels.js', () => {
+describe('Dashboard Channel Management Tests', () => {
   const channels = writable([]);
   const activeChannel = writable(0);
-  
-  return {
-    channelStore: {
-      channels,
-      activeChannel
-    }
-  };
-});
-
-import { channelStore } from '$lib/stores/channels.js';
-
-describe('Dashboard Channel Management Tests', () => {
-  const { channels, activeChannel } = channelStore;
+  const channelStore = { channels, activeChannel };
   let mockChannelData;
 
   beforeEach(() => {
@@ -101,28 +88,28 @@ describe('Dashboard Channel Management Tests', () => {
 
   describe('Channel Display', () => {
     it('should display all 6 channels', () => {
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       const channelCards = container.querySelectorAll('.channel-card');
       expect(channelCards.length).toBe(6);
     });
 
     it('should show online status for connected channels', () => {
-      const { getAllByText } = render(Dashboard);
+      const { getAllByText } = render(Dashboard, { props: { channelStore } });
       
       const onlineElements = getAllByText('Online');
       expect(onlineElements.length).toBe(2); // Channels 0 and 1
     });
 
     it('should show offline status for disconnected channels', () => {
-      const { getAllByText } = render(Dashboard);
+      const { getAllByText } = render(Dashboard, { props: { channelStore } });
       
       const offlineElements = getAllByText('Offline');
       expect(offlineElements.length).toBe(4); // Channels 2-5
     });
 
     it('should display channel measurements', () => {
-      const { getByText } = render(Dashboard);
+      const { getByText } = render(Dashboard, { props: { channelStore } });
       
       // Check channel 0 measurements
       expect(getByText('5.000 V')).toBeInTheDocument();
@@ -138,14 +125,14 @@ describe('Dashboard Channel Management Tests', () => {
     });
 
     it('should display machine types', () => {
-      const { getByText } = render(Dashboard);
+      const { getByText } = render(Dashboard, { props: { channelStore } });
       
       expect(getByText('P906')).toBeInTheDocument();
       expect(getByText('P905')).toBeInTheDocument();
     });
 
     it('should display output status', () => {
-      const { getAllByText } = render(Dashboard);
+      const { getAllByText } = render(Dashboard, { props: { channelStore } });
       
       expect(getAllByText('Output: ON').length).toBe(1);
       expect(getAllByText('Output: OFF').length).toBe(1);
@@ -154,7 +141,7 @@ describe('Dashboard Channel Management Tests', () => {
 
   describe('Channel Selection', () => {
     it('should highlight active channel', () => {
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       const channelCards = container.querySelectorAll('.channel-card');
       expect(channelCards[0]).toHaveClass('active');
@@ -163,7 +150,7 @@ describe('Dashboard Channel Management Tests', () => {
 
     it('should emit select event when channel clicked', async () => {
       const onselectchannel = vi.fn();
-      const { container } = render(Dashboard, { props: { onselectchannel } });
+      const { container } = render(Dashboard, { props: { channelStore, onselectchannel } });
       
       const channelCards = container.querySelectorAll('.channel-card');
       await fireEvent.pointerDown(channelCards[2]);
@@ -175,7 +162,7 @@ describe('Dashboard Channel Management Tests', () => {
     });
 
     it('should update active channel visual state', async () => {
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       // Change active channel
       activeChannel.set(3);
@@ -190,7 +177,7 @@ describe('Dashboard Channel Management Tests', () => {
 
   describe('Real-time Updates', () => {
     it('should update when channel data changes', async () => {
-      const { getByText, queryByText } = render(Dashboard);
+      const { getByText, queryByText } = render(Dashboard, { props: { channelStore } });
       
       // Initially channel 2 is offline
       expect(queryByText('Channel 3')).toBeInTheDocument();
@@ -218,7 +205,7 @@ describe('Dashboard Channel Management Tests', () => {
     });
 
     it('should handle rapid channel updates', async () => {
-      const { getByText } = render(Dashboard);
+      const { getByText } = render(Dashboard, { props: { channelStore } });
       
       // Simulate rapid voltage changes on channel 0
       for (let i = 0; i < 10; i++) {
@@ -266,7 +253,7 @@ describe('Dashboard Channel Management Tests', () => {
         }))
       ]);
       
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       // Should render without crashing
       expect(container.querySelector('.dashboard')).toBeInTheDocument();
@@ -276,7 +263,7 @@ describe('Dashboard Channel Management Tests', () => {
     it('should handle empty channel array', () => {
       channels.set([]);
       
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       const channelCards = container.querySelectorAll('.channel-card');
       expect(channelCards.length).toBe(0);
@@ -297,7 +284,7 @@ describe('Dashboard Channel Management Tests', () => {
       
       channels.set(manyChannels);
       
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       const channelCards = container.querySelectorAll('.channel-card');
       expect(channelCards.length).toBe(10);

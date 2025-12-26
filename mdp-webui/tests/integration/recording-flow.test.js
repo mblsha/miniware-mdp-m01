@@ -128,6 +128,12 @@ import App from '../../src/App.svelte';
 import { serialConnection } from '$lib/serial';
 import { channelStore } from '$lib/stores/channels';
 
+const runtime = {
+  serial: serialConnection,
+  channels: channelStore,
+  destroy: vi.fn(),
+};
+
 // Mock URL.createObjectURL for file export
 global.URL.createObjectURL = vi.fn(() => 'mock-url');
 global.URL.revokeObjectURL = vi.fn();
@@ -227,7 +233,7 @@ describe('Recording Flow Integration Test', () => {
   it.skip('should complete full recording workflow', async () => {
     // SKIP REASON: Complex integration between wave packet processing and channel store updates
     // The test passes individual steps but waveform data accumulation requires full app integration
-    const renderResult = render(App);
+    const renderResult = render(App, { props: { runtime } });
     const { container, getByText, queryByText } = renderResult;
     
     // Step 1: Connect to device
@@ -344,7 +350,7 @@ describe('Recording Flow Integration Test', () => {
   });
 
   it('should handle channel switching during recording', async () => {
-    const renderResult = render(App);
+    const renderResult = render(App, { props: { runtime } });
     const { container, getByText, queryByText } = renderResult;
     
     await connectDevice(renderResult);
@@ -396,7 +402,7 @@ describe('Recording Flow Integration Test', () => {
   });
 
   it('should handle errors during recording', async () => {
-    const renderResult = render(App);
+    const renderResult = render(App, { props: { runtime } });
     const { container, getByText, queryByText } = renderResult;
     
     await connectDevice(renderResult);
@@ -432,7 +438,7 @@ describe('Recording Flow Integration Test', () => {
   it.skip('should export valid CSV format', async () => {
     // SKIP REASON: Depends on waveform data accumulation which requires full app integration
     // Export button only appears when there's recorded data
-    const renderResult = render(App);
+    const renderResult = render(App, { props: { runtime } });
     const { container, getByText, queryByText } = renderResult;
     
     await connectDevice(renderResult);
@@ -468,7 +474,7 @@ describe('Recording Flow Integration Test', () => {
   });
 
   it('should handle empty recording export', async () => {
-    const renderResult = render(App);
+    const renderResult = render(App, { props: { runtime } });
     const { container, getByText, queryByText } = renderResult;
     
     await connectDevice(renderResult);
@@ -490,7 +496,7 @@ describe('Recording Flow Integration Test', () => {
   });
 
   it('should update active channel from device', async () => {
-    const renderResult = render(App);
+    const renderResult = render(App, { props: { runtime } });
     const { container } = renderResult;
     
     await connectDevice(renderResult);

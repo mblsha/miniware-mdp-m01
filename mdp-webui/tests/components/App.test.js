@@ -2,151 +2,140 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { writable } from 'svelte/store';
-import { createMockSerial, MockSerialPort } from '../mocks/serial-api.js';
-import { createMachinePacket, createSynthesizePacket } from '../mocks/packet-data.js';
 
-// Mock serial.js with simplified store mocking
-const mockConnect = vi.hoisted(() => vi.fn());
-const mockDisconnect = vi.hoisted(() => vi.fn());
-
-vi.mock('$lib/serial.js', () => ({
-  serialConnection: {
-    status: writable('disconnected'),
-    error: writable(null),
-    deviceType: writable(null),
-    connect: mockConnect,
-    disconnect: mockDisconnect,
-  },
-  ConnectionStatus: {
-    DISCONNECTED: 'disconnected',
-    CONNECTING: 'connecting', 
-    CONNECTED: 'connected',
-    ERROR: 'error'
-  }
-}));
-
-// Mock child components with proper Svelte components BEFORE other imports
+// Mock child components with proper Svelte components BEFORE importing App
 vi.mock('$lib/components/Dashboard.svelte', async () => ({
-  default: (await vi.importActual('../mocks/components/MockDashboard.svelte')).default
+  default: (await vi.importActual('../mocks/components/MockDashboard.svelte')).default,
 }));
 vi.mock('$lib/components/ChannelDetail.svelte', async () => ({
-  default: (await vi.importActual('../mocks/components/MockChannelDetail.svelte')).default
+  default: (await vi.importActual('../mocks/components/MockChannelDetail.svelte')).default,
 }));
 
-vi.mock('$lib/stores/channels.js', () => {
-  const mockChannels = writable([
-    { channel: 0, online: true, voltage: 3.3, current: 0.5, power: 1.65, temperature: 25, isOutput: false, machineType: 'P906', recording: false, waveformData: [] },
-    { channel: 1, online: true, voltage: 5.0, current: 1.0, power: 5.0, temperature: 30, isOutput: true, machineType: 'P906', recording: false, waveformData: [] },
-    { channel: 2, online: true, voltage: 12.0, current: 0.2, power: 2.4, temperature: 28, isOutput: false, machineType: 'L1060', recording: false, waveformData: [] },
-    { channel: 3, online: true, voltage: 0, current: 0, power: 0, temperature: 22, isOutput: false, machineType: 'P906', recording: false, waveformData: [] },
-    { channel: 4, online: false, voltage: 0, current: 0, power: 0, temperature: 0, isOutput: false, machineType: '', recording: false, waveformData: [] },
-    { channel: 5, online: false, voltage: 0, current: 0, power: 0, temperature: 0, isOutput: false, machineType: '', recording: false, waveformData: [] }
-  ]);
-  
-  return {
-    channelStore: {
-      channels: mockChannels,
-      setOutput: vi.fn(),
-      setVoltage: vi.fn(),
-      setCurrent: vi.fn(),
-      startRecording: vi.fn(),
-      stopRecording: vi.fn()
-    }
-  };
-});
-
 import App from '../../src/App.svelte';
-import { serialConnection } from '$lib/serial.js';
+
+function createRuntimeStub() {
+  const status = writable('disconnected');
+  const error = writable(null);
+  const deviceType = writable(null);
+  const connect = vi.fn();
+  const disconnect = vi.fn();
+
+  const channels = writable(
+    Array.from({ length: 6 }, (_, i) => ({
+      channel: i,
+      online: i < 4,
+      voltage: i === 0 ? 3.3 : i === 1 ? 5.0 : i === 2 ? 12.0 : 0,
+      current: i === 0 ? 0.5 : i === 1 ? 1.0 : i === 2 ? 0.2 : 0,
+      power: i === 0 ? 1.65 : i === 1 ? 5.0 : i === 2 ? 2.4 : 0,
+      temperature: i < 4 ? 25 : 0,
+      isOutput: i === 1,
+      machineType: i === 2 ? 'L1060' : 'P906',
+      mode: 'Normal',
+      recording: false,
+      waveformData: [],
+    }))
+  );
+
+  const channelStore = {
+    channels,
+    setOutput: vi.fn(),
+    setVoltage: vi.fn(),
+    setCurrent: vi.fn(),
+    startRecording: vi.fn(),
+    stopRecording: vi.fn(),
+    setActiveChannel: vi.fn(),
+  };
+
+  return {
+    serial: { status, error, deviceType, connect, disconnect },
+    channels: channelStore,
+    packets: {},
+    sparklines: {},
+    timeseries: {},
+    timeseriesIntegration: {},
+    destroy: vi.fn(),
+  };
+}
 
 describe('App Component', () => {
-  let mockSerial;
-  let mockPort;
+  let runtime;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    serialConnection.status.set('disconnected');
-    serialConnection.error.set(null);
-    serialConnection.deviceType.set(null);
-    mockConnect.mockResolvedValue();
-    mockSerial = createMockSerial();
-    global.navigator.serial = mockSerial;
+    runtime = createRuntimeStub();
   });
 
   describe('Connection Management', () => {
-    it('should render connect button when disconnected', () => {
-      const { getByText } = render(App);
+    it('renders connect button when disconnected', () => {
+      const { getByText } = render(App, { props: { runtime } });
       expect(getByText('Connect')).toBeInTheDocument();
     });
 
-    it('should show placeholder when not connected', () => {
-      const { getByText } = render(App);
+    it('shows placeholder when not connected', () => {
+      const { getByText } = render(App, { props: { runtime } });
       expect(getByText('Connect to your MDP device to begin')).toBeInTheDocument();
     });
 
-    it('should handle connection flow', async () => {
-      const { getByText, queryByText } = render(App);
+    it('handles connection flow', async () => {
+      const { getByText, queryByText } = render(App, { props: { runtime } });
+
+      runtime.serial.connect.mockImplementation(async () => {
+        runtime.serial.status.set('connecting');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        runtime.serial.status.set('connected');
+      });
 
       const connectButton = getByText('Connect');
-      mockConnect.mockImplementation(async () => {
-        serialConnection.status.set('connecting');
-        await new Promise(resolve => setTimeout(resolve, 10));
-        serialConnection.status.set('connected');
-      });
       await fireEvent.pointerDown(connectButton);
+      await fireEvent.pointerUp(connectButton);
 
-      await fireEvent.pointerUp(connectButton);
-      await fireEvent.pointerUp(connectButton);
-      
-      // Wait for connection to complete
       await waitFor(() => {
         expect(getByText('Disconnect')).toBeInTheDocument();
       });
-      
-      // Placeholder should be gone
       expect(queryByText('Connect to your MDP device to begin')).not.toBeInTheDocument();
     });
 
-    it('should display device type when available', async () => {
-      const { getByText } = render(App);
-      serialConnection.status.set('connected');
-      serialConnection.deviceType.set({ type: 'M01' });
-      
+    it('displays device type when available', async () => {
+      const { getByText } = render(App, { props: { runtime } });
+      runtime.serial.status.set('connected');
+      runtime.serial.deviceType.set({ type: 'M01' });
+
       await waitFor(() => {
         expect(getByText('(M01)')).toBeInTheDocument();
       });
     });
 
-    it('should handle connection errors', async () => {
-      const { getByText } = render(App);
-      mockConnect.mockRejectedValue(new Error('Port not available'));
+    it('handles connection errors', async () => {
+      const { getByText } = render(App, { props: { runtime } });
+
+      runtime.serial.connect.mockRejectedValue(new Error('Port not available'));
       await fireEvent.pointerDown(getByText('Connect'));
       await fireEvent.pointerUp(getByText('Connect'));
-      serialConnection.status.set('error');
-      serialConnection.error.set('Port not available');
-      
+
+      runtime.serial.status.set('error');
+      runtime.serial.error.set('Port not available');
+
       await waitFor(() => {
         expect(getByText(/Error: Port not available/)).toBeInTheDocument();
       });
     });
 
-    it('should handle disconnect', async () => {
-      const { getByText } = render(App);
-      
-      // First connect
-      serialConnection.status.set('connected');
-      
+    it('handles disconnect', async () => {
+      const { getByText } = render(App, { props: { runtime } });
+
+      runtime.serial.status.set('connected');
+
       await waitFor(() => {
         expect(getByText('Disconnect')).toBeInTheDocument();
       });
-      
-      // Then disconnect
-      mockDisconnect.mockImplementation(() => {
-        serialConnection.status.set('disconnected');
+
+      runtime.serial.disconnect.mockImplementation(async () => {
+        runtime.serial.status.set('disconnected');
       });
-      
+
       await fireEvent.pointerDown(getByText('Disconnect'));
       await fireEvent.pointerUp(getByText('Disconnect'));
-      
+
       await waitFor(() => {
         expect(getByText('Connect')).toBeInTheDocument();
       });
@@ -154,52 +143,47 @@ describe('App Component', () => {
   });
 
   describe('View Management', () => {
-    it('should show dashboard when connected', async () => {
-      const { getByTestId } = render(App);
-      serialConnection.status.set('connected');
+    it('shows dashboard when connected', async () => {
+      const { getByTestId } = render(App, { props: { runtime } });
+      runtime.serial.status.set('connected');
       await tick();
-      
+
       await waitFor(() => {
         expect(getByTestId('mock-dashboard')).toBeInTheDocument();
       });
     });
 
-    it('should switch to channel detail view', async () => {
-      const { component, getByTestId } = render(App);
-      serialConnection.status.set('connected');
+    it('switches to channel detail view', async () => {
+      const { component, getByTestId } = render(App, { props: { runtime } });
+      runtime.serial.status.set('connected');
       await tick();
-      
+
       await waitFor(() => {
         expect(getByTestId('mock-dashboard')).toBeInTheDocument();
       });
-      
-      // Simulate channel selection by calling the component function directly
+
       component.showChannelDetail(2);
       await tick();
-      
+
       await waitFor(() => {
         expect(getByTestId('mock-channel-detail')).toBeInTheDocument();
       });
     });
 
-    it('should return to dashboard from detail view', async () => {
-      const { component, getByTestId } = render(App);
-      serialConnection.status.set('connected');
-      
+    it('returns to dashboard from detail view', async () => {
+      const { component, getByTestId } = render(App, { props: { runtime } });
+      runtime.serial.status.set('connected');
+
       await waitFor(() => {
         expect(getByTestId('mock-dashboard')).toBeInTheDocument();
       });
-      
-      // First go to detail view
+
       component.showChannelDetail(3);
-      
       await waitFor(() => {
         expect(getByTestId('mock-channel-detail')).toBeInTheDocument();
       });
-      
-      // Then go back
+
       component.showDashboard();
-      
       await waitFor(() => {
         expect(getByTestId('mock-dashboard')).toBeInTheDocument();
       });
@@ -207,12 +191,12 @@ describe('App Component', () => {
   });
 
   describe('Error States', () => {
-    it('should display connection errors prominently', async () => {
-      const { getByText } = render(App);
-      
-      serialConnection.status.set('error');
-      serialConnection.error.set('Device disconnected unexpectedly');
-      
+    it('displays connection errors prominently', async () => {
+      const { getByText } = render(App, { props: { runtime } });
+
+      runtime.serial.status.set('error');
+      runtime.serial.error.set('Device disconnected unexpectedly');
+
       await waitFor(() => {
         const errorElement = getByText(/Error: Device disconnected unexpectedly/);
         expect(errorElement).toBeInTheDocument();
@@ -220,21 +204,19 @@ describe('App Component', () => {
       });
     });
 
-    it('should clear error when reconnecting', async () => {
-      const { getByText, queryByText } = render(App);
-      
-      // Start with error
-      serialConnection.status.set('error');
-      serialConnection.error.set('Connection failed');
-      
+    it('clears error when reconnecting', async () => {
+      const { getByText, queryByText } = render(App, { props: { runtime } });
+
+      runtime.serial.status.set('error');
+      runtime.serial.error.set('Connection failed');
+
       await waitFor(() => {
         expect(getByText(/Error: Connection failed/)).toBeInTheDocument();
       });
-      
-      // Clear error on successful connection
-      serialConnection.status.set('connected');
-      serialConnection.error.set(null);
-      
+
+      runtime.serial.status.set('connected');
+      runtime.serial.error.set(null);
+
       await waitFor(() => {
         expect(queryByText(/Error:/)).not.toBeInTheDocument();
       });
@@ -242,23 +224,19 @@ describe('App Component', () => {
   });
 
   describe('Browser Compatibility', () => {
-    it('should show error when Web Serial is not supported', async () => {
-      // Mock the connection to reject with Web Serial API error
-      mockConnect.mockImplementation(async () => {
-        // Simulate the serial connection error state changes
-        serialConnection.status.set('error');
-        serialConnection.error.set('Web Serial API not supported. Please use Chrome, Edge, or Opera.');
+    it('shows error when Web Serial is not supported', async () => {
+      runtime.serial.connect.mockImplementation(async () => {
+        runtime.serial.status.set('error');
+        runtime.serial.error.set('Web Serial API not supported. Please use Chrome, Edge, or Opera.');
         throw new Error('Web Serial API not supported. Please use Chrome, Edge, or Opera.');
       });
-      
-      const { getByText } = render(App);
-      
+
+      const { getByText } = render(App, { props: { runtime } });
+
       const connectButton = getByText('Connect');
       await fireEvent.pointerDown(connectButton);
+      await fireEvent.pointerUp(connectButton);
 
-      await fireEvent.pointerUp(connectButton);
-      await fireEvent.pointerUp(connectButton);
-      
       await waitFor(() => {
         expect(getByText(/Web Serial API not supported/)).toBeInTheDocument();
       });

@@ -1,6 +1,5 @@
 <script>
-  import { channelStore } from '$lib/stores/channels.js';
-  
+  export let channelStore;
   export let channel = 0;
   export let onback = undefined;
   
