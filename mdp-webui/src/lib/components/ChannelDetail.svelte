@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { channelStore as defaultChannelStore } from '../stores/channels.js';
   import WaveformChart from './WaveformChart.svelte';
   import TimestampAnalysis from './TimestampAnalysis.svelte';
   import OutputButton from './OutputButton.svelte';
   import type { Readable } from 'svelte/store';
   import type { Channel, WaveformPoint } from '$lib/types';
+  import type { ChannelStore } from '$lib/stores/channels';
+  import { getRuntime } from '$lib/app/context';
   
-  export let channelStore = defaultChannelStore;
+  export let channelStore: ChannelStore | undefined = undefined;
   export let channel = 0;
   export let onback: (() => void) | undefined = undefined;
   
@@ -15,7 +16,17 @@
   let channelData: Channel | undefined;
   let isRecording: boolean;
 
-  $: channels = channelStore.channels;
+  let resolvedChannelStore: ChannelStore;
+  $: {
+    const runtime = getRuntime();
+    const resolved = channelStore ?? runtime?.channels;
+    if (!resolved) {
+      throw new Error('ChannelDetail requires `channelStore` prop or AppRuntime context');
+    }
+    resolvedChannelStore = resolved;
+  }
+
+  $: channels = resolvedChannelStore.channels;
   $: channelData = $channels[channel];
   $: isRecording = channelData?.recording ?? false;
   
@@ -29,7 +40,7 @@
       targetVoltage = channelData.targetVoltage || channelData.voltage;
       targetCurrent = channelData.targetCurrent || channelData.current;
     }
-    channelStore.setActiveChannel(channel);
+    resolvedChannelStore.setActiveChannel(channel);
   });
   
   onDestroy(() => {
@@ -44,15 +55,15 @@
   
   
   async function applyVoltage() {
-    await channelStore.setVoltage(channel, targetVoltage, targetCurrent);
+    await resolvedChannelStore.setVoltage(channel, targetVoltage, targetCurrent);
   }
   
   async function applyCurrent() {
-    await channelStore.setCurrent(channel, targetVoltage, targetCurrent);
+    await resolvedChannelStore.setCurrent(channel, targetVoltage, targetCurrent);
   }
   
   function startRecording() {
-    channelStore.startRecording(channel);
+    resolvedChannelStore.startRecording(channel);
     recordingDuration = 0;
     recordingTimer = setInterval(() => {
       recordingDuration++;
@@ -60,7 +71,7 @@
   }
   
   function stopRecording() {
-    channelStore.stopRecording(channel);
+    resolvedChannelStore.stopRecording(channel);
     if (recordingTimer) {
       clearInterval(recordingTimer);
       recordingTimer = null;
@@ -106,6 +117,7 @@
             channel={channel}
             isOutput={channelData.isOutput}
             machineType={channelData.machineType}
+            onToggle={resolvedChannelStore.setOutput}
           />
         </div>
         

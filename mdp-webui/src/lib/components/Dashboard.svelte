@@ -1,16 +1,27 @@
 <script lang="ts">
   import type { Readable } from 'svelte/store';
   import type { Channel } from '$lib/types';
-  import { channelStore as defaultChannelStore } from '../stores/channels.js';
+  import type { ChannelStore } from '$lib/stores/channels';
+  import { getRuntime } from '$lib/app/context';
   import ChannelCard from './ChannelCard.svelte';
   
-  export let channelStore = defaultChannelStore;
+  export let channelStore: ChannelStore | undefined = undefined;
   export let onselectchannel: ((_channel: number) => void) | undefined = undefined;
   
   let channels: Readable<Channel[]>;
   let activeChannel: Readable<number>;
+
+  let resolvedChannelStore: ChannelStore;
+  $: {
+    const runtime = getRuntime();
+    const resolved = channelStore ?? runtime?.channels;
+    if (!resolved) {
+      throw new Error('Dashboard requires `channelStore` prop or AppRuntime context');
+    }
+    resolvedChannelStore = resolved;
+  }
   
-  $: ({ channels, activeChannel } = channelStore);
+  $: ({ channels, activeChannel } = resolvedChannelStore);
   
   function selectChannel(channel: number) {
     onselectchannel?.(channel);

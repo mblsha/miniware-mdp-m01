@@ -2,18 +2,12 @@ import { render, fireEvent, screen, waitFor } from '@testing-library/svelte';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import OutputButton from '../../src/lib/components/OutputButton.svelte';
 
-// Mock the channel store
-const mockSetOutput = vi.hoisted(() => vi.fn());
-vi.mock('../../src/lib/stores/channels.js', () => ({
-  channelStore: {
-    setOutput: mockSetOutput
-  }
-}));
+const mockOnToggle = vi.hoisted(() => vi.fn());
 
 describe('OutputButton', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    mockSetOutput.mockClear();
+    mockOnToggle.mockClear();
   });
 
   afterEach(() => {
@@ -27,7 +21,8 @@ describe('OutputButton', () => {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -39,7 +34,8 @@ describe('OutputButton', () => {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'L1060 Load'
+          machineType: 'L1060 Load',
+          onToggle: mockOnToggle
         }
       });
 
@@ -51,7 +47,8 @@ describe('OutputButton', () => {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'L1060'
+          machineType: 'L1060',
+          onToggle: mockOnToggle
         }
       });
 
@@ -63,7 +60,8 @@ describe('OutputButton', () => {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'Unknown'
+          machineType: 'Unknown',
+          onToggle: mockOnToggle
         }
       });
 
@@ -77,7 +75,8 @@ describe('OutputButton', () => {
         props: {
           channel: 0,
           isOutput: true,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -90,7 +89,8 @@ describe('OutputButton', () => {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -106,6 +106,7 @@ describe('OutputButton', () => {
           channel: 0,
           isOutput: false,
           machineType: 'P906 PSU',
+          onToggle: mockOnToggle,
           size: 'small'
         }
       });
@@ -119,6 +120,7 @@ describe('OutputButton', () => {
           channel: 0,
           isOutput: false,
           machineType: 'P906 PSU',
+          onToggle: mockOnToggle,
           size: 'normal'
         }
       });
@@ -129,13 +131,14 @@ describe('OutputButton', () => {
 
   describe('Optimistic State Updates', () => {
     it('should immediately show new state when clicked', async () => {
-      mockSetOutput.mockResolvedValue();
+      mockOnToggle.mockResolvedValue();
 
       render(OutputButton, {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -153,29 +156,31 @@ describe('OutputButton', () => {
     });
 
     it('should call channelStore.setOutput with correct parameters', async () => {
-      mockSetOutput.mockResolvedValue();
+      mockOnToggle.mockResolvedValue();
 
       render(OutputButton, {
         props: {
           channel: 2,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
       await fireEvent.pointerUp(screen.getByRole('button'));
 
-      expect(mockSetOutput).toHaveBeenCalledWith(2, true);
+      expect(mockOnToggle).toHaveBeenCalledWith(2, true);
     });
 
     it('should toggle from ON to OFF state', async () => {
-      mockSetOutput.mockResolvedValue();
+      mockOnToggle.mockResolvedValue();
 
       render(OutputButton, {
         props: {
           channel: 0,
           isOutput: true,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -186,20 +191,21 @@ describe('OutputButton', () => {
 
       expect(screen.getByText('Output: OFF')).toBeInTheDocument();
       expect(button).not.toHaveClass('on');
-      expect(mockSetOutput).toHaveBeenCalledWith(0, false);
+      expect(mockOnToggle).toHaveBeenCalledWith(0, false);
     });
   });
 
   describe('Timeout and Error Handling', () => {
     it('should revert to original state after 5 second timeout', async () => {
       // Mock a hanging promise (no acknowledgement)
-      mockSetOutput.mockReturnValue(new Promise(() => {}));
+      mockOnToggle.mockReturnValue(new Promise(() => {}));
 
       render(OutputButton, {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -223,13 +229,14 @@ describe('OutputButton', () => {
 
     it('should revert state immediately on setOutput error', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      mockSetOutput.mockRejectedValue(new Error('Communication failed'));
+      mockOnToggle.mockRejectedValue(new Error('Communication failed'));
 
       render(OutputButton, {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -249,13 +256,14 @@ describe('OutputButton', () => {
     });
 
     it('should clear optimistic state when actual state matches', async () => {
-      mockSetOutput.mockResolvedValue();
+      mockOnToggle.mockResolvedValue();
 
       const { rerender } = render(OutputButton, {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -269,7 +277,8 @@ describe('OutputButton', () => {
       await rerender({
         channel: 0,
         isOutput: true,
-        machineType: 'P906 PSU'
+        machineType: 'P906 PSU',
+        onToggle: mockOnToggle
       });
 
       // Should clear waiting state
@@ -288,6 +297,7 @@ describe('OutputButton', () => {
           channel: 0,
           isOutput: false,
           machineType: 'P906 PSU',
+          onToggle: mockOnToggle,
           disabled: true
         }
       });
@@ -297,18 +307,19 @@ describe('OutputButton', () => {
 
       await fireEvent.pointerUp(button);
 
-      expect(mockSetOutput).not.toHaveBeenCalled();
+      expect(mockOnToggle).not.toHaveBeenCalled();
       expect(screen.getByText('Output: OFF')).toBeInTheDocument();
     });
 
     it('should not respond to clicks while waiting for acknowledgement', async () => {
-      mockSetOutput.mockReturnValue(new Promise(() => {}));
+      mockOnToggle.mockReturnValue(new Promise(() => {}));
 
       render(OutputButton, {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
@@ -316,49 +327,51 @@ describe('OutputButton', () => {
       
       // First click
       await fireEvent.pointerUp(button);
-      expect(mockSetOutput).toHaveBeenCalledTimes(1);
+      expect(mockOnToggle).toHaveBeenCalledTimes(1);
       expect(button).toHaveClass('waiting');
 
       // Second click should be ignored
       await fireEvent.pointerUp(button);
-      expect(mockSetOutput).toHaveBeenCalledTimes(1);
+      expect(mockOnToggle).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('Event Propagation', () => {
     it('should call setOutput when clicked', async () => {
-      mockSetOutput.mockResolvedValue();
+      mockOnToggle.mockResolvedValue();
 
       render(OutputButton, {
         props: {
           channel: 0,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
       const button = screen.getByRole('button');
       await fireEvent.pointerUp(button);
 
-      expect(mockSetOutput).toHaveBeenCalled();
+      expect(mockOnToggle).toHaveBeenCalled();
     });
   });
 
   describe('Event Emission', () => {
     it('should successfully toggle without timing out', async () => {
-      mockSetOutput.mockResolvedValue();
+      mockOnToggle.mockResolvedValue();
 
       render(OutputButton, {
         props: {
           channel: 2,
           isOutput: false,
-          machineType: 'P906 PSU'
+          machineType: 'P906 PSU',
+          onToggle: mockOnToggle
         }
       });
 
       await fireEvent.pointerUp(screen.getByRole('button'));
 
-      expect(mockSetOutput).toHaveBeenCalledWith(2, true);
+      expect(mockOnToggle).toHaveBeenCalledWith(2, true);
     });
   });
 });

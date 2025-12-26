@@ -33,13 +33,10 @@ vi.mock('$lib/stores/theme.js', () => ({
   theme: writable('light')
 }));
 
-// Mock sparkline store
 const mockSparklineData = writable([]);
-vi.mock('$lib/stores/sparkline.js', () => ({
-  sparklineStore: {
-    getChannelMetricData: vi.fn(() => mockSparklineData)
-  }
-}));
+const mockSparklineStore = {
+  getChannelMetricData: vi.fn(() => mockSparklineData),
+};
 
 import Sparkline from '$lib/components/Sparkline.svelte';
 
@@ -57,6 +54,7 @@ describe('Sparkline Component', () => {
         props: { 
           channel: 0, 
           metric: 'voltage',
+          sparklineStore: mockSparklineStore,
           width: 300,
           height: 80
         }
@@ -74,7 +72,8 @@ describe('Sparkline Component', () => {
       const { container } = render(Sparkline, {
         props: { 
           channel: 0, 
-          metric: 'voltage'
+          metric: 'voltage',
+          sparklineStore: mockSparklineStore
         }
       });
       
@@ -126,7 +125,7 @@ describe('Sparkline Component', () => {
       mockSparklineData.set(mockData);
       
       render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -140,7 +139,7 @@ describe('Sparkline Component', () => {
       mockSparklineData.set(mockData);
       
       const { rerender, container } = render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -149,7 +148,7 @@ describe('Sparkline Component', () => {
       });
       
       // Test current metric - should still render properly
-      await rerender({ channel: 0, metric: 'current' });
+      await rerender({ channel: 0, metric: 'current', sparklineStore: mockSparklineStore });
       
       await waitFor(() => {
         expect(container.querySelector('svg')).toBeInTheDocument();
@@ -162,7 +161,7 @@ describe('Sparkline Component', () => {
       mockSparklineData.set(mockData);
       
       render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -189,7 +188,7 @@ describe('Sparkline Component', () => {
       mockSparklineData.set(smallData);
       
       render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -209,7 +208,7 @@ describe('Sparkline Component', () => {
       mockSparklineData.set(largeData);
       
       render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -234,6 +233,7 @@ describe('Sparkline Component', () => {
         props: { 
           channel: 0, 
           metric: 'voltage',
+          sparklineStore: mockSparklineStore,
           targetValue: 3.5 
         }
       });
@@ -261,6 +261,7 @@ describe('Sparkline Component', () => {
         props: { 
           channel: 0, 
           metric: 'voltage',
+          sparklineStore: mockSparklineStore,
           targetValue: null
         }
       });
@@ -280,6 +281,7 @@ describe('Sparkline Component', () => {
         props: { 
           channel: 0, 
           metric: 'voltage',
+          sparklineStore: mockSparklineStore,
           targetValue: 0
         }
       });
@@ -303,7 +305,7 @@ describe('Sparkline Component', () => {
       mockSparklineData.set(mockData);
       
       render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -323,6 +325,7 @@ describe('Sparkline Component', () => {
         props: { 
           channel: 0, 
           metric: 'voltage',
+          sparklineStore: mockSparklineStore,
           showAxes: true
         }
       });
@@ -352,6 +355,7 @@ describe('Sparkline Component', () => {
           props: { 
             channel: 0, 
             metric,
+            sparklineStore: mockSparklineStore,
             showAxes: true
           }
         });
@@ -378,7 +382,7 @@ describe('Sparkline Component', () => {
       mockSparklineData.set(initialData);
       
       const { container } = render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -405,7 +409,7 @@ describe('Sparkline Component', () => {
       ]);
       
       const { rerender, container } = render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -413,7 +417,7 @@ describe('Sparkline Component', () => {
         expect(container.querySelector('svg')).toBeInTheDocument();
       });
       
-      await rerender({ channel: 0, metric: 'current' });
+      await rerender({ channel: 0, metric: 'current', sparklineStore: mockSparklineStore });
       
       // Chart should still be present after metric change
       expect(container.querySelector('svg')).toBeInTheDocument();
@@ -432,7 +436,7 @@ describe('Sparkline Component', () => {
       mockSparklineData.set(mockData);
       
       render(Sparkline, {
-        props: { channel: 0, metric: 'voltage' }
+        props: { channel: 0, metric: 'voltage', sparklineStore: mockSparklineStore }
       });
       
       await waitFor(() => {
@@ -454,6 +458,7 @@ describe('Sparkline Component', () => {
         props: { 
           channel: 0, 
           metric: 'voltage',
+          sparklineStore: mockSparklineStore,
           showTooltip: false
         }
       });

@@ -1,13 +1,25 @@
 <script lang="ts">
   import type { Channel } from '$lib/types';
+  import { getRuntime } from '$lib/app/context';
+  import type { SparklineStore } from '$lib/stores/sparkline';
   import OutputButton from './OutputButton.svelte';
   import Sparkline from './Sparkline.svelte';
   
   export let channel: Channel;
   export let active = false;
   export let onclick: (() => void) | undefined = undefined;
+  export let onToggleOutput: ((channel: number, enabled: boolean) => Promise<void>) | undefined = undefined;
+  export let sparklineStore: SparklineStore | undefined = undefined;
   
   let showModeDetails = false;
+
+  let resolvedOnToggleOutput: ((channel: number, enabled: boolean) => Promise<void>) | undefined = undefined;
+  let resolvedSparklineStore: SparklineStore | undefined = undefined;
+  $: {
+    const runtime = getRuntime();
+    resolvedOnToggleOutput = onToggleOutput ?? runtime?.channels.setOutput;
+    resolvedSparklineStore = sparklineStore ?? runtime?.sparklines;
+  }
   
   function getAvailableModes(machineType: string) {
     if (machineType === 'L1060') {
@@ -67,6 +79,7 @@
             channel={channel.channel} 
             metric="voltage" 
             targetValue={channel.targetVoltage}
+            sparklineStore={resolvedSparklineStore}
             width={80} 
             height={30} 
             showAxes={false}
@@ -83,6 +96,7 @@
             channel={channel.channel} 
             metric="current" 
             targetValue={channel.targetCurrent}
+            sparklineStore={resolvedSparklineStore}
             width={80} 
             height={30} 
             showAxes={false}
@@ -99,6 +113,7 @@
             channel={channel.channel} 
             metric="power" 
             targetValue={channel.targetPower}
+            sparklineStore={resolvedSparklineStore}
             width={80} 
             height={30} 
             showAxes={false}
@@ -126,6 +141,7 @@
         channel={channel.channel}
         isOutput={channel.isOutput}
         machineType={channel.machineType}
+        onToggle={resolvedOnToggleOutput}
         size="small"
       />
     </div>

@@ -29,45 +29,40 @@ vi.mock('$lib/components/WaveformChart.svelte', async () => ({
   default: (await vi.importActual('../mocks/components/MockWaveformChart.svelte')).default
 }));
 
-// Mock the channel store
-vi.mock('$lib/stores/channels.js', () => {
-  const channels = writable([]);
-  const activeChannel = writable(0);
-  
-  return {
-    channelStore: {
-      channels,
-      activeChannel,
-      setActiveChannel: vi.fn((ch) => activeChannel.set(ch)),
-      startRecording: vi.fn((ch) => {
-        channels.update(chs => {
-          if (chs[ch]) {
-            chs[ch].recording = true;
-            chs[ch].waveformData = [];
-          }
-          return [...chs];
-        });
-      }),
-      stopRecording: vi.fn((ch) => {
-        channels.update(chs => {
-          if (chs[ch]) {
-            chs[ch].recording = false;
-          }
-          return [...chs];
-        });
-      }),
-      setVoltage: vi.fn(),
-      setCurrent: vi.fn(),
-      setOutput: vi.fn()
-    }
-  };
-});
+const channels = writable([]);
+const activeChannel = writable(0);
+const channelStore = {
+  channels,
+  activeChannel,
+  setActiveChannel: vi.fn((ch) => activeChannel.set(ch)),
+  startRecording: vi.fn((ch) => {
+    channels.update((chs) => {
+      if (chs[ch]) {
+        chs[ch].recording = true;
+        chs[ch].waveformData = [];
+      }
+      return [...chs];
+    });
+  }),
+  stopRecording: vi.fn((ch) => {
+    channels.update((chs) => {
+      if (chs[ch]) {
+        chs[ch].recording = false;
+      }
+      return [...chs];
+    });
+  }),
+  setVoltage: vi.fn(),
+  setCurrent: vi.fn(),
+  setOutput: vi.fn(),
+};
 
-import { channelStore } from '$lib/stores/channels.js';
+function renderChannelDetail(props) {
+  return render(ChannelDetail, { props: { channelStore, ...props } });
+}
 
 describe('ChannelDetail Recording Tests', () => {
   let mockChannelData;
-  const { channels, activeChannel } = channelStore;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -102,7 +97,7 @@ describe('ChannelDetail Recording Tests', () => {
 
   describe('Recording Workflow', () => {
     it('should start and stop recording', async () => {
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       // Start recording
       await fireEvent.pointerDown(getByText('Start Recording'));
@@ -136,7 +131,7 @@ describe('ChannelDetail Recording Tests', () => {
       mockChannelData[0].recording = true;
       channels.set([...mockChannelData]);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       // Simulate adding waveform data
       mockChannelData[0].waveformData = [
@@ -156,7 +151,7 @@ describe('ChannelDetail Recording Tests', () => {
     });
 
     it('should not show export button for empty recording', async () => {
-      const { getByText, queryByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText, queryByText } = renderChannelDetail({ channel: 0 });
       
       // Start and immediately stop recording
       await fireEvent.pointerDown(getByText('Start Recording'));
@@ -186,7 +181,7 @@ describe('ChannelDetail Recording Tests', () => {
       ];
       channels.set([...mockChannelData]);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       await fireEvent.pointerDown(getByText('Export Data'));
       await fireEvent.pointerUp(getByText('Export Data'));
@@ -217,7 +212,7 @@ describe('ChannelDetail Recording Tests', () => {
       mockChannelData[0].waveformData = largeData;
       channels.set([...mockChannelData]);
       
-      const { getByText } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText } = renderChannelDetail({ channel: 0 });
       
       expect(getByText('1000 points')).toBeInTheDocument();
       
@@ -240,7 +235,7 @@ describe('ChannelDetail Recording Tests', () => {
       channels.set([...mockChannelData]);
       
       // Start recording on channel 0
-      const { getByText, rerender } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText, rerender } = renderChannelDetail({ channel: 0 });
       await fireEvent.pointerDown(getByText('Start Recording'));
       await fireEvent.pointerUp(getByText('Start Recording'));
       
@@ -248,7 +243,7 @@ describe('ChannelDetail Recording Tests', () => {
       channels.set([...mockChannelData]);
       
       // Switch to channel 1
-      await rerender({ channel: 1 });
+      await rerender({ channelStore, channel: 1 });
       
       // Channel 1 should not be recording
       expect(getByText('Start Recording')).toBeInTheDocument();
@@ -261,7 +256,7 @@ describe('ChannelDetail Recording Tests', () => {
       channels.set([...mockChannelData]);
       
       // Switch back to channel 0
-      await rerender({ channel: 0 });
+      await rerender({ channelStore, channel: 0 });
       
       // Channel 0 should still be recording
       expect(getByText('Stop Recording')).toBeInTheDocument();
@@ -278,13 +273,13 @@ describe('ChannelDetail Recording Tests', () => {
       ];
       channels.set([...mockChannelData]);
       
-      const { getByText, rerender } = render(ChannelDetail, { props: { channel: 0 } });
+      const { getByText, rerender } = renderChannelDetail({ channel: 0 });
       
       // Channel 0 should show its data
       expect(getByText('1 points')).toBeInTheDocument();
       
       // Switch to channel 1
-      await rerender({ channel: 1 });
+      await rerender({ channelStore, channel: 1 });
       
       // Channel 1 should show its own data
       expect(getByText('1 points')).toBeInTheDocument();

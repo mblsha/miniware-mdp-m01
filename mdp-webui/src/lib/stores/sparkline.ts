@@ -1,15 +1,10 @@
-import { writable, derived } from 'svelte/store';
-import type { Writable, Readable } from 'svelte/store';
-import { channelStore } from './channels.js';
-
-// Type definitions
-interface DataPoint {
-  timestamp: number;
-  value: number;
-}
+import { derived, writable } from 'svelte/store';
+import type { Readable, Writable } from 'svelte/store';
+import type { Channel } from '../types';
+import type { SparklineDataPoint } from '../types';
 
 interface MetricData {
-  [metric: string]: DataPoint[];
+  [metric: string]: SparklineDataPoint[];
 }
 
 interface SparklineData {
@@ -19,125 +14,101 @@ interface SparklineData {
 const WINDOW_DURATION_MS = 60 * 1000; // 1 minute
 const CLEANUP_INTERVAL_MS = 5 * 1000; // Clean up every 5 seconds
 
-export function createSparklineStore() {
-  // Store for sparkline data by channel and metric
-  // Structure: { [channel]: { [metric]: [{timestamp, value}] } }
+export type SparklineStore = ReturnType<typeof createSparklineStore>;
+
+export function createSparklineStore(options: { channels: Readable<Channel[]> }): {
+  data: Readable<SparklineData>;
+  addDataPoint: (channel: number, metric: string, value: number, timestamp?: number) => void;
+  getChannelMetricData: (channel: number, metric: string) => Readable<SparklineDataPoint[]>;
+  clear: () => void;
+  destroy: () => void;
+} {
   const sparklineData: Writable<SparklineData> = writable({});
-  
+
   let cleanupInterval: ReturnType<typeof setInterval> | null = null;
-  
-  // Initialize cleanup interval
-  function startCleanup() {
+
+  function startCleanup(): void {
     if (cleanupInterval) return;
-    
+
     cleanupInterval = setInterval(() => {
       const now = Date.now();
       const cutoffTime = now - WINDOW_DURATION_MS;
-      
-      sparklineData.update(data => {
+
+      sparklineData.update((data) => {
         const newData: SparklineData = {};
-        
-        // Clean up old data points for all channels and metrics
+
         Object.keys(data).forEach((channelKey) => {
           const channel = Number(channelKey);
           newData[channel] = {};
-          Object.keys(data[channel]).forEach(metric => {
-            newData[channel][metric] = data[channel][metric]
-              .filter(point => point.timestamp >= cutoffTime);
+
+          Object.keys(data[channel]).forEach((metric) => {
+            newData[channel][metric] = data[channel][metric].filter((point) => point.timestamp >= cutoffTime);
           });
         });
-        
+
         return newData;
       });
     }, CLEANUP_INTERVAL_MS);
   }
-  
-  // Stop cleanup interval
-  function stopCleanup() {
-    if (cleanupInterval) {
-      clearInterval(cleanupInterval);
-      cleanupInterval = null;
-    }
+
+  function stopCleanup(): void {
+    if (!cleanupInterval) return;
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
   }
-  
-  // Add data point for a specific channel and metric
+
   function addDataPoint(channel: number, metric: string, value: number, timestamp: number = Date.now()): void {
-    sparklineData.update(data => {
+    sparklineData.update((data) => {
       if (!data[channel]) {
         data[channel] = {};
       }
       if (!data[channel][metric]) {
         data[channel][metric] = [];
       }
-      
-      // Add new data point
+
       data[channel][metric].push({ timestamp, value });
-      
-      // Remove old data points beyond window
+
       const cutoffTime = timestamp - WINDOW_DURATION_MS;
-      data[channel][metric] = data[channel][metric]
-        .filter(point => point.timestamp >= cutoffTime);
-      
+      data[channel][metric] = data[channel][metric].filter((point) => point.timestamp >= cutoffTime);
+
       return data;
     });
   }
-  
-  // Get data for a specific channel and metric
-  function getChannelMetricData(channel: number, metric: string): Readable<DataPoint[]> {
+
+  function getChannelMetricData(channel: number, metric: string): Readable<SparklineDataPoint[]> {
     return derived(sparklineData, ($data) => {
-      if (!$data[channel] || !$data[channel][metric]) {
-        return [];
-      }
+      if (!$data[channel] || !$data[channel][metric]) return [];
       return $data[channel][metric];
     });
   }
-  
-  // Clear all data
+
   function clear(): void {
     sparklineData.set({});
   }
-  
-  // Subscribe to channel updates to automatically populate sparkline data
+
   function subscribeToChannelUpdates(): () => void {
-    return channelStore.channels.subscribe($channels => {
-      $channels.forEach((channel, index: number) => {
-        if (channel.online) {
-          const now = Date.now();
-          
-          // Add voltage data point
-          addDataPoint(index, 'voltage', channel.voltage, now);
-          
-          // Add current data point  
-          addDataPoint(index, 'current', channel.current, now);
-          
-          // Calculate and add power data point
-          const power = channel.voltage * channel.current;
-          addDataPoint(index, 'power', power, now);
-        }
+    return options.channels.subscribe(($channels) => {
+      const now = Date.now();
+      $channels.forEach((channel) => {
+        if (!channel.online) return;
+        addDataPoint(channel.channel, 'voltage', channel.voltage, now);
+        addDataPoint(channel.channel, 'current', channel.current, now);
+        addDataPoint(channel.channel, 'power', channel.voltage * channel.current, now);
       });
     });
   }
-  
-  // Start the store
+
   startCleanup();
   const unsubscribeChannels = subscribeToChannelUpdates();
-  
+
   return {
-    // Read-only access to data
-    data: derived(sparklineData, $data => $data),
-    
-    // Methods
+    data: derived(sparklineData, ($data) => $data),
     addDataPoint,
     getChannelMetricData,
     clear,
-    
-    // Cleanup
     destroy: () => {
       stopCleanup();
       unsubscribeChannels();
-    }
+    },
   };
 }
-
-// Global instance
-export const sparklineStore = createSparklineStore();

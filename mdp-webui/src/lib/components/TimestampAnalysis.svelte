@@ -2,13 +2,13 @@
   import * as Plot from '@observablehq/plot';
   import { onDestroy, onMount } from 'svelte';
   
-  import { serialConnection } from '../serial';
-  import { decodePacket, isWavePacket } from '../packet-decoder';
   import { theme } from '$lib/stores/theme.js';
-  import type { PacketHandler } from '$lib/types';
+  import { getRuntime } from '$lib/app/context';
+  import type { PacketBus } from '$lib/services/packet-bus';
   
   export let channel = 0;
   export let isRecording = false;
+  export let packetBus: PacketBus | undefined = undefined;
   
   type PacketDataPoint = {
     packetIndex: number;
@@ -56,13 +56,13 @@
   function setupPacketHandlers() {
     // Clean up old handlers
     unregisterWaveHandler?.();
+
+    const runtime = getRuntime();
+    const resolvedPacketBus = packetBus ?? runtime?.packets;
+    if (!resolvedPacketBus) return;
     
-    // Create new handlers
-    const waveHandler: PacketHandler = (packet) => {
+    unregisterWaveHandler = resolvedPacketBus.onWave.subscribe((decoded) => {
       if (!isRecording) return;
-      
-      const decoded = decodePacket(packet);
-      if (!decoded || !isWavePacket(decoded)) return;
       
       const wave = decoded.data;
       if (wave.channel !== channel) return;
@@ -120,10 +120,7 @@
       }
       
       updatePlot();
-    };
-    
-    // Register handlers
-    unregisterWaveHandler = serialConnection.registerPacketHandler(0x12, waveHandler); // WAVE
+    });
   }
   
   // Clear data when recording starts

@@ -1,17 +1,21 @@
 <script lang="ts">
   import type { Readable } from 'svelte/store';
-  import { serialConnection as defaultSerialConnection, ConnectionStatus, type DeviceInfo } from './lib/serial.js';
-  import { channelStore as defaultChannelStore } from './lib/stores/channels.js';
+  import { ConnectionStatus, type DeviceInfo } from './lib/serial.js';
   import { debugEnabled } from './lib/debug-logger.js';
   import Dashboard from './lib/components/Dashboard.svelte';
   import ChannelDetail from './lib/components/ChannelDetail.svelte';
   import ThemeToggle from './lib/components/ThemeToggle.svelte';
   import { theme } from './lib/stores/theme.js';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
+  import { setRuntime } from './lib/app/context';
+  import { createRuntime, type AppRuntime } from './lib/app/runtime';
   
-  // Allow dependency injection for testing
-  export let serialConnection = defaultSerialConnection;
-  export let channelStore = defaultChannelStore;
+  export let runtime: AppRuntime | undefined = undefined;
+
+  const ownsRuntime = runtime === undefined;
+  const resolvedRuntime = runtime ?? createRuntime();
+
+  setRuntime(resolvedRuntime);
 
   let currentView = 'dashboard';
   let selectedChannel = 0;
@@ -23,8 +27,16 @@
   onMount(() => {
     theme.init();
   });
+
+  onDestroy(() => {
+    if (ownsRuntime) {
+      resolvedRuntime.destroy();
+    }
+  });
   
-  // Extract stores from serialConnection object (now reactive to prop changes)
+  const serialConnection = resolvedRuntime.serial;
+  const channelStore = resolvedRuntime.channels;
+
   $: ({ status, error, deviceType } = serialConnection);
   
   async function handleConnect() {

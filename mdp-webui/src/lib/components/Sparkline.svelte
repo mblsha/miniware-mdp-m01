@@ -2,9 +2,10 @@
   import * as Plot from '@observablehq/plot';
   import { onDestroy } from 'svelte';
   import { theme } from '$lib/stores/theme.js';
-  import { sparklineStore } from '$lib/stores/sparkline.js';
-  import type { Readable } from 'svelte/store';
+  import { readable, type Readable } from 'svelte/store';
   import type { SparklineDataPoint, SparklineOptions } from '$lib/types';
+  import type { SparklineStore } from '$lib/stores/sparkline';
+  import { getRuntime } from '$lib/app/context';
   
   export let channel = 0;
   export let metric: SparklineOptions['metric'] = 'voltage';
@@ -13,17 +14,23 @@
   export let height = 60;
   export let showAxes = false; // Minimal sparkline by default
   export let showTooltip = true;
+  export let sparklineStore: SparklineStore | undefined = undefined;
   
   let chartContainer: HTMLDivElement | null = null;
   let currentTheme;
   let metricData: SparklineDataPoint[] = [];
+  const emptyDataStore: Readable<SparklineDataPoint[]> = readable([]);
   
   // Subscribe to theme changes
   $: currentTheme = $theme;
   
   // Subscribe to sparkline data for this channel and metric
   let dataStore: Readable<SparklineDataPoint[]>;
-  $: dataStore = sparklineStore.getChannelMetricData(channel, metric);
+  $: {
+    const runtime = getRuntime();
+    const resolvedSparklineStore = sparklineStore ?? runtime?.sparklines;
+    dataStore = resolvedSparklineStore ? resolvedSparklineStore.getChannelMetricData(channel, metric) : emptyDataStore;
+  }
   $: metricData = $dataStore;
   
   // Get theme-specific colors

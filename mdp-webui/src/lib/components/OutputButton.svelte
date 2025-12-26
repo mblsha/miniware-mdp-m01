@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { channelStore } from '../stores/channels.js';
   import { createEventDispatcher } from 'svelte';
 
   export let channel: number;
   export let isOutput: boolean;
   export let machineType: string;
+  export let onToggle: ((channel: number, enabled: boolean) => Promise<void>) | undefined = undefined;
   export let disabled = false;
   export let size: 'small' | 'normal' = 'normal';
 
@@ -31,7 +31,7 @@
       event.stopPropagation();
     }
     
-    if (isWaitingForAck || disabled) {
+    if (isWaitingForAck || disabled || !onToggle) {
       return;
     }
 
@@ -54,7 +54,7 @@
     }, 5000);
 
     try {
-      await channelStore.setOutput(channel, newState);
+      await onToggle(channel, newState);
       
       // Success - wait for actual state update to clear optimistic state
       // The actual state will be updated by the synthesize packet handler
@@ -98,7 +98,7 @@
   class:waiting={isWaitingForAck}
   class:small={size === 'small'}
   onpointerup={toggleOutput}
-  {disabled}
+  disabled={disabled || !onToggle}
   type="button"
 >
   {buttonText}: {displayState ? 'ON' : 'OFF'}

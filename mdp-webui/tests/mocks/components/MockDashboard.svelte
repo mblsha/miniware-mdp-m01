@@ -1,7 +1,7 @@
 <script>
-  import { channelStore } from '$lib/stores/channels.js';
   import ChannelCard from './MockChannelCard.svelte';
   
+  export let channelStore;
   export let onselectchannel = undefined;
   
   const { channels, activeChannel } = channelStore;

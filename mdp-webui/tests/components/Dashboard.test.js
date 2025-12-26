@@ -22,20 +22,14 @@ function createMockChannelStore() {
   };
 }
 
-var mockChannelStore;
-
-vi.mock('$lib/stores/channels', () => {
-  mockChannelStore = createMockChannelStore();
-  return { channelStore: mockChannelStore };
-});
-
 import Dashboard from '$lib/components/Dashboard.svelte';
-import { channelStore } from '$lib/stores/channels';
 
 describe('Dashboard Component', () => {
+  const channelStore = createMockChannelStore();
+
   beforeEach(() => {
     // Reset mock store to clean state
-    mockChannelStore.reset();
+    channelStore.reset();
     
     // Set up test data
     channelStore.channels.set(Array(6).fill(null).map((_, i) => ({
@@ -57,7 +51,7 @@ describe('Dashboard Component', () => {
   describe('Rendering', () => {
 
     it('should render all 6 channel cards', () => {
-      const { getAllByTestId } = render(Dashboard);
+      const { getAllByTestId } = render(Dashboard, { props: { channelStore } });
       
       const cards = getAllByTestId(/channel-card-\d/);
       expect(cards).toHaveLength(6);
@@ -70,7 +64,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should highlight active channel', async () => {
-      const { getByTestId } = render(Dashboard);
+      const { getByTestId } = render(Dashboard, { props: { channelStore } });
       
       // Set channel 2 as active
       channelStore.activeChannel.set(2);
@@ -90,7 +84,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should update when channels data changes', async () => {
-      const { rerender } = render(Dashboard);
+      const { rerender } = render(Dashboard, { props: { channelStore } });
       
       // Update channels with online status
       channelStore.channels.set(Array(6).fill(null).map((_, i) => ({
@@ -116,7 +110,7 @@ describe('Dashboard Component', () => {
 
   describe('Grid Layout', () => {
     it('should use CSS grid for layout', () => {
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       const grid = container.querySelector('.channel-grid');
       expect(grid).toBeInTheDocument();
@@ -127,7 +121,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should have responsive grid columns', () => {
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       const grid = container.querySelector('.channel-grid');
       const styles = window.getComputedStyle(grid);
@@ -141,7 +135,7 @@ describe('Dashboard Component', () => {
     it('should emit selectChannel event when card is clicked', async () => {
       const selectHandler = vi.fn();
       const { getByTestId } = render(Dashboard, { 
-        props: { onselectchannel: selectHandler }
+        props: { channelStore, onselectchannel: selectHandler }
       });
       
       // Click channel 3
@@ -155,7 +149,7 @@ describe('Dashboard Component', () => {
     it('should handle multiple channel selections', async () => {
       const selections = [];
       const { getByTestId } = render(Dashboard, {
-        props: { onselectchannel: (channel) => selections.push(channel) }
+        props: { channelStore, onselectchannel: (channel) => selections.push(channel) }
       });
       
       // Click multiple channels
@@ -174,7 +168,7 @@ describe('Dashboard Component', () => {
       
       const selectHandler = vi.fn();
       const { getByTestId } = render(Dashboard, {
-        props: { onselectchannel: selectHandler }
+        props: { channelStore, onselectchannel: selectHandler }
       });
       
       // Click the already active channel
@@ -187,7 +181,7 @@ describe('Dashboard Component', () => {
 
   describe('Data Binding', () => {
     it('should react to store updates', async () => {
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       // Initially 6 cards
       let cards = container.querySelectorAll('[data-testid^="channel-card-"]');
@@ -218,7 +212,7 @@ describe('Dashboard Component', () => {
     it('should handle empty channel array', async () => {
       channelStore.channels.set([]);
       
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       const cards = container.querySelectorAll('[data-testid^="channel-card-"]');
       expect(cards).toHaveLength(0);
@@ -231,7 +225,7 @@ describe('Dashboard Component', () => {
         { channel: 2, online: true }
       ]);
       
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       const cards = container.querySelectorAll('[data-testid^="channel-card-"]');
       expect(cards).toHaveLength(3);
@@ -240,7 +234,7 @@ describe('Dashboard Component', () => {
 
   describe('Performance', () => {
     it('should handle rapid active channel changes', async () => {
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       // Rapidly change active channel
       for (let i = 0; i < 20; i++) {
@@ -257,7 +251,7 @@ describe('Dashboard Component', () => {
     });
 
     it('should efficiently update only changed channels', async () => {
-      const { rerender } = render(Dashboard);
+      const { rerender } = render(Dashboard, { props: { channelStore } });
       
       const initialChannels = Array(6).fill(null).map((_, i) => ({
         channel: i,
@@ -282,7 +276,7 @@ describe('Dashboard Component', () => {
 
   describe('Accessibility', () => {
     it('should have semantic HTML structure', () => {
-      const { container } = render(Dashboard);
+      const { container } = render(Dashboard, { props: { channelStore } });
       
       // Grid should be properly structured
       const grid = container.querySelector('.channel-grid');
@@ -292,7 +286,7 @@ describe('Dashboard Component', () => {
     it('should support keyboard navigation', async () => {
       const selectHandler = vi.fn();
       const { container } = render(Dashboard, {
-        props: { onselectchannel: selectHandler }
+        props: { channelStore, onselectchannel: selectHandler }
       });
       
       // Get first card and simulate keyboard interaction
@@ -324,7 +318,7 @@ describe('Dashboard Component', () => {
         }
       ]);
       
-      const { getAllByTestId } = render(Dashboard);
+      const { getAllByTestId } = render(Dashboard, { props: { channelStore } });
       
       const cards = getAllByTestId(/channel-card-\d/);
       expect(cards).toHaveLength(3);
@@ -335,7 +329,7 @@ describe('Dashboard Component', () => {
         { channel: 999, online: true }
       ]);
       
-      const { getByTestId } = render(Dashboard);
+      const { getByTestId } = render(Dashboard, { props: { channelStore } });
       
       const card = getByTestId('channel-card-999');
       expect(card).toHaveTextContent('Channel 1000');
@@ -346,7 +340,7 @@ describe('Dashboard Component', () => {
         { channel: -1, online: true }
       ]);
       
-      const { getByTestId } = render(Dashboard);
+      const { getByTestId } = render(Dashboard, { props: { channelStore } });
       
       const card = getByTestId('channel-card--1');
       expect(card).toHaveTextContent('Channel 0');
@@ -355,14 +349,14 @@ describe('Dashboard Component', () => {
 
   describe('Memory Management', () => {
     it('should clean up event listeners on unmount', () => {
-      const { unmount } = render(Dashboard);
+      const { unmount } = render(Dashboard, { props: { channelStore } });
       
       // Should not throw errors
       expect(() => unmount()).not.toThrow();
     });
 
     it('should unsubscribe from stores on unmount', async () => {
-      const { unmount } = render(Dashboard);
+      const { unmount } = render(Dashboard, { props: { channelStore } });
       
       unmount();
       

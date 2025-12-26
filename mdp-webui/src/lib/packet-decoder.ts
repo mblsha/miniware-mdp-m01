@@ -4,7 +4,7 @@ import { getMachineTypeString } from './machine-utils';
 import { get } from 'svelte/store';
 import type { DeviceInfo } from './serial.js';
 import type { Channel, WaveformPoint } from './types';
-import type { AddressData, AddressEntry, MachineData, SynthesizeChannel, SynthesizeData, WaveData } from './types/kaitai';
+import type { AddressData, AddressEntry, MachineData, SynthesizeChannel, SynthesizeData, UpdateChannelData, WaveData } from './types/kaitai';
 
 export const PackType = {
   SYNTHESIZE: 0x11,
@@ -29,6 +29,7 @@ export type SynthesizePacket = PacketBase<SynthesizeData> & { packType: typeof P
 export type WavePacket = PacketBase<WaveData> & { packType: typeof PackType.WAVE };
 export type AddressPacket = PacketBase<AddressData> & { packType: typeof PackType.ADDR };
 export type MachinePacket = PacketBase<MachineData> & { packType: typeof PackType.MACHINE };
+export type UpdateChannelPacket = PacketBase<UpdateChannelData> & { packType: typeof PackType.UPDAT_CH };
 
 export type ChannelUpdate = Partial<Channel> & Pick<Channel, 'channel'>;
 
@@ -62,6 +63,12 @@ function isMachineData(data: unknown): data is MachineData {
   return typeof record.machineTypeRaw === 'number';
 }
 
+function isUpdateChannelData(data: unknown): data is UpdateChannelData {
+  if (typeof data !== 'object' || data === null) return false;
+  const record = data as Record<string, unknown>;
+  return typeof record.targetChannel === 'number';
+}
+
 export function isSynthesizePacket(packet: DecodedPacket): packet is SynthesizePacket {
   return packet.packType === PackType.SYNTHESIZE && isSynthesizeData(packet.data);
 }
@@ -76,6 +83,10 @@ export function isAddressPacket(packet: DecodedPacket): packet is AddressPacket 
 
 export function isMachinePacket(packet: DecodedPacket): packet is MachinePacket {
   return packet.packType === PackType.MACHINE && isMachineData(packet.data);
+}
+
+export function isUpdateChannelPacket(packet: DecodedPacket): packet is UpdateChannelPacket {
+  return packet.packType === PackType.UPDAT_CH && isUpdateChannelData(packet.data);
 }
 
 export function decodePacket(data: Uint8Array | number[] | null): DecodedPacket | null {
