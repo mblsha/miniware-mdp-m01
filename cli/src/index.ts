@@ -33,37 +33,37 @@ program.hook('preAction', (thisCommand) => {
   debugEnabled.set(Boolean(opts.debug));
 });
 
-function parseNumericId(value?: string | number): number | null {
+function normalizeId(value?: string | number): number[] {
   if (value === undefined || value === null) {
-    return null;
+    return [];
   }
 
   if (typeof value === 'number') {
-    return value;
+    return [value];
   }
 
   const trimmed = value.trim().toLowerCase();
   if (trimmed.length === 0) {
-    return null;
+    return [];
   }
 
+  const candidates: number[] = [];
   if (trimmed.startsWith('0x')) {
-    return Number.parseInt(trimmed, 16);
+    candidates.push(Number.parseInt(trimmed.slice(2), 16));
+  } else {
+    candidates.push(Number.parseInt(trimmed, 10));
+    candidates.push(Number.parseInt(trimmed, 16));
   }
 
-  return Number.parseInt(trimmed, 10);
+  return candidates.filter(Number.isFinite);
 }
 
 function matchesMiniwarePort(port: SerialPort.PortInfo): boolean {
-  const vendorId = parseNumericId(port.vendorId);
-  const productId = parseNumericId(port.productId);
+  const vendorIds = normalizeId(port.vendorId);
+  const productIds = normalizeId(port.productId);
 
-  return Number.isFinite(vendorId) &&
-    Number.isFinite(productId) &&
-    vendorId === TARGET_VENDOR_ID &&
-    productId === TARGET_PRODUCT_ID;
+  return vendorIds.includes(TARGET_VENDOR_ID) && productIds.includes(TARGET_PRODUCT_ID);
 }
-
 async function getAutoPort(): Promise<string> {
   const ports = await SerialPort.list();
   const matchingPorts = ports.filter(matchesMiniwarePort);
