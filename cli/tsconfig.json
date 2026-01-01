@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "lib": ["ES2022"],
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "cli/*": ["src/*"]
+    },
+    "types": ["node"]
+  },
+  "include": ["src/**/*", "../mdp-webui/src/lib/**/*"],
+  "exclude": ["node_modules"]
+}
