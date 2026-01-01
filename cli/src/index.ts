@@ -452,6 +452,15 @@ async function handleRecordCommand(
     log('Debug logging disabled during recording to keep CSV output clean.');
   }
 
+  const originalConsoleLog = console.log;
+  const originalConsoleWarn = console.warn;
+  console.log = (...args: unknown[]) => {
+    process.stderr.write(`${format(...args)}\n`);
+  };
+  console.warn = (...args: unknown[]) => {
+    process.stderr.write(`${format(...args)}\n`);
+  };
+
   const connection = new NodeSerialConnection({ portPath: context.portPath });
   try {
     await connection.connect();
@@ -523,6 +532,8 @@ async function handleRecordCommand(
     connection.stopHeartbeat();
     await connection.disconnect();
     await writer.close();
+    console.log = originalConsoleLog;
+    console.warn = originalConsoleWarn;
     const duration = runningTimeUs / 1_000_000;
     log(`Recording stopped (${reason}). ${pointCount} samples over ${duration.toFixed(3)}s.`);
     restoreConsole();
