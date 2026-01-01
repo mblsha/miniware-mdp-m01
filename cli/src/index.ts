@@ -14,10 +14,12 @@ import {
   processMachinePacket,
   processSynthesizePacket,
   processWavePacket,
-  type ChannelUpdate
+  type ChannelUpdate,
+  isMachinePacket
 } from '../../mdp-webui/src/lib/packet-decoder';
 import { PackType } from '../../mdp-webui/src/lib/types';
 import { debugEnabled } from '../../mdp-webui/src/lib/debug-logger';
+import { getMachineTypeString } from '../../mdp-webui/src/lib/machine-utils';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
@@ -112,8 +114,6 @@ interface DeviceContextParams {
   portPath: string;
   category: DeviceCategory;
   machineType: string;
-  manufacturer?: string;
-  serialNumber?: string;
 }
 
 interface DeviceContext extends DeviceContextParams {
@@ -185,10 +185,7 @@ class ContextRegistry {
     this.getAliases().forEach((alias) => {
       const ctx = this.aliasMap.get(alias);
       if (!ctx) return;
-      const serialPart = ctx.serialNumber ? ` (SN: ${ctx.serialNumber})` : '';
-      lines.push(
-        `  ${alias} -> ${ctx.category.toUpperCase()} (${ctx.machineType}) @ ${ctx.portPath}${serialPart}`
-      );
+      lines.push(`  ${alias} -> ${ctx.category.toUpperCase()} (${ctx.machineType})`);
     });
 
     if (this.ambiguousCategories.size > 0) {
@@ -205,6 +202,34 @@ class ContextRegistry {
 
 const STATUS_TIMEOUT_MS = 5000;
 
+async function detectMachineTypeFromSynthesize(
+  connection: NodeSerialConnection,
+  timeoutMs = 2500
+): Promise<string | null> {
+  try {
+    await connection.sendPacket(createHeartbeatPacket());
+  } catch {
+    // ignore heartbeat failure during detection
+  }
+
+  const packet = await connection.waitForPacket(PackType.SYNTHESIZE, timeoutMs);
+  if (!packet) {
+    return null;
+  }
+
+  const decoded = decodePacket(packet);
+  if (!decoded) {
+    return null;
+  }
+
+  const processed = processSynthesizePacket(decoded);
+  if (!processed || processed.length === 0) {
+    return null;
+  }
+
+  return processed[0].machineType;
+}
+
 async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
   const ports = (await SerialPort.list()).filter(matchesMiniwarePort);
   const contexts: DeviceContextParams[] = [];
@@ -220,9 +245,7 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
         contexts.push({
           portPath: port.path,
           category: 'psu',
-          machineType: 'Unknown',
-          manufacturer: port.manufacturer,
-          serialNumber: port.serialNumber
+          machineType: 'Unknown'
         });
         continue;
       }
@@ -233,21 +256,21 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
         contexts.push({
           portPath: port.path,
           category: 'psu',
-          machineType: 'Unknown',
-          manufacturer: port.manufacturer,
-          serialNumber: port.serialNumber
+          machineType: 'Unknown'
         });
         continue;
       }
 
-      const machineType = info.type;
+      const machineData = decoded && isMachinePacket(decoded) ? decoded.data : null;
+      const fallbackLabel =
+        machineData?.machineName ?? (machineData ? getMachineTypeString(machineData.machineTypeRaw) : undefined);
+      const channelMachineTypes = await detectMachineTypeFromSynthesize(connection);
+      const machineType = channelMachineTypes ?? fallbackLabel ?? info.type;
       const category: DeviceCategory = machineType.toLowerCase().includes('l1060') ? 'load' : 'psu';
       contexts.push({
         portPath: port.path,
         category,
-        machineType,
-        manufacturer: port.manufacturer,
-        serialNumber: port.serialNumber
+        machineType
       });
     } catch (error) {
       console.warn(`Failed to probe ${port.path}:`, error instanceof Error ? error.message : error);
