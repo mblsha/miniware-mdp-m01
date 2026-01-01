@@ -106,6 +106,313 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type DeviceCategory = 'psu' | 'load';
+
+interface DeviceContextParams {
+  portPath: string;
+  category: DeviceCategory;
+  machineType: string;
+  manufacturer?: string;
+  serialNumber?: string;
+}
+
+interface DeviceContext extends DeviceContextParams {
+  alias: string;
+  index: number;
+}
+
+class ContextRegistry {
+  private readonly aliasMap = new Map<string, DeviceContext>();
+  private readonly ambiguousCategories = new Set<DeviceCategory>();
+  public readonly uniqueContextsByCategory: Record<DeviceCategory, DeviceContext[]> = {
+    psu: [],
+    load: []
+  };
+
+  constructor(contexts: DeviceContextParams[]) {
+    const groups: Record<DeviceCategory, DeviceContextParams[]> = {
+      psu: [],
+      load: []
+    };
+    contexts.forEach((context) => {
+      groups[context.category].push(context);
+    });
+
+    (['psu', 'load'] as DeviceCategory[]).forEach((category) => {
+      const devices = groups[category];
+      if (devices.length === 0) {
+        return;
+      }
+
+      if (devices.length > 1) {
+        this.ambiguousCategories.add(category);
+      }
+
+      devices.forEach((context, index) => {
+        const alias = devices.length === 1 ? category : `${category}${index + 1}`;
+        const device: DeviceContext = {
+          ...context,
+          alias,
+          index: index + 1
+        };
+        this.aliasMap.set(alias, device);
+        this.pushUnique(device);
+      });
+    });
+  }
+
+  private pushUnique(context: DeviceContext): void {
+    const list = this.uniqueContextsByCategory[context.category];
+    if (!list.some((entry) => entry.portPath === context.portPath)) {
+      list.push(context);
+    }
+  }
+
+  getContext(alias: string): DeviceContext | undefined {
+    return this.aliasMap.get(alias);
+  }
+
+  getAliases(): string[] {
+    return Array.from(this.aliasMap.keys()).sort();
+  }
+
+  getAmbiguousCategories(): DeviceCategory[] {
+    return Array.from(this.ambiguousCategories);
+  }
+
+  describe(): string[] {
+    const lines: string[] = ['Detected device contexts:'];
+    this.getAliases().forEach((alias) => {
+      const ctx = this.aliasMap.get(alias);
+      if (!ctx) return;
+      const serialPart = ctx.serialNumber ? ` (SN: ${ctx.serialNumber})` : '';
+      lines.push(
+        `  ${alias} -> ${ctx.category.toUpperCase()} (${ctx.machineType}) @ ${ctx.portPath}${serialPart}`
+      );
+    });
+
+    if (this.ambiguousCategories.size > 0) {
+      lines.push('Ambiguous names:');
+      this.getAmbiguousCategories().forEach((category) => {
+        const hints = this.uniqueContextsByCategory[category].map((ctx) => ctx.alias).join(', ');
+        lines.push(`  ${category} (use ${hints})`);
+      });
+    }
+
+    return lines;
+  }
+}
+
+const STATUS_TIMEOUT_MS = 5000;
+
+async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
+  const ports = (await SerialPort.list()).filter(matchesMiniwarePort);
+  const contexts: DeviceContextParams[] = [];
+
+  for (const port of ports) {
+    const connection = new NodeSerialConnection({ portPath: port.path });
+    try {
+      await connection.connect();
+      await connection.sendPacket(createGetMachinePacket());
+      const response = await connection.waitForPacket(PackType.MACHINE, 5000);
+      if (!response) {
+        console.warn(`No machine response from ${port.path}; defaulting to PSU context.`);
+        contexts.push({
+          portPath: port.path,
+          category: 'psu',
+          machineType: 'Unknown',
+          manufacturer: port.manufacturer,
+          serialNumber: port.serialNumber
+        });
+        continue;
+      }
+      const decoded = decodePacket(response);
+      const info = decoded ? processMachinePacket(decoded) : null;
+      if (!info) {
+        console.warn(`Unable to decode machine packet from ${port.path}; defaulting to PSU context.`);
+        contexts.push({
+          portPath: port.path,
+          category: 'psu',
+          machineType: 'Unknown',
+          manufacturer: port.manufacturer,
+          serialNumber: port.serialNumber
+        });
+        continue;
+      }
+
+      const machineType = info.type;
+      const category: DeviceCategory = machineType.toLowerCase().includes('l1060') ? 'load' : 'psu';
+      contexts.push({
+        portPath: port.path,
+        category,
+        machineType,
+        manufacturer: port.manufacturer,
+        serialNumber: port.serialNumber
+      });
+    } catch (error) {
+      console.warn(`Failed to probe ${port.path}:`, error instanceof Error ? error.message : error);
+    } finally {
+      await connection.disconnect();
+    }
+  }
+
+  return contexts;
+}
+
+async function waitForChannelStatus(
+  connection: NodeSerialConnection,
+  channel: number,
+  timeoutMs = STATUS_TIMEOUT_MS
+): Promise<ChannelUpdate | null> {
+  const packet = await connection.waitForPacket(PackType.SYNTHESIZE, timeoutMs);
+  if (!packet) {
+    return null;
+  }
+
+  const decoded = decodePacket(packet);
+  if (!decoded) {
+    return null;
+  }
+
+  const processed = processSynthesizePacket(decoded);
+  if (!processed || processed.length === 0) {
+    return null;
+  }
+
+  return processed[channel] ?? processed[0];
+}
+
+interface ContextCommandOptions {
+  channel?: string;
+  status?: boolean;
+  statusJson?: boolean;
+  setVoltage?: string;
+  setCurrent?: string;
+}
+
+async function handleContextCommand(
+  alias: string,
+  context: DeviceContext,
+  options: ContextCommandOptions
+): Promise<void> {
+  const channel = parseChannelArg(options.channel ?? '0');
+  const wantsStatus = Boolean(options.status || options.statusJson);
+  const wantsSets = Boolean(options.setVoltage || options.setCurrent);
+
+  if (!wantsStatus && !wantsSets) {
+    throw new Error('Provide at least one action: --status, --status-json, --set-voltage, or --set-current');
+  }
+
+  const connection = new NodeSerialConnection({ portPath: context.portPath });
+  await connection.connect();
+  try {
+    const baseline = wantsStatus || wantsSets ? await waitForChannelStatus(connection, channel) : null;
+    if ((wantsStatus || wantsSets) && !baseline) {
+      throw new Error('No synthesize data received yet for the requested channel');
+    }
+
+    const parsedVoltage = options.setVoltage !== undefined ? Number(options.setVoltage) : undefined;
+    const parsedCurrent = options.setCurrent !== undefined ? Number(options.setCurrent) : undefined;
+
+    if (parsedVoltage !== undefined && !Number.isFinite(parsedVoltage)) {
+      throw new Error('Target voltage must be a valid number');
+    }
+
+    if (parsedCurrent !== undefined && !Number.isFinite(parsedCurrent)) {
+      throw new Error('Target current must be a valid number');
+    }
+
+    if (parsedVoltage !== undefined) {
+      const currentTarget =
+        parsedCurrent ??
+        baseline?.targetCurrent ??
+        baseline?.current ??
+        0;
+      await connection.sendPacket(createSetChannelPacket(channel));
+      await delay(50);
+      await connection.sendPacket(createSetVoltagePacket(channel, parsedVoltage, currentTarget));
+      await delay(50);
+    }
+
+    if (parsedCurrent !== undefined) {
+      const voltageTarget =
+        parsedVoltage ??
+        baseline?.targetVoltage ??
+        baseline?.voltage ??
+        0;
+      await connection.sendPacket(createSetChannelPacket(channel));
+      await delay(50);
+      await connection.sendPacket(createSetCurrentPacket(channel, voltageTarget, parsedCurrent));
+      await delay(50);
+    }
+
+    const finalStatus =
+      wantsStatus || wantsSets ? await waitForChannelStatus(connection, channel) : baseline;
+
+    if (options.statusJson && finalStatus) {
+      const payload = {
+        alias,
+        category: context.category,
+        machineType: context.machineType,
+        channel,
+        status: finalStatus
+      };
+      console.log(JSON.stringify(payload, null, 2));
+    }
+
+    if (options.status && finalStatus) {
+      const lines = [
+        `${alias} (${context.machineType}) channel ${channel}:`,
+        `  Online: ${finalStatus.online ? 'YES' : 'NO'}`,
+        `  Voltage: ${finalStatus.voltage.toFixed(3)} V (target ${finalStatus.targetVoltage.toFixed(3)} V)`,
+        `  Current: ${finalStatus.current.toFixed(3)} A (target ${finalStatus.targetCurrent.toFixed(3)} A)`,
+        `  Temperature: ${finalStatus.temperature.toFixed(1)} °C`,
+        `  Output: ${finalStatus.isOutput ? 'ON' : 'OFF'}`,
+        `  Mode: ${finalStatus.mode}`
+      ];
+      lines.forEach((line) => console.log(line));
+    } else if (wantsSets && finalStatus && !options.status && !options.statusJson) {
+      console.log(
+        `${alias} channel ${channel} updated: ${finalStatus.voltage.toFixed(3)} V / ${finalStatus.current.toFixed(3)} A`
+      );
+    }
+  } finally {
+    await connection.disconnect();
+  }
+}
+
+function registerContextCommands(program: Command, registry: ContextRegistry): void {
+  registry.getAmbiguousCategories().forEach((category) => {
+    program
+      .command(category)
+      .description(`Ambiguous alias (${category}) – use ${category}1/${category}2 etc.`)
+      .action(() => {
+        const hints = registry.uniqueContextsByCategory[category]
+          .map((ctx) => ctx.alias)
+          .join(', ');
+        throw new Error(
+          `Multiple ${category.toUpperCase()} devices connected; specify one of: ${hints}`
+        );
+      });
+  });
+
+  registry.getAliases().forEach((alias) => {
+    const context = registry.getContext(alias);
+    if (!context) return;
+    program
+      .command(alias)
+      .description(`Control ${context.machineType} (${alias})`)
+      .option('--channel <number>', 'Channel index (0-5)', '0')
+      .option('--status', 'Print textual status')
+      .option('--status-json', 'Print JSON status')
+      .option('--set-voltage <voltage>', 'Set target voltage (V)')
+      .option('--set-current <current>', 'Set target current (A)')
+      .action(async (options: ContextCommandOptions) => {
+        await handleContextCommand(alias, context, options);
+      });
+  });
+}
+
 program
   .name('mdp-cli')
   .description('Node CLI for the Miniware MDP PSU (reuses the WebUI packet helpers)')
@@ -269,4 +576,37 @@ program
     await connection.disconnect();
   });
 
-program.parseAsync(process.argv);
+async function run(): Promise<void> {
+  let registry: ContextRegistry | null = null;
+
+  try {
+    const contexts = await discoverDeviceContexts();
+
+    if (contexts.length > 0) {
+      registry = new ContextRegistry(contexts);
+      registerContextCommands(program, registry);
+    } else {
+      console.warn('No Miniware device contexts detected; context commands are disabled.');
+    }
+  } catch (error) {
+    console.warn('Device context discovery failed:', error instanceof Error ? error.message : error);
+  }
+
+  program
+    .command('devices')
+    .description('List available device contexts')
+    .action(() => {
+      if (!registry) {
+        console.log('No device contexts available. Run `list` to inspect serial ports.');
+        return;
+      }
+      registry.describe().forEach((line) => console.log(line));
+    });
+
+  await program.parseAsync(process.argv);
+}
+
+run().catch((error) => {
+  console.error('Unhandled error:', error instanceof Error ? error.message : error);
+  process.exit(1);
+});

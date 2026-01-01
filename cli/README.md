@@ -12,11 +12,12 @@ npm install
 ## Commands
 
 - `npm run start -- list` – prints only Miniware serial ports (vendor/product 0x0416/0xdc01).
-- `npm run start -- watch` – logs synthesize, wave, and machine packets indefinitely (Ctrl+C to stop). Without `--port` it selects the first Miniware matching port.
-- `npm run start -- machine` – requests the device type and prints it; autodiscovery uses only the vendor/product match unless you override with `--port`.
-- `npm run start -- set 0 -v 12 -t 0.5` – sets channel 0 to 12 V/0.5 A; you can still supply `--port` to override the auto-selected device.
-- `npm run start -- output 0 on` – toggles channel output state and uses auto-detection unless `--port` is given.
-- Append `--debug` to any command to keep the Kaitai debug logs in the output; otherwise they are disabled so you only see the CLI response.
+- `npm run start -- watch [--port <path>]` – stream synthesize/wave/machine packets (Ctrl+C to stop); auto-selects the first Miniware matching port if `--port` is omitted.
+- `npm run start -- machine [--port <path>]` – queries the machine type from the selected port.
+- `npm run start -- devices` – shows the current alias map (`psu`, `psu1`, `load`, …) so you know which context names to use.
+- `<alias>` commands (e.g. `npm run start -- psu --status` or `psu1`, `load`, `load2`) become available based on connected devices; use `--status`, `--status-json`, `--set-voltage`, `--set-current`, and `--channel` to inspect or adjust the selected context.
+- When multiple PSUs or loads are connected the unqualified names (`psu`/`load`) become ambiguous and the CLI will prompt you to use `psu1`, `psu2`, `load1`, etc., so scripts can point at the numbered contexts explicitly.
+- Append `--debug` to any command to keep the Kaitai debug logs in the output; otherwise they stay disabled so you only see the CLI response.
 
 All commands accept `--port` followed by the serial path and honor standard Miniware channel numbers (0–5).
 
