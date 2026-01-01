@@ -1,4 +1,3 @@
-mdp-webui/playwright-report/
-mdp-webui/test-results/
+webui/playwright-report/
+webui/test-results/
 cli/node_modules/
-

@@ -16,6 +16,6 @@
     },
     "types": ["node"]
   },
-  "include": ["src/**/*", "../mdp-webui/src/lib/**/*"],
+  "include": ["src/**/*", "../webui/src/lib/**/*"],
   "exclude": ["node_modules"]
 }

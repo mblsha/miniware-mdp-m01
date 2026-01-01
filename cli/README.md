@@ -23,5 +23,5 @@ All commands accept `--port` followed by the serial path and honor standard Mini
 
 ## Notes
 
-- The CLI relies on `mdp-webui/src/lib` for packet parsing/encoding, so keep the Kaitai build up to date if you regenerate `mdp.ksy`.
+- The CLI relies on `webui/src/lib` for packet parsing/encoding, so keep the Kaitai build up to date if you regenerate `mdp.ksy`.
 - Heartbeats are emitted automatically while `watch` is running; other commands send the required packets and exit cleanly.

@@ -1,5 +1,5 @@
 import { SerialPort } from 'serialport';
-import type { PacketHandler, SerialConfig } from '../../mdp-webui/src/lib/types';
+import type { PacketHandler, SerialConfig } from '../../webui/src/lib/types';
 
 const DEFAULT_CONFIG: SerialConfig = {
   baudRate: 115200,
