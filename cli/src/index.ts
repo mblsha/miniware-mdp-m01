@@ -7,19 +7,17 @@ import {
   createSetChannelPacket,
   createSetCurrentPacket,
   createSetOutputPacket,
-  createSetVoltagePacket
-} from '../../mdp-webui/src/lib/packet-encoder';
-import {
+  createSetVoltagePacket,
   decodePacket,
   processMachinePacket,
   processSynthesizePacket,
   processWavePacket,
   type ChannelUpdate,
-  isMachinePacket
-} from '../../mdp-webui/src/lib/packet-decoder';
-import { PackType } from '../../mdp-webui/src/lib/types';
-import { debugEnabled } from '../../mdp-webui/src/lib/debug-logger';
-import { getMachineTypeString } from '../../mdp-webui/src/lib/machine-utils';
+  isMachinePacket,
+  PackType,
+  debugEnabled,
+  getMachineTypeString
+} from '../../packages/mdp-core/src/protocol';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
