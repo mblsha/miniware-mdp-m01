@@ -12,10 +12,7 @@ npm install
 ## Commands
 
 - `npm run start -- list` – prints the detected serial ports.
-- `npm run start -- watch` – logs synthesize, wave, and machine packets indefinitely (Ctrl+C to stop). If `--port` is omitted, it will pick the first Miniware-compatible serial device automatically.
-- `npm run start -- machine` – requests the device type and prints it; the port is autodiscovered unless you pass `--port`.
-- `npm run start -- set 0 -v 12 -t 0.5` – sets channel 0 to 12 V/0.5 A (sends the channel select, voltage, and current packets); you can still supply `--port` to override the auto-selected device.
-- `npm run start -- output 0 on` – toggles channel output state; uses auto-detected Miniware device when `--port` is not specified.
+- Append `--debug` to any command to keep the Kaitai debug logs in the output; otherwise they are disabled so you only see the CLI response.
 
 All commands accept `--port` followed by the serial path and honor standard Miniware channel numbers (0–5).
 

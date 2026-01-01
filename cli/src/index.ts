@@ -17,11 +17,21 @@ import {
   type ChannelUpdate
 } from '../../mdp-webui/src/lib/packet-decoder';
 import { PackType } from '../../mdp-webui/src/lib/types';
+import { debugEnabled } from '../../mdp-webui/src/lib/debug-logger';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
 
 const program = new Command();
+
+debugEnabled.set(false);
+
+program.option('--debug', 'Enable Kaitai/debug logging');
+
+program.hook('preAction', (thisCommand) => {
+  const opts = thisCommand.optsWithGlobals();
+  debugEnabled.set(Boolean(opts.debug));
+});
 
 function parseNumericId(value?: string | number): number | null {
   if (value === undefined || value === null) {
