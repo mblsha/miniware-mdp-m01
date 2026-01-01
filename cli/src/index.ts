@@ -18,6 +18,14 @@ import {
   debugEnabled,
   getMachineTypeString
 } from '../../packages/mdp-core/src/protocol';
+import {
+  detectMachineTypeFromSynthesize,
+  fetchMachineInfo,
+  setOutputState,
+  setTargets,
+  waitForChannelStatus
+} from './controller';
+import { delay } from './utils';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
@@ -107,10 +115,6 @@ function parseChannelArg(value: string): number {
     throw new Error('Channel must be an integer between 0 and 5');
   }
   return channel;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 type DeviceCategory = 'psu' | 'load';
@@ -207,34 +211,6 @@ class ContextRegistry {
 
 const STATUS_TIMEOUT_MS = 5000;
 
-async function detectMachineTypeFromSynthesize(
-  connection: NodeSerialConnection,
-  timeoutMs = 2500
-): Promise<string | null> {
-  try {
-    await connection.sendPacket(createHeartbeatPacket());
-  } catch {
-    // ignore heartbeat failure during detection
-  }
-
-  const packet = await connection.waitForPacket(PackType.SYNTHESIZE, timeoutMs);
-  if (!packet) {
-    return null;
-  }
-
-  const decoded = decodePacket(packet);
-  if (!decoded) {
-    return null;
-  }
-
-  const processed = processSynthesizePacket(decoded);
-  if (!processed || processed.length === 0) {
-    return null;
-  }
-
-  return processed[0].machineType;
-}
-
 async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
   const ports = (await SerialPort.list()).filter(matchesMiniwarePort);
   const contexts: DeviceContextParams[] = [];
@@ -287,29 +263,6 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
   return contexts;
 }
 
-async function waitForChannelStatus(
-  connection: NodeSerialConnection,
-  channel: number,
-  timeoutMs = STATUS_TIMEOUT_MS
-): Promise<ChannelUpdate | null> {
-  const packet = await connection.waitForPacket(PackType.SYNTHESIZE, timeoutMs);
-  if (!packet) {
-    return null;
-  }
-
-  const decoded = decodePacket(packet);
-  if (!decoded) {
-    return null;
-  }
-
-  const processed = processSynthesizePacket(decoded);
-  if (!processed || processed.length === 0) {
-    return null;
-  }
-
-  return processed[channel] ?? processed[0];
-}
-
 interface ContextCommandOptions {
   channel?: string;
   status?: boolean;
@@ -355,38 +308,15 @@ async function handleContextCommand(
       throw new Error('Target current must be a valid number');
     }
 
-    if (parsedVoltage !== undefined) {
-      const currentTarget =
-        parsedCurrent ??
-        baseline?.targetCurrent ??
-        baseline?.current ??
-        0;
-      await connection.sendPacket(createSetChannelPacket(channel));
-      await delay(50);
-      await connection.sendPacket(createSetVoltagePacket(channel, parsedVoltage, currentTarget));
-      await delay(50);
-    }
-
-    if (parsedCurrent !== undefined) {
-      const voltageTarget =
-        parsedVoltage ??
-        baseline?.targetVoltage ??
-        baseline?.voltage ??
-        0;
-      await connection.sendPacket(createSetChannelPacket(channel));
-      await delay(50);
-      await connection.sendPacket(createSetCurrentPacket(channel, voltageTarget, parsedCurrent));
-      await delay(50);
+    if (wantsSets) {
+      await setTargets(connection, channel, parsedVoltage, parsedCurrent, baseline ?? undefined);
     }
 
     if (wantsOutput) {
       if (!['on', 'off'].includes(normalizedOutputState!)) {
         throw new Error('Output state must be "on" or "off"');
       }
-      await connection.sendPacket(createSetChannelPacket(channel));
-      await delay(50);
-      await connection.sendPacket(createSetOutputPacket(channel, normalizedOutputState === 'on'));
-      await delay(50);
+      await setOutputState(connection, channel, normalizedOutputState as 'on' | 'off');
     }
 
     const finalStatus =

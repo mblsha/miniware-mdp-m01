@@ -13,10 +13,10 @@ Goals: keep the CLI working reliably while deferring the large `mdp-core` refact
 - Step 1: ✅ plan documented (this file).
 - Step 2: ✅ NodeSerialConnection framing guards and buffer caps added.
 - Step 3: ✅ auto port selection now errors if more than one device is present; additional transport polish still planned.
-- Step 4: ✅ roadmap items captured below.
+- Step 4: ✅ controller layer introduced and CLI now calls into it for machine/status/output actions.
 
 ## Future roadmap
 - ✅ Extract `packages/mdp-core/` containing protocol utilities (packet encoder/decoder, Kaitai runtime shim, machine utils) with environment-neutral exports (currently bridging via re-exports).
 - ✅ Introduce a transport interface (`write`, `close`, `onBytes`, `listPorts`), then implement WebSerial + NodeSerial implementations that feed into the shared core (NodeSerialConnection now satisfies the interface; WebSerial remains to be formalized).
-- ⬜ Refactor the CLI around a controller layer that takes a transport, issues protocol actions (`getMachineInfo`, `setTargets`, `setOutput`, etc.), and returns structured data, keeping `index.ts` thin.
+- ✅ Refactor the CLI around a controller layer that takes a transport, issues protocol actions (`getMachineInfo`, `setTargets`, `setOutput`, etc.), and returns structured data, keeping `index.ts` thin.
 - ⬜ Harden tests: unit-test the core parser/transport state machine with mocked chunks, then integration-test the CLI/transport wiring without needing real hardware.
