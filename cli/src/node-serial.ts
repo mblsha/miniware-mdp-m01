@@ -175,6 +175,11 @@ export class NodeSerialConnection {
       }
 
       const packetSize = this.receiveBuffer[3];
+      if (packetSize < 6) {
+        // Drop one byte to avoid a tight loop on malformed sizes.
+        this.receiveBuffer = this.receiveBuffer.slice(1);
+        continue;
+      }
       if (this.receiveBuffer.length < packetSize) {
         break;
       }

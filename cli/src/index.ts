@@ -545,8 +545,9 @@ program
     const portPath = await resolvePort(options.port);
     const connection = new NodeSerialConnection({ portPath });
     await connection.connect();
+    const responsePromise = connection.waitForPacket(PackType.MACHINE, timeout);
     await connection.sendPacket(createGetMachinePacket());
-    const response = await connection.waitForPacket(PackType.MACHINE, timeout);
+    const response = await responsePromise;
     if (!response) {
       console.log('No machine response received.');
       await connection.disconnect();
