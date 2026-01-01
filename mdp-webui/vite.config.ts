@@ -47,7 +47,7 @@ export default defineConfig({
     ]
   },
   optimizeDeps: {
-    exclude: ['kaitai-struct']
+    include: ['kaitai-struct']
   },
   build: {
     rollupOptions: {
