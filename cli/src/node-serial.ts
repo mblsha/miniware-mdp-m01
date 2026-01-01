@@ -9,6 +9,10 @@ const DEFAULT_CONFIG: SerialConfig = {
   flowControl: 'none'
 };
 
+const MIN_PACKET_SIZE = 6;
+const MAX_PACKET_SIZE = 512;
+const MAX_BUFFER_SIZE = 2048;
+
 export interface NodeSerialConnectionOptions {
   portPath: string;
   config?: Partial<SerialConfig>;
@@ -157,6 +161,11 @@ export class NodeSerialConnection {
   }
 
   private processIncomingData(): void {
+    if (this.receiveBuffer.length > MAX_BUFFER_SIZE) {
+      // Keep only the latest bytes to avoid unbounded growth.
+      this.receiveBuffer = this.receiveBuffer.slice(this.receiveBuffer.length - MAX_BUFFER_SIZE);
+    }
+
     while (this.receiveBuffer.length >= 6) {
       const headerIndex = this.findHeader();
       if (headerIndex === -1) {
@@ -175,6 +184,11 @@ export class NodeSerialConnection {
       }
 
       const packetSize = this.receiveBuffer[3];
+      if (packetSize < MIN_PACKET_SIZE || packetSize > MAX_PACKET_SIZE) {
+        // Corrupted length field, drop a byte and try to resync.
+        this.receiveBuffer = this.receiveBuffer.slice(1);
+        continue;
+      }
       if (this.receiveBuffer.length < packetSize) {
         break;
       }

@@ -73,6 +73,13 @@ async function getAutoPort(): Promise<string> {
     throw new Error('No Miniware serial ports detected');
   }
 
+  if (matchingPorts.length > 1) {
+    const paths = matchingPorts.map((p) => p.path).join(', ');
+    throw new Error(
+      `Multiple Miniware serial ports detected (${paths}); specify one via --port`
+    );
+  }
+
   const portInfo = matchingPorts[0];
   console.log(
     `Auto-selected serial port ${portInfo.path}${portInfo.manufacturer ? ` (${portInfo.manufacturer})` : ''}`
