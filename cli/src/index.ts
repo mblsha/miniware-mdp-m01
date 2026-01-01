@@ -58,24 +58,20 @@ function matchesMiniwarePort(port: SerialPort.PortInfo): boolean {
   const vendorId = parseNumericId(port.vendorId);
   const productId = parseNumericId(port.productId);
 
-  if (Number.isFinite(vendorId) && Number.isFinite(productId)) {
-    if (vendorId === TARGET_VENDOR_ID && productId === TARGET_PRODUCT_ID) {
-      return true;
-    }
-  }
-
-  const manufacturer = port.manufacturer?.toLowerCase() ?? '';
-  return manufacturer.includes('miniware') || manufacturer.includes('stmicroelectronics');
+  return Number.isFinite(vendorId) &&
+    Number.isFinite(productId) &&
+    vendorId === TARGET_VENDOR_ID &&
+    productId === TARGET_PRODUCT_ID;
 }
 
 async function getAutoPort(): Promise<string> {
   const ports = await SerialPort.list();
-  if (ports.length === 0) {
-    throw new Error('No serial ports detected');
+  const matchingPorts = ports.filter(matchesMiniwarePort);
+  if (matchingPorts.length === 0) {
+    throw new Error('No Miniware serial ports detected');
   }
 
-  const match = ports.find(matchesMiniwarePort);
-  const portInfo = match ?? ports[0];
+  const portInfo = matchingPorts[0];
   console.log(
     `Auto-selected serial port ${portInfo.path}${portInfo.manufacturer ? ` (${portInfo.manufacturer})` : ''}`
   );
@@ -117,14 +113,15 @@ program
 
 program
   .command('list')
-  .description('List available serial ports')
+  .description('List Miniware serial ports (filtered by vendor/product)')
   .action(async () => {
     const ports = await SerialPort.list();
-    if (ports.length === 0) {
-      console.log('No serial ports detected.');
+    const matches = ports.filter(matchesMiniwarePort);
+    if (matches.length === 0) {
+      console.log('No Miniware serial ports detected.');
       return;
     }
-    ports.forEach((port) => {
+    matches.forEach((port) => {
       console.log(`${port.path}  ${port.manufacturer ?? ''}`.trim());
     });
   });
