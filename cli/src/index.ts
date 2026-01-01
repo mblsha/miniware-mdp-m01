@@ -316,14 +316,19 @@ interface ContextCommandOptions {
 async function handleContextCommand(
   alias: string,
   context: DeviceContext,
-  options: ContextCommandOptions
+  options: ContextCommandOptions,
+  outputState?: string
 ): Promise<void> {
   const channel = parseChannelArg(options.channel ?? '0');
   const wantsStatus = Boolean(options.status || options.statusJson);
   const wantsSets = Boolean(options.setVoltage || options.setCurrent);
+  const wantsOutput = typeof outputState === 'string';
+  const normalizedOutputState = wantsOutput ? (outputState ?? '').toLowerCase() : undefined;
 
-  if (!wantsStatus && !wantsSets) {
-    throw new Error('Provide at least one action: --status, --status-json, --set-voltage, or --set-current');
+  if (!wantsStatus && !wantsSets && !wantsOutput) {
+    throw new Error(
+      'Provide at least one action: --status, --status-json, --set-voltage, --set-current, or output state (on/off)'
+    );
   }
 
   const connection = new NodeSerialConnection({ portPath: context.portPath });
@@ -369,6 +374,16 @@ async function handleContextCommand(
       await delay(50);
     }
 
+    if (wantsOutput) {
+      if (!['on', 'off'].includes(normalizedOutputState!)) {
+        throw new Error('Output state must be "on" or "off"');
+      }
+      await connection.sendPacket(createSetChannelPacket(channel));
+      await delay(50);
+      await connection.sendPacket(createSetOutputPacket(channel, normalizedOutputState === 'on'));
+      await delay(50);
+    }
+
     const finalStatus =
       wantsStatus || wantsSets ? await waitForChannelStatus(connection, channel) : baseline;
 
@@ -398,6 +413,8 @@ async function handleContextCommand(
       console.log(
         `${alias} channel ${channel} updated: ${finalStatus.voltage.toFixed(3)} V / ${finalStatus.current.toFixed(3)} A`
       );
+    } else if (wantsOutput && !wantsStatus && !options.statusJson && !wantsSets) {
+      console.log(`${alias} channel ${channel} output ${normalizedOutputState?.toUpperCase()}`);
     }
   } finally {
     await connection.disconnect();
@@ -425,13 +442,14 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
     program
       .command(alias)
       .description(`Control ${context.machineType} (${alias})`)
+      .argument('[state]', 'Output state (on/off)')
       .option('--channel <number>', 'Channel index (0-5)', '0')
       .option('--status', 'Print textual status')
       .option('--status-json', 'Print JSON status')
       .option('--set-voltage <voltage>', 'Set target voltage (V)')
       .option('--set-current <current>', 'Set target current (A)')
-      .action(async (options: ContextCommandOptions) => {
-        await handleContextCommand(alias, context, options);
+      .action(async (state: string | undefined, options: ContextCommandOptions) => {
+        await handleContextCommand(alias, context, options, state);
       });
   });
 }
