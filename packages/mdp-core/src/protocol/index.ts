@@ -5,7 +5,7 @@ export {
   createSetCurrentPacket,
   createSetOutputPacket,
   createSetVoltagePacket
-} from '../../../../mdp-webui/src/lib/packet-encoder';
+} from './packet-encoder';
 
 export {
   decodePacket,
