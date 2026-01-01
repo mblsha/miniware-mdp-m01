@@ -1,5 +1,5 @@
 import { SerialPort } from 'serialport';
-import type { PacketHandler, SerialConfig } from '../../mdp-webui/src/lib/types';
+import type { PacketHandler, SerialConfig } from '../../packages/mdp-core/src/transport';
 import type { Transport } from '../../packages/mdp-core/src/transport';
 
 const DEFAULT_CONFIG: SerialConfig = {

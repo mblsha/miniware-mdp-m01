@@ -191,6 +191,7 @@ This is still a trap for installs/CI/platforms. Unless you’ve proven you need 
 ## Action log
 - ✅ Made `Transport` export in `mdp-core` type-only so the shared package doesn’t try to access a runtime export.
 - ✅ Exported `ProtocolModule` from `cli/src/controller.ts` so tests can import it by name.
+- ✅ Relocated `PacketHandler`/`SerialConfig` typing to `mdp-core/src/transport` so `NodeSerialConnection` no longer imports from `mdp-webui`.
 
 Yes—**directionally and structurally** it’s better:
 

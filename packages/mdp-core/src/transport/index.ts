@@ -9,3 +9,11 @@ export interface Transport {
   startHeartbeat(generator: () => number[], intervalMs?: number): void;
   stopHeartbeat(): void;
 }
+
+export interface SerialConfig {
+  baudRate: number;
+  dataBits: 7 | 8;
+  stopBits: 1 | 2;
+  parity: 'none' | 'even' | 'odd';
+  flowControl: 'none' | 'hardware';
+}
