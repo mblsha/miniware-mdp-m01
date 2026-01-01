@@ -1,5 +1,6 @@
 import { SerialPort } from 'serialport';
 import type { PacketHandler, SerialConfig } from '../../mdp-webui/src/lib/types';
+import type { Transport } from '../../packages/mdp-core/src/transport';
 
 const DEFAULT_CONFIG: SerialConfig = {
   baudRate: 115200,
@@ -18,7 +19,7 @@ export interface NodeSerialConnectionOptions {
   config?: Partial<SerialConfig>;
 }
 
-export class NodeSerialConnection {
+export class NodeSerialConnection implements Transport {
   private readonly portPath: string;
   private readonly config: SerialConfig;
   private port: SerialPort | null = null;
