@@ -41,11 +41,6 @@ declare class MiniwareMdpM01 {
   };
 }
 
-declare module 'kaitai-struct/KaitaiStream.js' {
-  export default KaitaiStream;
-}
-
-
 // Web Serial API types (for modern browsers)
 interface SerialPortRequestOptions {
   filters?: Array<{
