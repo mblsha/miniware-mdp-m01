@@ -21,6 +21,9 @@ const isBrowser =
   typeof window.document !== 'undefined' &&
   typeof window.navigator !== 'undefined';
 
+const hasKaitaiStream = (value: unknown): value is { KaitaiStream?: KaitaiStreamConstructor } =>
+  typeof value === 'object' && value !== null && 'KaitaiStream' in value;
+
 let KaitaiStreamImpl: KaitaiStreamConstructor | undefined;
 let MiniwareMdpM01Impl: MiniwareMdpM01Constructor | undefined;
 
@@ -34,11 +37,12 @@ if (isBrowser) {
   MiniwareMdpM01Impl = browserWindow.MiniwareMdpM01;
 } else {
   const kaitaiRuntime = (await import('kaitai-struct')) as KaitaiRuntimeModule;
+  const defaultRuntime = kaitaiRuntime.default ?? kaitaiRuntime;
   const runtime =
     kaitaiRuntime.KaitaiStream ??
-    kaitaiRuntime.default?.KaitaiStream ??
-    kaitaiRuntime.default ??
-    kaitaiRuntime;
+    (hasKaitaiStream(defaultRuntime)
+      ? defaultRuntime.KaitaiStream ?? defaultRuntime
+      : defaultRuntime);
   KaitaiStreamImpl = runtime as KaitaiStreamConstructor;
 
   if (!globalScope.KaitaiStream) {
@@ -46,7 +50,7 @@ if (isBrowser) {
   }
 
   if (typeof globalScope.self === 'undefined') {
-    globalScope.self = globalScope;
+    Reflect.set(globalScope as object, 'self', globalScope);
   }
 
   await import('./kaitai/MiniwareMdpM01.js');
