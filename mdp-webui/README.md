@@ -59,6 +59,10 @@ The project structure:
 - `/src/lib/stores/channels.js` - Global state management
 - `/src/lib/components/` - UI components
 
+## Command-line interface
+
+If you need a Node.js tool instead of the browser UI, see `../cli/README.md` for a CLI that reuses the same packet helpers and speaks to the Miniware device through `serialport`.
+
 ## License
 
 This project is part of the miniware-mdp-m01 repository.
