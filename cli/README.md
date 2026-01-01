@@ -16,6 +16,7 @@ npm install
 - `npm run start -- machine [--port <path>]` – queries the machine type from the selected port.
 - `npm run start -- devices` – shows the current alias map (`psu`, `psu1`, `load`, …) so you know which context names to use.
 - `<alias>` commands (e.g. `npm run start -- psu --status` or `psu1`, `load`, `load2`) become available based on connected devices; use `--status`, `--status-json`, `--set-voltage`, `--set-current`, and `--channel` to inspect or adjust the selected context.
+- `npm run start -- psu record [--duration <sec>] [--output-csv <path>]` – record waveform data for the selected device context; CSV is written to stdout by default and non-data messages go to stderr.
 - When multiple PSUs or loads are connected the unqualified names (`psu`/`load`) become ambiguous and the CLI will prompt you to use `psu1`, `psu2`, `load1`, etc., so scripts can point at the numbered contexts explicitly.
 - Append `--debug` to any command to keep the Kaitai debug logs in the output; otherwise they stay disabled so you only see the CLI response.
 
