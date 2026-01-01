@@ -15,11 +15,11 @@ import type { Transport } from '../../packages/mdp-core/src/transport';
 import { delay } from './utils';
 
 const STATUS_TIMEOUT_MS = 5000;
-type ProtocolPackType = Pick<
+export type ProtocolPackType = Pick<
   typeof PackTypeEnum,
   'SYNTHESIZE' | 'MACHINE' | 'SET_CH' | 'SET_V' | 'SET_I' | 'SET_ISOUTPUT'
 >;
-type ProtocolModule = {
+export type ProtocolModule = {
   createGetMachinePacket: typeof CreateGetMachinePacket;
   createHeartbeatPacket: typeof CreateHeartbeatPacket;
   createSetChannelPacket: typeof CreateSetChannelPacket;
