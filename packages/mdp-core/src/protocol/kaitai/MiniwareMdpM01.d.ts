@@ -1,6 +1,5 @@
-// Type declarations for Kaitai-generated MiniwareMdpM01 parser
-// This prevents TypeScript errors in the generated JS file
+// Type declarations for Kaitai-generated MiniwareMdpM01 parser.
+import type { MiniwareMdpM01Constructor } from '../types/kaitai';
 
-declare module './MiniwareMdpM01.js' {
-  export = MiniwareMdpM01;
-}
+declare const MiniwareMdpM01: MiniwareMdpM01Constructor;
+export default MiniwareMdpM01;

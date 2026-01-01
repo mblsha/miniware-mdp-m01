@@ -228,10 +228,32 @@ export class SerialConnection {
     await this.writer.write(uint8Array);
   }
 
-  startHeartbeat(): void {
+  waitForPacket(packetType: number, timeoutMs = 3000): Promise<number[] | null> {
+    return new Promise((resolve) => {
+      let unsubscribe: (() => void) | null = null;
+
+      const timer = window.setTimeout(() => {
+        unsubscribe?.();
+        resolve(null);
+      }, timeoutMs);
+
+      unsubscribe = this.registerPacketHandler(packetType, (packet) => {
+        window.clearTimeout(timer);
+        unsubscribe?.();
+        resolve(packet);
+      });
+    });
+  }
+
+  startHeartbeat(generator?: () => number[], intervalMs = 1000): void {
+    this.stopHeartbeat();
     this.heartbeatInterval = window.setInterval(() => {
-      this.sendHeartbeat().catch(console.error);
-    }, 1000);
+      if (generator) {
+        this.sendPacket(generator()).catch(console.error);
+      } else {
+        this.sendHeartbeat().catch(console.error);
+      }
+    }, intervalMs);
   }
 
   stopHeartbeat(): void {

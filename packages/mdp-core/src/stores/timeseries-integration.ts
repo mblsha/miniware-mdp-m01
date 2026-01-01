@@ -1,9 +1,9 @@
 import { get } from 'svelte/store';
 import type { Readable } from 'svelte/store';
-import type { SynthesizeChannel } from '@mdp-core/protocol/types/kaitai';
 import { getOperatingMode } from '@mdp-core/protocol';
 import type { PacketBus } from '@mdp-core/services/packet-bus';
-import type { Channel, TimeSeriesPoint, TimeseriesStore } from './timeseries-store';
+import type { Channel } from '@mdp-core/protocol/types';
+import type { TimeSeriesPoint, TimeseriesStore } from './timeseries-store';
 
 type MetricStats = { min: number; max: number; avg: number };
 type ChannelStats = { voltage: MetricStats; current: MetricStats; power: MetricStats; sampleCount: number };
@@ -29,13 +29,7 @@ export type TimeseriesIntegration = ReturnType<typeof createTimeseriesIntegratio
 export function createTimeseriesIntegration(options: {
   packets: PacketBus;
   timeseries: TimeseriesStore;
-  channels: {
-    channels: {
-      subscribe: (run: (value: { recording: boolean }[]) => void) => () => void;
-    };
-    startRecording: (channel: number) => void;
-    stopRecording: (channel: number) => void;
-  };
+  channels: ChannelStore;
 }): {
   startRecording: (channels: number[]) => string;
   stopRecording: () => void;

@@ -14,6 +14,7 @@ export interface Channel {
   targetPower: number;
   inputVoltage?: number;
   inputCurrent?: number;
+  inputPower?: number;
   recording?: boolean;
   waveformData?: WaveformPoint[];
   runningTimeUs?: number;
