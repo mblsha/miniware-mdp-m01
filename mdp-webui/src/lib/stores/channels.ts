@@ -1,11 +1,18 @@
 import { derived, writable } from 'svelte/store';
 import type { Readable, Writable } from 'svelte/store';
-import type { Channel, WaveformPoint } from '../types';
-import { processAddressPacket, processMachinePacket, processSynthesizePacket } from '../packet-decoder';
-import type { AddressPacket, ChannelUpdate, MachinePacket, SynthesizePacket, UpdateChannelPacket, WavePacket } from '../packet-decoder';
-import { createSetChannelPacket, createSetCurrentPacket, createSetOutputPacket, createSetVoltagePacket } from '../packet-encoder';
-import { debugError } from '../debug-logger';
-import type { PacketBus } from '../services/packet-bus';
+import type { Channel, WaveformPoint } from '@mdp-core/protocol/types';
+import { processAddressPacket, processMachinePacket, processSynthesizePacket } from '@mdp-core/protocol/packet-decoder';
+import type {
+  AddressPacket,
+  ChannelUpdate,
+  MachinePacket,
+  SynthesizePacket,
+  UpdateChannelPacket,
+  WavePacket
+} from '@mdp-core/protocol/packet-decoder';
+import { createSetChannelPacket, createSetCurrentPacket, createSetOutputPacket, createSetVoltagePacket } from '@mdp-core/protocol/packet-encoder';
+import { debugError } from '@mdp-core/protocol/debug-logger';
+import type { PacketBus } from '@mdp-core/services/packet-bus';
 import type { SerialConnection } from '../serial';
 
 export type ChannelStore = ReturnType<typeof createChannelStore>;

@@ -11,17 +11,19 @@ const DEFAULT_CONFIG: SerialConfig = {
 };
 
 const MIN_PACKET_SIZE = 6;
-const MAX_PACKET_SIZE = 512;
+const MAX_PACKET_SIZE = 255;
 const MAX_BUFFER_SIZE = 2048;
 
 export interface NodeSerialConnectionOptions {
   portPath: string;
   config?: Partial<SerialConfig>;
+  serialPortFactory?: () => SerialPort;
 }
 
 export class NodeSerialConnection implements Transport {
   private readonly portPath: string;
   private readonly config: SerialConfig;
+  private readonly serialPortFactory?: () => SerialPort;
   private port: SerialPort | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private readonly packetHandlers = new Map<number, PacketHandler[]>();
@@ -30,6 +32,7 @@ export class NodeSerialConnection implements Transport {
   constructor(options: NodeSerialConnectionOptions) {
     this.portPath = options.portPath;
     this.config = { ...DEFAULT_CONFIG, ...(options.config ?? {}) };
+    this.serialPortFactory = options.serialPortFactory;
   }
 
   async connect(): Promise<void> {
@@ -37,10 +40,12 @@ export class NodeSerialConnection implements Transport {
       return;
     }
 
-    const port = new SerialPort({
-      path: this.portPath,
-      baudRate: this.config.baudRate,
-      dataBits: this.config.dataBits,
+    const port =
+      this.serialPortFactory?.() ??
+      new SerialPort({
+        path: this.portPath,
+        baudRate: this.config.baudRate,
+        dataBits: this.config.dataBits,
       stopBits: this.config.stopBits,
       parity: this.config.parity,
       rtscts: this.config.flowControl === 'hardware',

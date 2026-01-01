@@ -108,13 +108,16 @@ export async function detectMachineTypeFromSynthesize(
   return processed[0].machineType;
 }
 
+type SleepFn = (ms: number) => Promise<void>;
+
 export async function setTargets(
   transport: Transport,
   channel: number,
   parsedVoltage?: number,
   parsedCurrent?: number,
   baseline?: ChannelUpdate,
-  protocol?: ProtocolModule
+  protocol?: ProtocolModule,
+  sleep?: SleepFn
 ): Promise<void> {
   const {
     createSetChannelPacket,
@@ -126,18 +129,18 @@ export async function setTargets(
     const currentTarget =
       parsedCurrent ?? baseline?.targetCurrent ?? baseline?.current ?? 0;
     await transport.sendPacket(createSetChannelPacket(channel));
-    await delay(50);
+    await (sleep ?? delay)(50);
     await transport.sendPacket(createSetVoltagePacket(channel, parsedVoltage, currentTarget));
-    await delay(50);
+    await (sleep ?? delay)(50);
   }
 
   if (parsedCurrent !== undefined) {
     const voltageTarget =
       parsedVoltage ?? baseline?.targetVoltage ?? baseline?.voltage ?? 0;
     await transport.sendPacket(createSetChannelPacket(channel));
-    await delay(50);
+    await (sleep ?? delay)(50);
     await transport.sendPacket(createSetCurrentPacket(channel, voltageTarget, parsedCurrent));
-    await delay(50);
+    await (sleep ?? delay)(50);
   }
 }
 
@@ -145,13 +148,14 @@ export async function setOutputState(
   transport: Transport,
   channel: number,
   state: 'on' | 'off',
-  protocol?: ProtocolModule
+  protocol?: ProtocolModule,
+  sleep?: SleepFn
 ): Promise<void> {
   const { createSetChannelPacket, createSetOutputPacket } = await getProtocol(protocol);
   await transport.sendPacket(createSetChannelPacket(channel));
-  await delay(50);
+  await (sleep ?? delay)(50);
   await transport.sendPacket(createSetOutputPacket(channel, state === 'on'));
-  await delay(50);
+  await (sleep ?? delay)(50);
 }
 
 export async function fetchMachineInfo(

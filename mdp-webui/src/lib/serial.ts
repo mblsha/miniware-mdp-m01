@@ -1,21 +1,11 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
-import type { SerialConfig, PacketHandler } from './types';
+import type { SerialConfig, PacketHandler } from '@mdp-core/transport';
+import { ConnectionStatus, type DeviceInfo, type DeviceType } from '@mdp-core/protocol/types';
 import { decodePacket, isSynthesizePacket, isWavePacket, type SynthesizePacket, type WavePacket } from './packet-decoder';
 /// <reference path="./types/web-serial.d.ts" />
 
-export const ConnectionStatus = {
-  DISCONNECTED: 'disconnected',
-  CONNECTING: 'connecting',
-  CONNECTED: 'connected',
-  ERROR: 'error'
-} as const;
-
-export type DeviceType = 'M01' | 'M02';
-
-export type DeviceInfo = {
-  type: DeviceType;
-  hasLCD: boolean;
-};
+export { ConnectionStatus };
+export type { DeviceInfo, DeviceType };
 
 const SERIAL_CONFIG: SerialConfig = {
   baudRate: 115200,

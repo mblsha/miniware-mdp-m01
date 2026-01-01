@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSignal } from '$lib/core/signal';
+import { createSignal } from '@mdp-core/util/signal';
 
 describe('createSignal', () => {
   it('notifies subscribers on emit', () => {
@@ -24,4 +24,3 @@ describe('createSignal', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 });
-

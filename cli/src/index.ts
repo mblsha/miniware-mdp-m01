@@ -479,24 +479,19 @@ program
     const timeout = Number(options.timeout);
     const portPath = await resolvePort(options.port);
     const connection = new NodeSerialConnection({ portPath });
-    await connection.connect();
-    await connection.sendPacket(createGetMachinePacket());
-    const response = await connection.waitForPacket(PackType.MACHINE, timeout);
-    if (!response) {
-      console.log('No machine response received.');
+    try {
+      await connection.connect();
+      const info = await fetchMachineInfo(connection, timeout);
+      if (info) {
+        console.log('Device Information:');
+        console.log(`  Type : ${info.type}`);
+        console.log(`  LCD  : ${info.hasLCD ? 'present' : 'absent'}`);
+      } else {
+        console.log('Failed to fetch machine info.');
+      }
+    } finally {
       await connection.disconnect();
-      return;
     }
-    const decoded = decodePacket(response);
-    const info = decoded ? processMachinePacket(decoded) : null;
-    if (info) {
-      console.log('Device Information:');
-      console.log(`  Type : ${info.type}`);
-      console.log(`  LCD  : ${info.hasLCD ? 'present' : 'absent'}`);
-    } else {
-      console.log('Failed to decode machine packet.');
-    }
-    await connection.disconnect();
   });
 
 program
@@ -508,24 +503,33 @@ program
   .argument('<channel>', 'Channel index (0-5)')
   .action(async (channelArg, options) => {
     const channel = parseChannelArg(channelArg);
-    const voltage = options.targetVoltage ? Number(options.targetVoltage) : 0;
-    const current = options.targetCurrent ? Number(options.targetCurrent) : 0;
-    if (!Number.isFinite(voltage) || !Number.isFinite(current)) {
+    const parsedVoltage = options.targetVoltage !== undefined ? Number(options.targetVoltage) : undefined;
+    const parsedCurrent = options.targetCurrent !== undefined ? Number(options.targetCurrent) : undefined;
+
+    if (
+      parsedVoltage !== undefined && !Number.isFinite(parsedVoltage) ||
+      parsedCurrent !== undefined && !Number.isFinite(parsedCurrent)
+    ) {
       throw new Error('Voltage and current must be valid numbers');
+    }
+
+    if (parsedVoltage === undefined && parsedCurrent === undefined) {
+      throw new Error('Provide either --target-voltage or --target-current (or both)');
     }
 
     const portPath = await resolvePort(options.port);
     const connection = new NodeSerialConnection({ portPath });
-    await connection.connect();
+    try {
+      await connection.connect();
+      const baseline = await waitForChannelStatus(connection, channel);
+      await setTargets(connection, channel, parsedVoltage, parsedCurrent, baseline);
 
-    await connection.sendPacket(createSetChannelPacket(channel));
-    await delay(50);
-    await connection.sendPacket(createSetVoltagePacket(channel, voltage, current));
-    await delay(50);
-    await connection.sendPacket(createSetCurrentPacket(channel, voltage, current));
-
-    console.log(`Set channel ${channel} to ${voltage.toFixed(2)}V / ${current.toFixed(3)}A`);
-    await connection.disconnect();
+      const logVoltage = parsedVoltage ?? baseline?.targetVoltage ?? baseline?.voltage ?? 0;
+      const logCurrent = parsedCurrent ?? baseline?.targetCurrent ?? baseline?.current ?? 0;
+      console.log(`Set channel ${channel} to ${logVoltage.toFixed(2)}V / ${logCurrent.toFixed(3)}A`);
+    } finally {
+      await connection.disconnect();
+    }
   });
 
 program
@@ -543,14 +547,13 @@ program
 
     const portPath = await resolvePort(options.port);
     const connection = new NodeSerialConnection({ portPath });
-    await connection.connect();
-
-    await connection.sendPacket(createSetChannelPacket(channel));
-    await delay(50);
-    await connection.sendPacket(createSetOutputPacket(channel, normalized === 'on'));
-
-    console.log(`Channel ${channel} output ${normalized.toUpperCase()}`);
-    await connection.disconnect();
+    try {
+      await connection.connect();
+      await setOutputState(connection, channel, normalized as 'on' | 'off');
+      console.log(`Channel ${channel} output ${normalized.toUpperCase()}`);
+    } finally {
+      await connection.disconnect();
+    }
   });
 
 async function run(): Promise<void> {

@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
+import { ConnectionStatus as SharedConnectionStatus } from '@mdp-core/protocol/types';
 
-export const ConnectionStatus = {
+export const ConnectionStatus = SharedConnectionStatus ?? {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
   CONNECTED: 'connected',

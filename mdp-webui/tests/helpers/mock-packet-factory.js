@@ -2,7 +2,7 @@
  * Mock packet factory that creates properly structured packets matching Kaitai parser output
  */
 
-import { PackType } from '$lib/packet-decoder.js';
+import { PackType } from '@mdp-core/protocol';
 
 /**
  * Create a valid packet header

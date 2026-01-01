@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { createSignal } from '$lib/core/signal.js';
+import { createSignal } from '@mdp-core/util/signal';
 
 const mockProcessSynthesizePacket = vi.hoisted(() => vi.fn());
 const mockProcessAddressPacket = vi.hoisted(() => vi.fn());
 const mockProcessMachinePacket = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/packet-decoder.js', () => ({
+  processSynthesizePacket: mockProcessSynthesizePacket,
+  processAddressPacket: mockProcessAddressPacket,
+  processMachinePacket: mockProcessMachinePacket,
+}));
+
+vi.mock('@mdp-core/protocol/packet-decoder', () => ({
   processSynthesizePacket: mockProcessSynthesizePacket,
   processAddressPacket: mockProcessAddressPacket,
   processMachinePacket: mockProcessMachinePacket,

@@ -12,11 +12,25 @@ export {
   processMachinePacket,
   processSynthesizePacket,
   processWavePacket,
-  isMachinePacket
-} from '../../../../mdp-webui/src/lib/packet-decoder';
-export type { ChannelUpdate } from '../../../../mdp-webui/src/lib/packet-decoder';
+  processAddressPacket,
+  isSynthesizePacket,
+  isWavePacket,
+  isAddressPacket,
+  isMachinePacket,
+  isUpdateChannelPacket,
+  PackType
+} from './packet-decoder';
+export type { ChannelUpdate } from './packet-decoder';
+export type {
+  DecodedPacket,
+  SynthesizePacket,
+  WavePacket,
+  AddressPacket,
+  MachinePacket,
+  UpdateChannelPacket
+} from './packet-decoder';
+export { getOperatingMode } from './packet-decoder';
 
-export { PackType } from '../../../../mdp-webui/src/lib/types';
-export { debugEnabled } from '../../../../mdp-webui/src/lib/debug-logger';
-export { getMachineTypeString } from '../../../../mdp-webui/src/lib/machine-utils';
+export { debugEnabled, isDebugEnabled } from './debug-logger';
+export { getMachineTypeString } from './machine-utils';
 export type { Transport } from '../transport';

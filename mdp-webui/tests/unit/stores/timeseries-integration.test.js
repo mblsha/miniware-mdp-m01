@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { get, writable } from 'svelte/store';
-import { createSignal } from '$lib/core/signal.js';
+import { createSignal } from '@mdp-core/util/signal';
 import { createTimeseriesStore } from '$lib/stores/timeseries.js';
 import { createTimeseriesIntegration } from '$lib/stores/timeseries-integration.js';
 

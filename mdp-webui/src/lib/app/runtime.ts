@@ -1,14 +1,14 @@
 import { SerialConnection } from '../serial';
-import { createPacketBus } from '../services/packet-bus';
-import type { PacketBus } from '../services/packet-bus';
+import { createPacketBus } from '@mdp-core/services/packet-bus';
+import type { PacketBus } from '@mdp-core/services/packet-bus';
 import { createChannelStore } from '../stores/channels';
 import type { ChannelStore } from '../stores/channels';
 import { createSparklineStore } from '../stores/sparkline';
 import type { SparklineStore } from '../stores/sparkline';
-import { createTimeseriesStore } from '../stores/timeseries';
-import type { TimeseriesStore } from '../stores/timeseries';
-import { createTimeseriesIntegration } from '../stores/timeseries-integration';
-import type { TimeseriesIntegration } from '../stores/timeseries-integration';
+import { createTimeseriesStore } from '@mdp-core/stores/timeseries-store';
+import type { TimeseriesStore } from '@mdp-core/stores/timeseries-store';
+import { createTimeseriesIntegration } from '@mdp-core/stores/timeseries-integration';
+import type { TimeseriesIntegration } from '@mdp-core/stores/timeseries-integration';
 
 export type AppRuntime = {
   serial: SerialConnection;
