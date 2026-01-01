@@ -606,7 +606,8 @@ program
       throw new Error('State must be "on" or "off"');
     }
 
-    const connection = new NodeSerialConnection({ portPath: options.port });
+    const portPath = await resolvePort(options.port);
+    const connection = new NodeSerialConnection({ portPath });
     await connection.connect();
 
     await connection.sendPacket(createSetChannelPacket(channel));
