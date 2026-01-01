@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a mixed C++/Python project for handling Miniware MDP (Multi-channel Digital Power) M01/M02 device data. The project provides data logging, parsing, and visualization capabilities for power supply monitoring.
+This is a mixed C++/TypeScript project for handling Miniware MDP (Multi-channel Digital Power) M01/M02 device data. The project provides data logging, parsing, and visualization capabilities for power supply monitoring.
 
 ## Repository Structure
 
@@ -14,10 +14,8 @@ This is a mixed C++/Python project for handling Miniware MDP (Multi-channel Digi
   - `CMakeLists.txt` - CMake build configuration
   - `tests/` - Unit tests using Google Test framework
   - `build/` - Build directory (git-ignored)
-- `py/` - Python tools for data parsing and visualization
-  - `mdp_m01/` - Main Python package with binary protocol parser
-  - `clickhouse-visualize.py` - Data visualization with ClickHouse integration
-  - `miniware-marimo.py` - Interactive Marimo notebook
+- `webui/` - Svelte-based web UI for real-time monitoring
+- `cli/` - Node/TypeScript CLI tooling for device control
 
 ## Key Technical Details
 
@@ -43,27 +41,7 @@ This is a mixed C++/Python project for handling Miniware MDP (Multi-channel Digi
 - CMake build system configured with Google Test integration
 - Uses Qt's signal/slot mechanism for packet notifications
 
-### Python Component Dependencies
-- kaitaistruct - Binary parsing
-- clickhouse_connect - Database connectivity
-- marimo - Interactive notebooks
-- altair, pandas - Data visualization
-- pyserial - Serial communication
-
 ## Development Commands
-
-### Python Development
-```bash
-# Navigate to Python directory
-cd py
-
-# Run tests (pytest-style)
-python -m pytest mdp_m01/test_parser.py
-
-# Run visualization tools
-python clickhouse-visualize.py  # Requires ClickHouse at 'clickhouse' host
-python miniware-marimo.py       # Starts Marimo notebook server
-```
 
 ### C++ Development
 ```bash
@@ -101,9 +79,9 @@ ctest --test-dir . -V
 
 The project implements a reverse-engineered protocol for Miniware MDP devices based on original source code. Key components:
 
-1. **Serial Communication**: Both C++ and Python components can communicate directly with MDP devices
-2. **Data Flow**: Device → Serial → Parser → Storage (ClickHouse) → Visualization
-3. **Real-time vs Historical**: C++ for real-time monitoring, Python for historical analysis
+1. **Serial Communication**: C++ and Web UI/CLI components can communicate directly with MDP devices
+2. **Data Flow**: Device → Serial → Parser → Visualization
+3. **Real-time vs Control**: C++ for real-time monitoring, Web UI for interactive visualization, CLI for device control
 
 ## Testing and Test Data Generation
 
@@ -278,7 +256,7 @@ Each test validates:
 ### Key Commands
 ```bash
 # Navigate to web UI directory
-cd mdp-webui
+cd webui
 
 # Install dependencies
 npm install
@@ -983,7 +961,6 @@ Always maintain keyboard accessibility alongside pointer events:
 ## Important Considerations
 
 - The C++ code references Qt's deprecated features and may need updates for newer Qt versions
-- Python code assumes ClickHouse is available at hostname 'clickhouse'
 - Protocol changes require regenerating parser from `mdp.ksy` using Kaitai Struct compiler
 - Test execution requires Qt event loop (QCoreApplication) for signal/slot mechanism
 - Google Test's gtest_main provides the main() function - don't add it to test files
