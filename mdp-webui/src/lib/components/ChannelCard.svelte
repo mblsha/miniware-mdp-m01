@@ -61,6 +61,9 @@
   {#if channel.online}
     <div class="info">
       <div class="machine-type">{channel.machineType}</div>
+      {#if channel.psuStatus}
+        <div class="psu-status">PSU Status: {channel.psuStatus}</div>
+      {/if}
     </div>
     
     <div class="measurements-table">
@@ -229,6 +232,11 @@
     font-weight: 600;
     color: #555;
     margin-bottom: 0.25rem;
+  }
+
+  .psu-status {
+    font-size: 0.85rem;
+    color: #666;
   }
   
   .measurements-table {

@@ -244,6 +244,7 @@ export function processSynthesizePacket(packet: DecodedPacket | null): ChannelUp
     debugLog('synthesize', `    OutputOn:`, ch.outputOn);
     debugLog('synthesize', `    Type:`, ch.type);
     
+    const psuStatus = getPsuStatus(ch);
     const channelData: ChannelUpdate = {
       channel: i,
       online: ch.online !== 0,
@@ -254,6 +255,7 @@ export function processSynthesizePacket(packet: DecodedPacket | null): ChannelUp
       temperature: ch.temperature || 0, // Kaitai already converts to °C
       isOutput: ch.outputOn !== 0,
       mode: getOperatingMode(ch),
+      psuStatus: psuStatus ?? undefined,
       // Add input measurements for extended view
       inputVoltage: ch.inVoltage || 0, // Kaitai already converts to V
       inputCurrent: ch.inCurrent || 0, // Kaitai already converts to A
@@ -350,4 +352,23 @@ export function getOperatingMode(channel: SynthesizeChannel): string {
     }
   }
   return 'Normal';
+}
+
+export function getPsuStatus(channel: SynthesizeChannel): string | null {
+  if (channel.type !== 2) {
+    return null;
+  }
+
+  switch (channel.statusPsu) {
+    case 0:
+      return 'OFF';
+    case 1:
+      return 'CC';
+    case 2:
+      return 'CV';
+    case 3:
+      return 'ON';
+    default:
+      return 'UNKNOWN';
+  }
 }
