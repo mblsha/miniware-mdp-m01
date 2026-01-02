@@ -284,7 +284,7 @@ function extractWaveSamples(
       if (!item) break;
       const sampleTimeUs = runningTimeUs + i * timePerSampleUs;
       samples.push({
-        timeSeconds: sampleTimeUs / 1_000_000,
+        timeSeconds: sampleTimeUs / 1_000,
         voltage: item.voltage,
         current: item.current
       });
