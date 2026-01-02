@@ -140,6 +140,56 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+  cli-lint:
+    name: CLI Lint
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: cli
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+  cli-type-check:
+    name: CLI Type Check
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: cli
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run type check
+        run: npm run type-check
+
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
@@ -183,7 +233,7 @@ jobs:
   summary:
     name: Summary
     runs-on: ubuntu-latest
-    needs: [webui-lint, webui-type-check, webui-unit-tests, cli-unit-tests]
+    needs: [webui-lint, webui-type-check, webui-unit-tests, cli-lint, cli-type-check, cli-unit-tests]
     if: always()
 
     steps:
@@ -192,11 +242,15 @@ jobs:
           echo "WebUI Lint: ${{ needs.webui-lint.result }}"
           echo "WebUI Type Check: ${{ needs.webui-type-check.result }}"
           echo "WebUI Unit Tests: ${{ needs.webui-unit-tests.result }}"
+          echo "CLI Lint: ${{ needs.cli-lint.result }}"
+          echo "CLI Type Check: ${{ needs.cli-type-check.result }}"
           echo "CLI Unit Tests: ${{ needs.cli-unit-tests.result }}"
 
           if [[ "${{ needs.webui-lint.result }}" != "success" || \
                 "${{ needs.webui-type-check.result }}" != "success" || \
                 "${{ needs.webui-unit-tests.result }}" != "success" || \
+                "${{ needs.cli-lint.result }}" != "success" || \
+                "${{ needs.cli-type-check.result }}" != "success" || \
                 "${{ needs.cli-unit-tests.result }}" != "success" ]]; then
             echo "One or more CI checks failed"
             exit 1
