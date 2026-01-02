@@ -2,6 +2,13 @@ import { Command } from 'commander';
 import { SerialPort } from 'serialport';
 import { NodeSerialConnection } from './node-serial';
 import {
+  ContextRegistry,
+  categorizeDevice,
+  type DeviceCategory,
+  type DeviceContext,
+  type DeviceContextParams
+} from './context-registry';
+import {
   createGetMachinePacket,
   createHeartbeatPacket,
   createSetChannelPacket,
@@ -108,98 +115,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-type DeviceCategory = 'psu' | 'load';
-
-interface DeviceContextParams {
-  portPath: string;
-  category: DeviceCategory;
-  machineType: string;
-}
-
-interface DeviceContext extends DeviceContextParams {
-  alias: string;
-  index: number;
-}
-
-class ContextRegistry {
-  private readonly aliasMap = new Map<string, DeviceContext>();
-  private readonly ambiguousCategories = new Set<DeviceCategory>();
-  public readonly uniqueContextsByCategory: Record<DeviceCategory, DeviceContext[]> = {
-    psu: [],
-    load: []
-  };
-
-  constructor(contexts: DeviceContextParams[]) {
-    const groups: Record<DeviceCategory, DeviceContextParams[]> = {
-      psu: [],
-      load: []
-    };
-    contexts.forEach((context) => {
-      groups[context.category].push(context);
-    });
-
-    (['psu', 'load'] as DeviceCategory[]).forEach((category) => {
-      const devices = groups[category];
-      if (devices.length === 0) {
-        return;
-      }
-
-      if (devices.length > 1) {
-        this.ambiguousCategories.add(category);
-      }
-
-      devices.forEach((context, index) => {
-        const alias = devices.length === 1 ? category : `${category}${index + 1}`;
-        const device: DeviceContext = {
-          ...context,
-          alias,
-          index: index + 1
-        };
-        this.aliasMap.set(alias, device);
-        this.pushUnique(device);
-      });
-    });
-  }
-
-  private pushUnique(context: DeviceContext): void {
-    const list = this.uniqueContextsByCategory[context.category];
-    if (!list.some((entry) => entry.portPath === context.portPath)) {
-      list.push(context);
-    }
-  }
-
-  getContext(alias: string): DeviceContext | undefined {
-    return this.aliasMap.get(alias);
-  }
-
-  getAliases(): string[] {
-    return Array.from(this.aliasMap.keys()).sort();
-  }
-
-  getAmbiguousCategories(): DeviceCategory[] {
-    return Array.from(this.ambiguousCategories);
-  }
-
-  describe(): string[] {
-    const lines: string[] = ['Detected device contexts:'];
-    this.getAliases().forEach((alias) => {
-      const ctx = this.aliasMap.get(alias);
-      if (!ctx) return;
-      lines.push(`  ${alias} -> ${ctx.category.toUpperCase()} (${ctx.machineType})`);
-    });
-
-    if (this.ambiguousCategories.size > 0) {
-      lines.push('Ambiguous names:');
-      this.getAmbiguousCategories().forEach((category) => {
-        const hints = this.uniqueContextsByCategory[category].map((ctx) => ctx.alias).join(', ');
-        lines.push(`  ${category} (use ${hints})`);
-      });
-    }
-
-    return lines;
-  }
-}
-
 const STATUS_TIMEOUT_MS = 5000;
 
 async function detectMachineTypeFromSynthesize(
@@ -266,7 +181,7 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
         machineData?.machineName ?? (machineData ? getMachineTypeString(machineData.machineTypeRaw) : undefined);
       const channelMachineTypes = await detectMachineTypeFromSynthesize(connection);
       const machineType = channelMachineTypes ?? fallbackLabel ?? info.type;
-      const category: DeviceCategory = machineType.toLowerCase().includes('l1060') ? 'load' : 'psu';
+      const category = categorizeDevice(machineType);
       contexts.push({
         portPath: port.path,
         category,
