@@ -81,7 +81,7 @@
   function exportData() {
     if (!channelData || !channelData.waveformData || !channelData.waveformData.length) return;
     
-    const csv = ['Timestamp (ms),Voltage (V),Current (A)'];
+    const csv = ['Time (s),Voltage (V),Current (A)'];
     channelData.waveformData.forEach((point: WaveformPoint) => {
       csv.push(`${point.timestamp},${point.voltage},${point.current}`);
     });

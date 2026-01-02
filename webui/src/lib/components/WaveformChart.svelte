@@ -24,7 +24,7 @@
   
   // Transform data for Plot
   $: plotData = data.map((d) => ({
-    timestamp: d.timestamp, // Already in milliseconds
+    timestamp: d.timestamp, // Already in seconds
     voltage: d.voltage,
     current: d.current
   }));
@@ -33,11 +33,11 @@
   function createPlot(containerWidth = 800): ReturnType<typeof Plot.plot> | null {
     if (plotData.length === 0) return null;
     
-    // If recording and lots of data, show only last 10000 ms (10 seconds)
+    // If recording and lots of data, show only last 10 seconds
     let displayData = plotData;
     if (isRecording && plotData.length > 100) {
       const lastTimestamp = plotData[plotData.length - 1]?.timestamp ?? 0;
-      const startTime = lastTimestamp - 10000; // 10000 ms = 10 seconds ago
+      const startTime = lastTimestamp - 10;
       displayData = plotData.filter(d => d.timestamp >= startTime);
     }
     
@@ -55,7 +55,7 @@
         backgroundColor: 'transparent'
       },
       x: {
-        label: "Time (ms)",
+        label: "Time (s)",
         nice: true
       },
       y: {
@@ -74,7 +74,7 @@
           y: "voltage",
           stroke: chartColors.voltage,
           strokeWidth: 2,
-          title: d => `Time: ${d.timestamp.toFixed(1)}ms\nVoltage: ${d.voltage.toFixed(3)}V`
+          title: d => `Time: ${d.timestamp.toFixed(3)}s\nVoltage: ${d.voltage.toFixed(3)}V`
         }),
         // Current line (scaled to secondary axis)
         Plot.lineY(displayData, {
@@ -82,7 +82,7 @@
           y: d => d.current * 10, // Scale current for visibility
           stroke: chartColors.current,
           strokeWidth: 2,
-          title: d => `Time: ${d.timestamp.toFixed(1)}ms\nCurrent: ${d.current.toFixed(3)}A`
+          title: d => `Time: ${d.timestamp.toFixed(3)}s\nCurrent: ${d.current.toFixed(3)}A`
         }),
         // Add dots for data points if not too many
         ...(displayData.length < 200 ? [

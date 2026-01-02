@@ -1,13 +1,10 @@
+import { createWriteStream } from 'node:fs';
+import { format } from 'node:util';
 import { Command } from 'commander';
 import { SerialPort } from 'serialport';
+import { get } from 'svelte/store';
 import { NodeSerialConnection } from './node-serial';
-import {
-  ContextRegistry,
-  categorizeDevice,
-  type DeviceCategory,
-  type DeviceContext,
-  type DeviceContextParams
-} from './context-registry';
+import { ContextRegistry, categorizeDevice, type DeviceContext, type DeviceContextParams } from './context-registry';
 import {
   createGetMachinePacket,
   createHeartbeatPacket,
@@ -22,7 +19,9 @@ import {
   processSynthesizePacket,
   processWavePacket,
   type ChannelUpdate,
-  isMachinePacket
+  type DecodedPacket,
+  isMachinePacket,
+  isWavePacket
 } from '../../webui/src/lib/packet-decoder';
 import { PackType } from '../../webui/src/lib/types';
 import { debugEnabled } from '../../webui/src/lib/debug-logger';
@@ -30,6 +29,8 @@ import { getMachineTypeString } from '../../webui/src/lib/machine-utils';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
+
+type PortInfo = Awaited<ReturnType<typeof SerialPort.list>>[number];
 
 const program = new Command();
 
@@ -67,7 +68,7 @@ function normalizeId(value?: string | number): number[] {
   return candidates.filter(Number.isFinite);
 }
 
-function matchesMiniwarePort(port: SerialPort.PortInfo): boolean {
+function matchesMiniwarePort(port: PortInfo): boolean {
   const vendorIds = normalizeId(port.vendorId);
   const productIds = normalizeId(port.productId);
 
@@ -97,8 +98,8 @@ async function resolvePort(provided?: string): Promise<string> {
 
 function formatChannelLine(update: ChannelUpdate): string {
   const online = update.online ? 'ONLINE' : 'OFFLINE';
-  const voltage = update.voltage.toFixed(3);
-  const current = update.current.toFixed(3);
+  const voltage = (update.voltage ?? 0).toFixed(3);
+  const current = (update.current ?? 0).toFixed(3);
   const output = update.isOutput ? 'OUTPUT ON' : 'OUTPUT OFF';
   return `Ch${update.channel}: ${online} | ${voltage}V ${current}A | ${output}`;
 }
@@ -115,6 +116,43 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type CsvWriter = {
+  writeLine: (line: string) => void;
+  close: () => Promise<void>;
+};
+
+function createCsvWriter(outputPath?: string): CsvWriter {
+  if (outputPath) {
+    const stream = createWriteStream(outputPath, { encoding: 'utf8' });
+    return {
+      writeLine: (line) => {
+        stream.write(`${line}\n`);
+      },
+      close: () =>
+        new Promise((resolve) => {
+          stream.end(() => resolve());
+        })
+    };
+  }
+
+  return {
+    writeLine: (line) => {
+      process.stdout.write(`${line}\n`);
+    },
+    close: async () => {}
+  };
+}
+
+function parseDurationSeconds(value?: string): number | null {
+  if (value === undefined) {
+    return null;
+  }
+  const duration = Number(value);
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error('Duration must be a positive number of seconds');
+  }
+  return duration;
+}
 const STATUS_TIMEOUT_MS = 5000;
 
 async function detectMachineTypeFromSynthesize(
@@ -142,7 +180,7 @@ async function detectMachineTypeFromSynthesize(
     return null;
   }
 
-  return processed[0].machineType;
+  return processed[0].machineType ?? null;
 }
 
 async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
@@ -220,12 +258,55 @@ async function waitForChannelStatus(
   return processed[channel] ?? processed[0];
 }
 
+type WaveSample = {
+  timeSeconds: number;
+  voltage: number;
+  current: number;
+};
+
+function extractWaveSamples(
+  packet: DecodedPacket,
+  runningTimeUs: number
+): { samples: WaveSample[]; nextRunningTimeUs: number } | null {
+  if (!isWavePacket(packet)) return null;
+
+  const wave = packet.data;
+  const samples: WaveSample[] = [];
+  const samplesPerGroup = packet.size === 126 ? 2 : packet.size === 206 ? 4 : 0;
+
+  wave.groups.forEach((group) => {
+    const groupElapsedTimeUs = group.timestamp / 10;
+    const pointsInGroup = samplesPerGroup || group.items.length || 1;
+    const timePerSampleUs = pointsInGroup > 0 ? groupElapsedTimeUs / pointsInGroup : 0;
+
+    for (let i = 0; i < pointsInGroup; i++) {
+      const item = group.items[i];
+      if (!item) break;
+      const sampleTimeUs = runningTimeUs + i * timePerSampleUs;
+      samples.push({
+        timeSeconds: sampleTimeUs / 1_000,
+        voltage: item.voltage,
+        current: item.current
+      });
+    }
+
+    runningTimeUs += groupElapsedTimeUs;
+  });
+
+  return { samples, nextRunningTimeUs: runningTimeUs };
+}
+
 interface ContextCommandOptions {
   channel?: string;
   status?: boolean;
   statusJson?: boolean;
   setVoltage?: string;
   setCurrent?: string;
+}
+
+interface RecordCommandOptions {
+  duration?: string;
+  outputCsv?: string;
 }
 
 async function handleContextCommand(
@@ -314,25 +395,154 @@ async function handleContextCommand(
     }
 
     if (options.status && finalStatus) {
+      const voltage = finalStatus.voltage ?? 0;
+      const targetVoltage = finalStatus.targetVoltage ?? 0;
+      const current = finalStatus.current ?? 0;
+      const targetCurrent = finalStatus.targetCurrent ?? 0;
+      const temperature = finalStatus.temperature ?? 0;
       const lines = [
         `${alias} (${context.machineType}) channel ${channel}:`,
         `  Online: ${finalStatus.online ? 'YES' : 'NO'}`,
-        `  Voltage: ${finalStatus.voltage.toFixed(3)} V (target ${finalStatus.targetVoltage.toFixed(3)} V)`,
-        `  Current: ${finalStatus.current.toFixed(3)} A (target ${finalStatus.targetCurrent.toFixed(3)} A)`,
-        `  Temperature: ${finalStatus.temperature.toFixed(1)} °C`,
+        `  Voltage: ${voltage.toFixed(3)} V (target ${targetVoltage.toFixed(3)} V)`,
+        `  Current: ${current.toFixed(3)} A (target ${targetCurrent.toFixed(3)} A)`,
+        `  Temperature: ${temperature.toFixed(1)} °C`,
         `  Output: ${finalStatus.isOutput ? 'ON' : 'OFF'}`,
         `  Mode: ${finalStatus.mode}`
       ];
       lines.forEach((line) => console.log(line));
     } else if (wantsSets && finalStatus && !options.status && !options.statusJson) {
+      const voltage = finalStatus.voltage ?? 0;
+      const current = finalStatus.current ?? 0;
       console.log(
-        `${alias} channel ${channel} updated: ${finalStatus.voltage.toFixed(3)} V / ${finalStatus.current.toFixed(3)} A`
+        `${alias} channel ${channel} updated: ${voltage.toFixed(3)} V / ${current.toFixed(3)} A`
       );
     } else if (wantsOutput && !wantsStatus && !options.statusJson && !wantsSets) {
       console.log(`${alias} channel ${channel} output ${normalizedOutputState?.toUpperCase()}`);
     }
   } finally {
     await connection.disconnect();
+  }
+}
+
+async function handleRecordCommand(
+  alias: string,
+  context: DeviceContext,
+  options: RecordCommandOptions
+): Promise<void> {
+  const originalConsoleLog = console.log;
+  const originalConsoleWarn = console.warn;
+  const restoreConsole = () => {
+    console.log = originalConsoleLog;
+    console.warn = originalConsoleWarn;
+  };
+  console.log = (...args: unknown[]) => {
+    process.stderr.write(`${format(...args)}\n`);
+  };
+  console.warn = (...args: unknown[]) => {
+    process.stderr.write(`${format(...args)}\n`);
+  };
+
+  const channel = parseChannelArg('0');
+  const durationSeconds = parseDurationSeconds(options.duration);
+  const outputPath = options.outputCsv;
+  const writer = createCsvWriter(outputPath);
+  const log = (message: string) => {
+    process.stderr.write(`${message}\n`);
+  };
+
+  if (get(debugEnabled)) {
+    debugEnabled.set(false);
+    log('Debug logging disabled during recording to keep CSV output clean.');
+  }
+
+  const connection = new NodeSerialConnection({ portPath: context.portPath });
+  try {
+    await connection.connect();
+    await connection.sendPacket(createSetChannelPacket(channel));
+    await delay(50);
+
+    connection.startHeartbeat(() => createHeartbeatPacket(), 1000);
+
+    let runningTimeUs = 0;
+    let pointCount = 0;
+    let hasWaveData = false;
+    const ignoredChannels = new Set<number>();
+
+    const unsubscribe = connection.registerPacketHandler(PackType.WAVE, (packet) => {
+      const decoded = decodePacket(packet);
+      if (!decoded || !isWavePacket(decoded)) return;
+
+      if (decoded.data.channel !== channel) {
+        if (!ignoredChannels.has(decoded.data.channel)) {
+          ignoredChannels.add(decoded.data.channel);
+          log(`Ignoring wave data from channel ${decoded.data.channel}.`);
+        }
+        return;
+      }
+
+      if (!hasWaveData) {
+        hasWaveData = true;
+        log(`Receiving wave data for channel ${channel}...`);
+      }
+
+      const result = extractWaveSamples(decoded, runningTimeUs);
+      if (!result) return;
+
+      runningTimeUs = result.nextRunningTimeUs;
+      result.samples.forEach((sample) => {
+        writer.writeLine(
+          `${sample.timeSeconds.toFixed(6)},${sample.voltage.toFixed(6)},${sample.current.toFixed(6)}`
+        );
+        pointCount += 1;
+      });
+    });
+
+    writer.writeLine('time_s,voltage_v,current_a');
+    log(
+      `Recording ${alias} channel ${channel}${outputPath ? ` to ${outputPath}` : ' to stdout'}...`
+    );
+
+    let stopRequested = false;
+    let durationTimer: ReturnType<typeof setTimeout> | null = null;
+    let resolveDone: (() => void) | null = null;
+
+    const done = new Promise<void>((resolve) => {
+      resolveDone = resolve;
+    });
+
+    const onSigint = () => {
+      void stop('interrupted');
+    };
+
+    const stop = async (reason: string) => {
+      if (stopRequested) return;
+      stopRequested = true;
+      process.removeListener('SIGINT', onSigint);
+      if (durationTimer) {
+        clearTimeout(durationTimer);
+        durationTimer = null;
+      }
+      unsubscribe();
+      connection.stopHeartbeat();
+      await connection.disconnect();
+      await writer.close();
+      const duration = runningTimeUs / 1_000_000;
+      log(`Recording stopped (${reason}). ${pointCount} samples over ${duration.toFixed(3)}s.`);
+      restoreConsole();
+      resolveDone?.();
+    };
+
+    process.once('SIGINT', onSigint);
+    if (durationSeconds) {
+      durationTimer = setTimeout(() => {
+        void stop('duration elapsed');
+      }, durationSeconds * 1000);
+    }
+
+    await done;
+  } catch (error) {
+    restoreConsole();
+    throw error;
   }
 }
 
@@ -354,7 +564,7 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
   registry.getAliases().forEach((alias) => {
     const context = registry.getContext(alias);
     if (!context) return;
-    program
+    const command = program
       .command(alias)
       .description(`Control ${context.machineType} (${alias})`)
       .argument('[state]', 'Output state (on/off)')
@@ -365,6 +575,15 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
       .option('--set-current <current>', 'Set target current (A)')
       .action(async (state: string | undefined, options: ContextCommandOptions) => {
         await handleContextCommand(alias, context, options, state);
+      });
+
+    command
+      .command('record')
+      .description('Record waveform data to CSV (stdout by default)')
+      .option('--duration <sec>', 'Recording duration in seconds')
+      .option('--output-csv <path>', 'Write CSV to a file instead of stdout')
+      .action(async (options: RecordCommandOptions) => {
+        await handleRecordCommand(alias, context, options);
       });
   });
 }

@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "resolveJsonModule": true,
@@ -14,8 +14,13 @@
     "paths": {
       "cli/*": ["src/*"]
     },
-    "types": ["node"]
+    "types": ["node", "svelte"]
   },
-  "include": ["src/**/*", "tests/**/*"],
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "../webui/src/types/**/*.d.ts",
+    "../webui/src/lib/types/**/*.d.ts"
+  ],
   "exclude": ["node_modules"]
 }
