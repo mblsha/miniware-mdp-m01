@@ -324,7 +324,7 @@ describe('ChannelDetail Component', () => {
       const blobContent = global.Blob.mock.calls[0][0][0];
       const lines = blobContent.split('\n');
       
-      expect(lines[0]).toBe('Timestamp (ms),Voltage (V),Current (A)');
+      expect(lines[0]).toBe('Time (s),Voltage (V),Current (A)');
       expect(lines[1]).toBe('0,3.3,0.5');
       expect(lines[2]).toBe('10,3.4,0.6');
       expect(lines[3]).toBe('20,3.5,0.7');

@@ -191,7 +191,7 @@ describe('ChannelDetail Recording Tests', () => {
       const blobContent = global.Blob.mock.calls[0][0][0];
       const lines = blobContent.split('\n');
       
-      expect(lines[0]).toBe('Timestamp (ms),Voltage (V),Current (A)');
+      expect(lines[0]).toBe('Time (s),Voltage (V),Current (A)');
       expect(lines[1]).toBe('0,5,1');
       expect(lines[2]).toBe('10,5.1,1.05');
       expect(lines[3]).toBe('20,5.2,1.1');
