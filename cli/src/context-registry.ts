@@ -23,6 +23,10 @@ export interface DeviceContext extends DeviceContextParams {
  * - Single device of a category: simple alias (e.g., "psu" or "load")
  * - Multiple devices of same category: numbered aliases (e.g., "psu1", "psu2")
  * - When multiple devices exist, the base category name becomes ambiguous
+ *
+ * IMPORTANT: Devices are sorted by portPath to ensure stable ordering across
+ * reboots and USB topology changes. This prevents "psu1" from unexpectedly
+ * pointing to a different physical device.
  */
 export class ContextRegistry {
   private readonly aliasMap = new Map<string, DeviceContext>();
@@ -42,7 +46,8 @@ export class ContextRegistry {
     });
 
     (['psu', 'load'] as DeviceCategory[]).forEach((category) => {
-      const devices = groups[category];
+      // Sort by portPath for stable ordering across reboots/topology changes
+      const devices = groups[category].sort((a, b) => a.portPath.localeCompare(b.portPath));
       if (devices.length === 0) {
         return;
       }

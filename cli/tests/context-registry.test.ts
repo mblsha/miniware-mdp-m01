@@ -295,4 +295,36 @@ describe('ContextRegistry', () => {
       expect(registry.getContext('psu')?.index).toBe(1);
     });
   });
+
+  describe('stable ordering', () => {
+    it('should sort devices by portPath for consistent ordering', () => {
+      // Devices provided in non-sorted order (simulates unpredictable USB enumeration)
+      const contexts: DeviceContextParams[] = [
+        { portPath: '/dev/ttyUSB2', category: 'psu', machineType: 'P906' },
+        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'M01' },
+        { portPath: '/dev/ttyUSB1', category: 'psu', machineType: 'M02' }
+      ];
+
+      const registry = new ContextRegistry(contexts);
+
+      // Should be sorted by portPath, not input order
+      expect(registry.getContext('psu1')?.portPath).toBe('/dev/ttyUSB0');
+      expect(registry.getContext('psu2')?.portPath).toBe('/dev/ttyUSB1');
+      expect(registry.getContext('psu3')?.portPath).toBe('/dev/ttyUSB2');
+    });
+
+    it('should maintain stable ordering across multiple calls', () => {
+      const contexts: DeviceContextParams[] = [
+        { portPath: '/dev/ttyUSB3', category: 'load', machineType: 'L1060' },
+        { portPath: '/dev/ttyUSB1', category: 'load', machineType: 'L1060' }
+      ];
+
+      const registry1 = new ContextRegistry(contexts);
+      const registry2 = new ContextRegistry([...contexts].reverse());
+
+      // Both registries should have same ordering despite different input order
+      expect(registry1.getContext('load1')?.portPath).toBe('/dev/ttyUSB1');
+      expect(registry2.getContext('load1')?.portPath).toBe('/dev/ttyUSB1');
+    });
+  });
 });

@@ -180,11 +180,8 @@ export class MockNodeSerialConnection {
     const packetType = packet[2];
     const handlers = this.packetHandlers.get(packetType) ?? [];
     for (const handler of handlers) {
-      try {
-        handler(packet);
-      } catch (err) {
-        console.error('Packet handler error:', err);
-      }
+      // In test mocks, handler errors should fail the test, not be swallowed
+      handler(packet);
     }
   }
 
