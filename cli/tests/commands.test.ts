@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ContextRegistry, type DeviceContextParams } from '../src/context-registry';
 import {
-  MockNodeSerialConnection,
   createMockDevices,
   type MockDeviceConfig
 } from './mocks/mock-serial';
@@ -317,12 +316,6 @@ describe('Command Handler Tests', () => {
         { portPath: '/dev/ttyUSB2', deviceType: 'P906' }
       ];
       const connections = createMockDevices(configs);
-      const contexts: DeviceContextParams[] = [
-        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906' },
-        { portPath: '/dev/ttyUSB1', category: 'psu', machineType: 'P906' },
-        { portPath: '/dev/ttyUSB2', category: 'psu', machineType: 'P906' }
-      ];
-      const registry = new ContextRegistry(contexts);
 
       const psu1Connection = connections.get('/dev/ttyUSB0')!;
       const psu2Connection = connections.get('/dev/ttyUSB1')!;

@@ -4,13 +4,7 @@ import { Command } from 'commander';
 import { SerialPort } from 'serialport';
 import { get } from 'svelte/store';
 import { NodeSerialConnection } from './node-serial';
-import {
-  ContextRegistry,
-  categorizeDevice,
-  type DeviceCategory,
-  type DeviceContext,
-  type DeviceContextParams
-} from './context-registry';
+import { ContextRegistry, categorizeDevice, type DeviceContext, type DeviceContextParams } from './context-registry';
 import {
   createGetMachinePacket,
   createHeartbeatPacket,
@@ -35,6 +29,8 @@ import { getMachineTypeString } from '../../webui/src/lib/machine-utils';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
+
+type PortInfo = Awaited<ReturnType<typeof SerialPort.list>>[number];
 
 const program = new Command();
 
@@ -72,7 +68,7 @@ function normalizeId(value?: string | number): number[] {
   return candidates.filter(Number.isFinite);
 }
 
-function matchesMiniwarePort(port: SerialPort.PortInfo): boolean {
+function matchesMiniwarePort(port: PortInfo): boolean {
   const vendorIds = normalizeId(port.vendorId);
   const productIds = normalizeId(port.productId);
 
@@ -102,8 +98,8 @@ async function resolvePort(provided?: string): Promise<string> {
 
 function formatChannelLine(update: ChannelUpdate): string {
   const online = update.online ? 'ONLINE' : 'OFFLINE';
-  const voltage = update.voltage.toFixed(3);
-  const current = update.current.toFixed(3);
+  const voltage = (update.voltage ?? 0).toFixed(3);
+  const current = (update.current ?? 0).toFixed(3);
   const output = update.isOutput ? 'OUTPUT ON' : 'OUTPUT OFF';
   return `Ch${update.channel}: ${online} | ${voltage}V ${current}A | ${output}`;
 }
@@ -184,7 +180,7 @@ async function detectMachineTypeFromSynthesize(
     return null;
   }
 
-  return processed[0].machineType;
+  return processed[0].machineType ?? null;
 }
 
 async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
@@ -399,19 +395,26 @@ async function handleContextCommand(
     }
 
     if (options.status && finalStatus) {
+      const voltage = finalStatus.voltage ?? 0;
+      const targetVoltage = finalStatus.targetVoltage ?? 0;
+      const current = finalStatus.current ?? 0;
+      const targetCurrent = finalStatus.targetCurrent ?? 0;
+      const temperature = finalStatus.temperature ?? 0;
       const lines = [
         `${alias} (${context.machineType}) channel ${channel}:`,
         `  Online: ${finalStatus.online ? 'YES' : 'NO'}`,
-        `  Voltage: ${finalStatus.voltage.toFixed(3)} V (target ${finalStatus.targetVoltage.toFixed(3)} V)`,
-        `  Current: ${finalStatus.current.toFixed(3)} A (target ${finalStatus.targetCurrent.toFixed(3)} A)`,
-        `  Temperature: ${finalStatus.temperature.toFixed(1)} °C`,
+        `  Voltage: ${voltage.toFixed(3)} V (target ${targetVoltage.toFixed(3)} V)`,
+        `  Current: ${current.toFixed(3)} A (target ${targetCurrent.toFixed(3)} A)`,
+        `  Temperature: ${temperature.toFixed(1)} °C`,
         `  Output: ${finalStatus.isOutput ? 'ON' : 'OFF'}`,
         `  Mode: ${finalStatus.mode}`
       ];
       lines.forEach((line) => console.log(line));
     } else if (wantsSets && finalStatus && !options.status && !options.statusJson) {
+      const voltage = finalStatus.voltage ?? 0;
+      const current = finalStatus.current ?? 0;
       console.log(
-        `${alias} channel ${channel} updated: ${finalStatus.voltage.toFixed(3)} V / ${finalStatus.current.toFixed(3)} A`
+        `${alias} channel ${channel} updated: ${voltage.toFixed(3)} V / ${current.toFixed(3)} A`
       );
     } else if (wantsOutput && !wantsStatus && !options.statusJson && !wantsSets) {
       console.log(`${alias} channel ${channel} output ${normalizedOutputState?.toUpperCase()}`);
@@ -452,100 +455,89 @@ async function handleRecordCommand(
     log('Debug logging disabled during recording to keep CSV output clean.');
   }
 
-  const originalConsoleLog = console.log;
-  const originalConsoleWarn = console.warn;
-  console.log = (...args: unknown[]) => {
-    process.stderr.write(`${format(...args)}\n`);
-  };
-  console.warn = (...args: unknown[]) => {
-    process.stderr.write(`${format(...args)}\n`);
-  };
-
   const connection = new NodeSerialConnection({ portPath: context.portPath });
   try {
     await connection.connect();
     await connection.sendPacket(createSetChannelPacket(channel));
     await delay(50);
 
-  connection.startHeartbeat(() => createHeartbeatPacket(), 1000);
+    connection.startHeartbeat(() => createHeartbeatPacket(), 1000);
 
-  let runningTimeUs = 0;
-  let pointCount = 0;
-  let hasWaveData = false;
-  const ignoredChannels = new Set<number>();
+    let runningTimeUs = 0;
+    let pointCount = 0;
+    let hasWaveData = false;
+    const ignoredChannels = new Set<number>();
 
-  const unsubscribe = connection.registerPacketHandler(PackType.WAVE, (packet) => {
-    const decoded = decodePacket(packet);
-    if (!decoded || !isWavePacket(decoded)) return;
+    const unsubscribe = connection.registerPacketHandler(PackType.WAVE, (packet) => {
+      const decoded = decodePacket(packet);
+      if (!decoded || !isWavePacket(decoded)) return;
 
-    if (decoded.data.channel !== channel) {
-      if (!ignoredChannels.has(decoded.data.channel)) {
-        ignoredChannels.add(decoded.data.channel);
-        log(`Ignoring wave data from channel ${decoded.data.channel}.`);
+      if (decoded.data.channel !== channel) {
+        if (!ignoredChannels.has(decoded.data.channel)) {
+          ignoredChannels.add(decoded.data.channel);
+          log(`Ignoring wave data from channel ${decoded.data.channel}.`);
+        }
+        return;
       }
-      return;
-    }
 
-    if (!hasWaveData) {
-      hasWaveData = true;
-      log(`Receiving wave data for channel ${channel}...`);
-    }
+      if (!hasWaveData) {
+        hasWaveData = true;
+        log(`Receiving wave data for channel ${channel}...`);
+      }
 
-    const result = extractWaveSamples(decoded, runningTimeUs);
-    if (!result) return;
+      const result = extractWaveSamples(decoded, runningTimeUs);
+      if (!result) return;
 
-    runningTimeUs = result.nextRunningTimeUs;
-    result.samples.forEach((sample) => {
-      writer.writeLine(
-        `${sample.timeSeconds.toFixed(6)},${sample.voltage.toFixed(6)},${sample.current.toFixed(6)}`
-      );
-      pointCount += 1;
+      runningTimeUs = result.nextRunningTimeUs;
+      result.samples.forEach((sample) => {
+        writer.writeLine(
+          `${sample.timeSeconds.toFixed(6)},${sample.voltage.toFixed(6)},${sample.current.toFixed(6)}`
+        );
+        pointCount += 1;
+      });
     });
-  });
 
-  writer.writeLine('time_s,voltage_v,current_a');
-  log(
-    `Recording ${alias} channel ${channel}${outputPath ? ` to ${outputPath}` : ' to stdout'}...`
-  );
+    writer.writeLine('time_s,voltage_v,current_a');
+    log(
+      `Recording ${alias} channel ${channel}${outputPath ? ` to ${outputPath}` : ' to stdout'}...`
+    );
 
-  let stopRequested = false;
-  let durationTimer: ReturnType<typeof setTimeout> | null = null;
-  let resolveDone: (() => void) | null = null;
+    let stopRequested = false;
+    let durationTimer: ReturnType<typeof setTimeout> | null = null;
+    let resolveDone: (() => void) | null = null;
 
-  const done = new Promise<void>((resolve) => {
-    resolveDone = resolve;
-  });
+    const done = new Promise<void>((resolve) => {
+      resolveDone = resolve;
+    });
 
-  const onSigint = () => {
-    void stop('interrupted');
-  };
+    const onSigint = () => {
+      void stop('interrupted');
+    };
 
-  const stop = async (reason: string) => {
-    if (stopRequested) return;
-    stopRequested = true;
-    process.removeListener('SIGINT', onSigint);
-    if (durationTimer) {
-      clearTimeout(durationTimer);
-      durationTimer = null;
+    const stop = async (reason: string) => {
+      if (stopRequested) return;
+      stopRequested = true;
+      process.removeListener('SIGINT', onSigint);
+      if (durationTimer) {
+        clearTimeout(durationTimer);
+        durationTimer = null;
+      }
+      unsubscribe();
+      connection.stopHeartbeat();
+      await connection.disconnect();
+      await writer.close();
+      const duration = runningTimeUs / 1_000_000;
+      log(`Recording stopped (${reason}). ${pointCount} samples over ${duration.toFixed(3)}s.`);
+      restoreConsole();
+      resolveDone?.();
+    };
+
+    process.once('SIGINT', onSigint);
+    if (durationSeconds) {
+      durationTimer = setTimeout(() => {
+        void stop('duration elapsed');
+      }, durationSeconds * 1000);
     }
-    unsubscribe();
-    connection.stopHeartbeat();
-    await connection.disconnect();
-    await writer.close();
-    console.log = originalConsoleLog;
-    console.warn = originalConsoleWarn;
-    const duration = runningTimeUs / 1_000_000;
-    log(`Recording stopped (${reason}). ${pointCount} samples over ${duration.toFixed(3)}s.`);
-    restoreConsole();
-    resolveDone?.();
-  };
-
-  process.once('SIGINT', onSigint);
-  if (durationSeconds) {
-    durationTimer = setTimeout(() => {
-      void stop('duration elapsed');
-    }, durationSeconds * 1000);
-  }
 
     await done;
   } catch (error) {

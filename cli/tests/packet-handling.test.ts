@@ -3,13 +3,11 @@ import {
   MockNodeSerialConnection,
   createSynthesizeResponse,
   createMachineResponse,
-  type MockDeviceConfig,
-  type MockChannelConfig
+  type MockDeviceConfig
 } from './mocks/mock-serial';
 import {
   createSetChannelPacket,
   createSetVoltagePacket,
-  createSetCurrentPacket,
   createSetOutputPacket,
   createHeartbeatPacket,
   createGetMachinePacket,

@@ -14,7 +14,8 @@
     "@serialport/bindings-cpp": "^13.0.1",
     "commander": "^11.0.0",
     "kaitai-struct": "^0.10.0",
-    "serialport": "^11.0.0"
+    "serialport": "^11.0.0",
+    "svelte": "^5.35.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.31.0",

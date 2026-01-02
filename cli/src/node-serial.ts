@@ -122,18 +122,21 @@ export class NodeSerialConnection {
 
   waitForPacket(packetType: number, timeoutMs = 3000): Promise<number[] | null> {
     return new Promise((resolve) => {
-      let unsubscribe: () => void;
+      let timer: ReturnType<typeof setTimeout> | null = null;
 
-      const timer = setTimeout(() => {
-        unsubscribe?.();
-        resolve(null);
-      }, timeoutMs);
-
-      unsubscribe = this.registerPacketHandler(packetType, (packet) => {
-        clearTimeout(timer);
-        unsubscribe?.();
+      const unsubscribe = this.registerPacketHandler(packetType, (packet) => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        unsubscribe();
         resolve(packet);
       });
+
+      timer = setTimeout(() => {
+        unsubscribe();
+        resolve(null);
+      }, timeoutMs);
     });
   }
 

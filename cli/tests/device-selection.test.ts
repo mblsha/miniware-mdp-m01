@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ContextRegistry, type DeviceContextParams } from '../src/context-registry';
 import {
-  MockNodeSerialConnection,
   createMockDevices,
   type MockDeviceConfig
 } from './mocks/mock-serial';
@@ -45,20 +44,6 @@ describe('Device Selection', () => {
     });
 
     it('should select correct PSU when using psu2', async () => {
-      const configs: MockDeviceConfig[] = [
-        {
-          portPath: '/dev/ttyUSB0',
-          deviceType: 'P906',
-          channels: [{ channel: 0, voltage: 5.0, current: 1.0, temperature: 25, isOutput: false, online: true }]
-        },
-        {
-          portPath: '/dev/ttyUSB1',
-          deviceType: 'M01',
-          channels: [{ channel: 0, voltage: 12.0, current: 2.0, temperature: 35, isOutput: true, online: true }]
-        }
-      ];
-
-      const connections = createMockDevices(configs);
       const contexts: DeviceContextParams[] = [
         { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906' },
         { portPath: '/dev/ttyUSB1', category: 'psu', machineType: 'M01' }
@@ -75,20 +60,6 @@ describe('Device Selection', () => {
 
   describe('Load selection with multiple devices', () => {
     it('should select correct Load when using load1', async () => {
-      const configs: MockDeviceConfig[] = [
-        {
-          portPath: '/dev/ttyUSB0',
-          deviceType: 'L1060',
-          channels: [{ channel: 0, voltage: 5.0, current: 2.0, temperature: 40, isOutput: true, online: true }]
-        },
-        {
-          portPath: '/dev/ttyUSB1',
-          deviceType: 'L1060',
-          channels: [{ channel: 0, voltage: 12.0, current: 1.0, temperature: 35, isOutput: false, online: true }]
-        }
-      ];
-
-      const connections = createMockDevices(configs);
       const contexts: DeviceContextParams[] = [
         { portPath: '/dev/ttyUSB0', category: 'load', machineType: 'L1060' },
         { portPath: '/dev/ttyUSB1', category: 'load', machineType: 'L1060' }
@@ -101,18 +72,6 @@ describe('Device Selection', () => {
     });
 
     it('should select correct Load when using load2', async () => {
-      const configs: MockDeviceConfig[] = [
-        {
-          portPath: '/dev/ttyUSB0',
-          deviceType: 'L1060'
-        },
-        {
-          portPath: '/dev/ttyUSB1',
-          deviceType: 'L1060'
-        }
-      ];
-
-      const connections = createMockDevices(configs);
       const contexts: DeviceContextParams[] = [
         { portPath: '/dev/ttyUSB0', category: 'load', machineType: 'L1060' },
         { portPath: '/dev/ttyUSB1', category: 'load', machineType: 'L1060' }
@@ -127,12 +86,6 @@ describe('Device Selection', () => {
 
   describe('Mixed PSU and Load selection', () => {
     it('should distinguish between PSU and Load with simple aliases', async () => {
-      const configs: MockDeviceConfig[] = [
-        { portPath: '/dev/ttyUSB0', deviceType: 'P906' },
-        { portPath: '/dev/ttyUSB1', deviceType: 'L1060' }
-      ];
-
-      const connections = createMockDevices(configs);
       const contexts: DeviceContextParams[] = [
         { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906' },
         { portPath: '/dev/ttyUSB1', category: 'load', machineType: 'L1060' }
@@ -222,11 +175,6 @@ describe('Device Selection', () => {
       ];
 
       const connections = createMockDevices(configs);
-      const contexts: DeviceContextParams[] = [
-        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906' },
-        { portPath: '/dev/ttyUSB1', category: 'load', machineType: 'L1060' }
-      ];
-      const registry = new ContextRegistry(contexts);
 
       const psuConnection = connections.get('/dev/ttyUSB0')!;
       const loadConnection = connections.get('/dev/ttyUSB1')!;
