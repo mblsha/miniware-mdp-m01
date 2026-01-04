@@ -133,12 +133,12 @@ export class WaveTimestampReconciler {
       const first = this.buffer[0];
       const last = this.buffer[this.buffer.length - 1];
       const hostSpanNs = last.hostNs - first.hostNs;
-      const deviceSpanUs = last.deviceEndUs - first.deviceStartUs;
+      const deviceSpanUs = last.deviceEndUs - first.deviceEndUs;
 
       const minSpanNs = flushAll ? 1 : this.delayNs;
       if (hostSpanNs >= minSpanNs && deviceSpanUs > 0) {
         const scale = hostSpanNs / (deviceSpanUs * 1000);
-        const offsetNs = first.hostNs - scale * first.deviceStartUs * 1000;
+        const offsetNs = first.hostNs - scale * first.deviceEndUs * 1000;
         this.lastMapping = { scale, offsetNs };
         return this.lastMapping;
       }
@@ -152,7 +152,7 @@ export class WaveTimestampReconciler {
       if (this.buffer.length > 0) {
         const first = this.buffer[0];
         const scale = 1;
-        const offsetNs = first.hostNs - scale * first.deviceStartUs * 1000;
+        const offsetNs = first.hostNs - scale * first.deviceEndUs * 1000;
         this.lastMapping = { scale, offsetNs };
         return this.lastMapping;
       }
