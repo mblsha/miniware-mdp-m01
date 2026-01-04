@@ -21,6 +21,7 @@ export class NodeSerialConnection {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private readonly packetHandlers = new Map<number, PacketHandler[]>();
   private readonly rawDataHandlers = new Set<RawDataHandler>();
+  private readonly packetObservers = new Set<PacketHandler>();
   private receiveBuffer = Buffer.alloc(0);
 
   constructor(options: NodeSerialConnectionOptions) {
@@ -128,6 +129,13 @@ export class NodeSerialConnection {
     };
   }
 
+  registerPacketObserver(handler: PacketHandler): () => void {
+    this.packetObservers.add(handler);
+    return () => {
+      this.packetObservers.delete(handler);
+    };
+  }
+
   waitForPacket(packetType: number, timeoutMs = 3000): Promise<number[] | null> {
     return new Promise((resolve) => {
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -221,6 +229,13 @@ export class NodeSerialConnection {
   private handlePacket(packet: number[]): void {
     if (!packet || packet.length < 3) {
       return;
+    }
+    for (const handler of this.packetObservers) {
+      try {
+        handler(packet);
+      } catch (err) {
+        console.error('Packet observer error:', err);
+      }
     }
     const packetType = packet[2];
     const handlers = this.packetHandlers.get(packetType) ?? [];

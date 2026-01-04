@@ -24,6 +24,15 @@ type PacketBase<TData> = {
   checksum?: number;
 };
 
+export type PacketChecksumValidation = {
+  ok: boolean;
+  expected: number;
+  actual: number;
+  packetType: number;
+  channel: number;
+  size: number;
+};
+
 export type DecodedPacket = PacketBase<unknown>;
 export type SynthesizePacket = PacketBase<SynthesizeData> & { packType: typeof PackType.SYNTHESIZE };
 export type WavePacket = PacketBase<WaveData> & { packType: typeof PackType.WAVE };
@@ -89,6 +98,30 @@ export function isUpdateChannelPacket(packet: DecodedPacket): packet is UpdateCh
   return packet.packType === PackType.UPDAT_CH && isUpdateChannelData(packet.data);
 }
 
+export function validatePacketChecksum(
+  data: Uint8Array | number[] | null
+): PacketChecksumValidation | null {
+  if (!data || data.length < 6) return null;
+  if (data[0] !== 0x5A || data[1] !== 0x5A) return null;
+  const size = data[3];
+  if (size < 6 || data.length !== size) return null;
+
+  const payloadSize = size - 6;
+  let checksum = 0;
+  for (let i = 0; i < payloadSize; i += 1) {
+    checksum ^= data[6 + i];
+  }
+
+  return {
+    ok: checksum === data[5],
+    expected: data[5],
+    actual: checksum,
+    packetType: data[2],
+    channel: data[4],
+    size
+  };
+}
+
 export function decodePacket(data: Uint8Array | number[] | null): DecodedPacket | null {
   const currentDebugState = get(debugEnabled);
   
@@ -133,6 +166,37 @@ export function decodePacket(data: Uint8Array | number[] | null): DecodedPacket 
         console.log('❌ decodePacket FAILED: Size mismatch, expected:', expectedSize, 'got:', data.length);
       }
       debugError('packet-decode', `  ❌ Packet size mismatch: expected ${expectedSize}, got ${data.length}`);
+      return null;
+    }
+
+    if (expectedSize < 6) {
+      if (currentDebugState) {
+        console.log('❌ decodePacket FAILED: Invalid packet size', expectedSize);
+      }
+      debugError('packet-decode', `  ❌ Invalid packet size: ${expectedSize}`);
+      return null;
+    }
+
+    const validation = validatePacketChecksum(data);
+    if (!validation) {
+      if (currentDebugState) {
+        console.log('❌ decodePacket FAILED: Checksum validation unavailable');
+      }
+      debugError('packet-decode', '  ❌ Packet checksum validation unavailable');
+      return null;
+    }
+    if (!validation.ok) {
+      if (currentDebugState) {
+        console.log(
+          '❌ decodePacket FAILED: Checksum mismatch',
+          validation.actual,
+          validation.expected
+        );
+      }
+      debugError(
+        'packet-decode',
+        `  ❌ Packet checksum mismatch: expected ${validation.expected}, got ${validation.actual}`
+      );
       return null;
     }
 

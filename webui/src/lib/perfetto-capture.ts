@@ -2,7 +2,8 @@ export type PerfettoAlertType =
   | 'voltage_oos'
   | 'current_oos'
   | 'power_oos'
-  | 'delta_t_oos';
+  | 'delta_t_oos'
+  | 'checksum_failed';
 
 type TraceMessage = {
   packet: TracePacket[];
@@ -13,7 +14,6 @@ type TracePacket = {
   trackEvent?: TrackEvent;
   trackDescriptor?: TrackDescriptor;
   trustedPacketSequenceId?: number;
-  firstPacketOnSequence?: boolean;
 };
 
 type TrackEvent = {
@@ -85,6 +85,10 @@ export type PerfettoAlert = {
   unit?: string;
   deltaNs?: number;
   timestampNs?: number;
+  packetType?: number;
+  packetSize?: number;
+  checksum?: number;
+  expectedChecksum?: number;
   note?: string;
 };
 
@@ -133,7 +137,6 @@ export function createPerfettoCapture(
   const maxRawBytes = options.maxRawBytes ?? 0;
   const format = options.format ?? 'stream';
   const trustedPacketSequenceId = 0x123;
-  let firstPacket = true;
 
   packets.push({
     trackDescriptor: {
@@ -144,11 +147,8 @@ export function createPerfettoCapture(
         processName: options.processName,
         startTimestampNs: 0
       }
-    },
-    trustedPacketSequenceId,
-    firstPacketOnSequence: true
+    }
   });
-  firstPacket = false;
 
   packets.push({
     trackDescriptor: {
@@ -160,11 +160,8 @@ export function createPerfettoCapture(
         tid: rawTid,
         threadName: rawThreadName
       }
-    },
-    trustedPacketSequenceId,
-    firstPacketOnSequence: firstPacket
+    }
   });
-  firstPacket = false;
 
   packets.push({
     trackDescriptor: {
@@ -176,11 +173,8 @@ export function createPerfettoCapture(
         tid: alertTid,
         threadName: alertThreadName
       }
-    },
-    trustedPacketSequenceId,
-    firstPacketOnSequence: firstPacket
+    }
   });
-  firstPacket = false;
 
   const addInstantEvent = (
     trackUuid: number,
@@ -197,11 +191,16 @@ export function createPerfettoCapture(
         categories: ['mdp'],
         debugAnnotations: annotations
       },
-      trustedPacketSequenceId,
-      firstPacketOnSequence: firstPacket
+      trustedPacketSequenceId
     });
-    firstPacket = false;
   };
+
+  addInstantEvent(
+    alertThreadUuid,
+    'alerts_ready',
+    [buildAnnotation('status', 'ready')],
+    0
+  );
 
   const recordRawChunk = (chunk: Uint8Array): void => {
     const timestampNs = options.nowNs() - startNs;
@@ -234,6 +233,18 @@ export function createPerfettoCapture(
     }
     if (typeof alert.deltaNs === 'number') {
       annotations.push(buildAnnotation('delta_ns', alert.deltaNs));
+    }
+    if (typeof alert.packetType === 'number') {
+      annotations.push(buildAnnotation('packet_type', alert.packetType));
+    }
+    if (typeof alert.packetSize === 'number') {
+      annotations.push(buildAnnotation('packet_size', alert.packetSize));
+    }
+    if (typeof alert.checksum === 'number') {
+      annotations.push(buildAnnotation('checksum', alert.checksum));
+    }
+    if (typeof alert.expectedChecksum === 'number') {
+      annotations.push(buildAnnotation('expected_checksum', alert.expectedChecksum));
     }
     if (alert.unit) {
       annotations.push(buildAnnotation('unit', alert.unit));
