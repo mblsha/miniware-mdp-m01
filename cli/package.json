@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
+    "prestart": "node scripts/ensure-perfetto-proto.js",
     "lint": "eslint src tests --ext .ts",
+    "prelint": "node scripts/ensure-perfetto-proto.js",
     "type-check": "tsc --noEmit",
+    "pretype-check": "node scripts/ensure-perfetto-proto.js",
     "test": "vitest run",
+    "pretest": "node scripts/ensure-perfetto-proto.js",
     "test:watch": "vitest"
   },
   "dependencies": {
