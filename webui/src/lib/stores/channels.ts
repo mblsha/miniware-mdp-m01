@@ -3,6 +3,7 @@ import type { Readable, Writable } from 'svelte/store';
 import type { Channel, WaveformPoint } from '../types';
 import { processAddressPacket, processMachinePacket, processSynthesizePacket } from '../packet-decoder';
 import type { AddressPacket, ChannelUpdate, MachinePacket, SynthesizePacket, UpdateChannelPacket, WavePacket } from '../packet-decoder';
+import { WaveTimestampReconciler, type WaveSample } from '../wave-reconciler';
 import { createSetChannelPacket, createSetCurrentPacket, createSetOutputPacket, createSetVoltagePacket } from '../packet-encoder';
 import { debugError } from '../debug-logger';
 import type { PacketBus } from '../services/packet-bus';
@@ -27,6 +28,9 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
   destroy: () => void;
 } {
   const { serial, packets } = options;
+  const DEFAULT_RECONCILE_DELAY_NS = 2_000_000_000;
+  const DEFAULT_RECONCILE_TAIL_NS = 500_000_000;
+  const waveReconcilers = new Map<number, WaveTimestampReconciler>();
 
   const getInitialState = (): Channel[] =>
     Array(6)
@@ -137,32 +141,19 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
     channels.update((chs) => {
       const ch = chs[channel];
       if (!ch || !ch.recording) return chs;
+      const reconciler = waveReconcilers.get(channel)
+        ?? new WaveTimestampReconciler(DEFAULT_RECONCILE_DELAY_NS, DEFAULT_RECONCILE_TAIL_NS);
+      waveReconcilers.set(channel, reconciler);
 
-      if (!ch.runningTimeUs) {
-        ch.runningTimeUs = 0;
-      }
+      const nowNs = Math.round(performance.now() * 1_000_000);
+      const adjustedSamples = reconciler.pushPacket(packet, nowNs);
+      if (adjustedSamples.length === 0) return chs;
 
-      const samplesPerGroup = packet.size === 126 ? 2 : 4;
-      const newPoints: WaveformPoint[] = [];
-
-      packet.data.groups.forEach((group) => {
-        const groupElapsedTimeUs = group.timestamp / 10;
-        const timePerSampleUs = groupElapsedTimeUs / samplesPerGroup;
-
-        for (let i = 0; i < samplesPerGroup; i++) {
-          const item = group.items[i];
-          if (!item) break;
-
-          const sampleTimeUs = (ch.runningTimeUs || 0) + i * timePerSampleUs;
-          newPoints.push({
-            timestamp: sampleTimeUs / 1000,
-            voltage: item.voltage,
-            current: item.current,
-          });
-        }
-
-        ch.runningTimeUs = (ch.runningTimeUs || 0) + groupElapsedTimeUs;
-      });
+      const newPoints = adjustedSamples.map((sample: WaveSample): WaveformPoint => ({
+        timestamp: sample.timeSeconds * 1000,
+        voltage: sample.voltage,
+        current: sample.current
+      }));
 
       if (!ch.waveformData) {
         ch.waveformData = [];
@@ -250,13 +241,34 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
       chs[channel].runningTimeUs = 0;
       return chs;
     });
+    waveReconcilers.set(
+      channel,
+      new WaveTimestampReconciler(DEFAULT_RECONCILE_DELAY_NS, DEFAULT_RECONCILE_TAIL_NS)
+    );
   }
 
   function stopRecording(channel: number): void {
     channels.update((chs) => {
       chs[channel].recording = false;
+      const reconciler = waveReconcilers.get(channel);
+      if (reconciler) {
+        const remaining = reconciler.flushAll();
+        if (remaining.length > 0) {
+          if (!chs[channel].waveformData) {
+            chs[channel].waveformData = [];
+          }
+          chs[channel].waveformData.push(
+            ...remaining.map((sample: WaveSample): WaveformPoint => ({
+              timestamp: sample.timeSeconds * 1000,
+              voltage: sample.voltage,
+              current: sample.current
+            }))
+          );
+        }
+      }
       return chs;
     });
+    waveReconcilers.delete(channel);
   }
 
   function clearRecording(channel: number): void {
@@ -264,12 +276,14 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
       chs[channel].waveformData = [];
       return chs;
     });
+    waveReconcilers.delete(channel);
   }
 
   function reset(): void {
     channels.set(getInitialState());
     activeChannel.set(0);
     waitingSynthesize.set(true);
+    waveReconcilers.clear();
   }
 
   const activeChannelData = derived([channels, activeChannel], ([$channels, $activeChannel]) => $channels[$activeChannel]);
