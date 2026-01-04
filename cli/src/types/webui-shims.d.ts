@@ -38,5 +38,3 @@ interface Navigator {
     getPorts(): Promise<SerialPort[]>;
   };
 }
-
-export {};
