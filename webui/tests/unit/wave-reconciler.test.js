@@ -20,25 +20,25 @@ function makeWavePacket(groupTimestamp, samples) {
 describe('WaveTimestampReconciler', () => {
   it('aligns device time to host time and emits monotonic samples', () => {
     const reconciler = new WaveTimestampReconciler(1, 0);
-    const packet1 = makeWavePacket(1000, [
+    const packet1 = makeWavePacket(1_000_000, [
       { voltage: 1.0, current: 0.1 },
       { voltage: 1.1, current: 0.2 }
     ]);
-    const packet2 = makeWavePacket(1000, [
+    const packet2 = makeWavePacket(1_000_000, [
       { voltage: 1.2, current: 0.3 },
       { voltage: 1.3, current: 0.4 }
     ]);
 
-    const first = reconciler.pushPacket(packet1, 0);
+    const first = reconciler.pushPacket(packet1, 100_000_000);
     expect(first).toHaveLength(0);
 
-    const second = reconciler.pushPacket(packet2, 1_000_000_000);
+    const second = reconciler.pushPacket(packet2, 200_000_000);
     expect(second).toHaveLength(4);
     expect(second.map((sample) => sample.timeSeconds)).toEqual([
       expect.closeTo(0, 6),
-      expect.closeTo(0.25, 6),
-      expect.closeTo(0.5, 6),
-      expect.closeTo(0.75, 6)
+      expect.closeTo(0.05, 6),
+      expect.closeTo(0.1, 6),
+      expect.closeTo(0.15, 6)
     ]);
     expect(second.map((sample) => sample.voltage)).toEqual([1.0, 1.1, 1.2, 1.3]);
   });
