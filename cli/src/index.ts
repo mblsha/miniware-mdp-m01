@@ -23,7 +23,6 @@ import {
   processWavePacket,
   validatePacketChecksum,
   type ChannelUpdate,
-  type DecodedPacket,
   isMachinePacket,
   isWavePacket
 } from '../../webui/src/lib/packet-decoder';

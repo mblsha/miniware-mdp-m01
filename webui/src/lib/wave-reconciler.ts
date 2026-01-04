@@ -151,7 +151,7 @@ export class WaveTimestampReconciler {
 
       if (this.buffer.length > 0) {
         const first = this.buffer[0];
-        const scale = this.lastMapping?.scale ?? 1;
+        const scale = 1;
         const offsetNs = first.hostNs - scale * first.deviceStartUs * 1000;
         this.lastMapping = { scale, offsetNs };
         return this.lastMapping;
