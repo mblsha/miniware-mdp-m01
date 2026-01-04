@@ -89,6 +89,7 @@ export interface SparklineOptions {
 }
 
 export type PacketHandler = (packet: number[]) => void;
+export type RawDataHandler = (chunk: Uint8Array) => void;
 
 // Store types
 export interface StoreState<T> {

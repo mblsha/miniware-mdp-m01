@@ -14,6 +14,8 @@
     "@serialport/bindings-cpp": "^13.0.1",
     "commander": "^11.0.0",
     "kaitai-struct": "^0.10.0",
+    "long": "^5.2.4",
+    "protobufjs": "^7.2.6",
     "serialport": "^11.0.0",
     "svelte": "^5.35.2"
   },
