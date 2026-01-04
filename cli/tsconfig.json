@@ -18,9 +18,7 @@
   },
   "include": [
     "src/**/*",
-    "tests/**/*",
-    "../webui/src/types/**/*.d.ts",
-    "../webui/src/lib/types/**/*.d.ts"
+    "tests/**/*"
   ],
   "exclude": ["node_modules"]
 }

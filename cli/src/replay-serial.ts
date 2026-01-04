@@ -1,4 +1,4 @@
-import type { PacketHandler, RawDataHandler } from '../../webui/src/lib/types';
+import type { PacketHandler, RawDataHandler } from './serial-types';
 
 export class ReplaySerialConnection {
   private readonly packetHandlers = new Map<number, PacketHandler[]>();

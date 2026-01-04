@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { loadReplayChunks } from '../src/perfetto-replay';
 import { ReplaySerialConnection } from '../src/replay-serial';
-import { PackType } from '../../webui/src/lib/types';
+import { PackType } from '../src/packet-types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const tracePath = resolve(__dirname, '../../reference-data/recording_1h.perfetto-trace');

@@ -1,5 +1,5 @@
 import { SerialPort } from 'serialport';
-import type { PacketHandler, RawDataHandler, SerialConfig } from '../../webui/src/lib/types';
+import type { PacketHandler, RawDataHandler, SerialConfig } from './serial-types';
 
 const DEFAULT_CONFIG: SerialConfig = {
   baudRate: 115200,

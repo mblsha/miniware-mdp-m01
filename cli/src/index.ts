@@ -27,7 +27,7 @@ import {
   isWavePacket
 } from '../../webui/src/lib/packet-decoder';
 import { getDeviceLimits } from '../../webui/src/lib/device-limits';
-import { PackType } from '../../webui/src/lib/types';
+import { PackType } from './packet-types';
 import { debugEnabled } from '../../webui/src/lib/debug-logger';
 import { getMachineTypeString } from '../../webui/src/lib/machine-utils';
 import { perfetto } from '../../third_party/retrobus-perfetto/ts/src/proto/perfetto_pb.js';
