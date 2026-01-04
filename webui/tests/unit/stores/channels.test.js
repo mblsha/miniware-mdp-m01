@@ -5,11 +5,13 @@ import { createSignal } from '$lib/core/signal.js';
 const mockProcessSynthesizePacket = vi.hoisted(() => vi.fn());
 const mockProcessAddressPacket = vi.hoisted(() => vi.fn());
 const mockProcessMachinePacket = vi.hoisted(() => vi.fn());
+const mockIsWavePacket = vi.hoisted(() => vi.fn((packet) => packet?.packType === 0x12));
 
 vi.mock('$lib/packet-decoder.js', () => ({
   processSynthesizePacket: mockProcessSynthesizePacket,
   processAddressPacket: mockProcessAddressPacket,
   processMachinePacket: mockProcessMachinePacket,
+  isWavePacket: mockIsWavePacket,
 }));
 
 import { createChannelStore } from '$lib/stores/channels.js';
@@ -162,6 +164,9 @@ describe('Channel Store', () => {
     });
 
     it('wave packets append waveform points while recording', () => {
+      const nowSpy = vi.spyOn(globalThis.performance, 'now');
+      nowSpy.mockReturnValueOnce(0);
+      nowSpy.mockReturnValueOnce(3000);
       channelStore.startRecording(2);
 
       packets.onWave.emit({
@@ -180,12 +185,31 @@ describe('Channel Store', () => {
           ],
         },
       });
+      packets.onWave.emit({
+        packType: 0x12,
+        size: 126,
+        data: {
+          channel: 2,
+          groups: [
+            {
+              timestamp: 1000,
+              items: [
+                { voltage: 3.32, current: 0.52 },
+                { voltage: 3.33, current: 0.53 },
+              ],
+            },
+          ],
+        },
+      });
+      nowSpy.mockRestore();
 
       const ch = get(channelStore.channels)[2];
       expect(ch.waveformData.length).toBeGreaterThan(0);
     });
 
     it('stopRecording preserves collected waveform data', () => {
+      const nowSpy = vi.spyOn(globalThis.performance, 'now');
+      nowSpy.mockReturnValueOnce(0);
       channelStore.startRecording(3);
 
       packets.onWave.emit({
@@ -206,6 +230,7 @@ describe('Channel Store', () => {
       });
 
       channelStore.stopRecording(3);
+      nowSpy.mockRestore();
 
       const ch = get(channelStore.channels)[3];
       expect(ch.recording).toBe(false);
@@ -213,6 +238,8 @@ describe('Channel Store', () => {
     });
 
     it('clearRecording removes waveform data', () => {
+      const nowSpy = vi.spyOn(globalThis.performance, 'now');
+      nowSpy.mockReturnValueOnce(0);
       channelStore.startRecording(4);
       packets.onWave.emit({
         packType: 0x12,
@@ -232,6 +259,7 @@ describe('Channel Store', () => {
       });
 
       channelStore.clearRecording(4);
+      nowSpy.mockRestore();
       const ch = get(channelStore.channels)[4];
       expect(ch.waveformData).toHaveLength(0);
     });
