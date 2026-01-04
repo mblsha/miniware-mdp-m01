@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -24,5 +24,6 @@ if (!existsSync(protoOutput)) {
     run('npm', ['install'], tsRoot);
   }
 
+  mkdirSync(resolve(tsRoot, 'src', 'proto'), { recursive: true });
   run('npm', ['run', 'gen:proto'], tsRoot);
 }
