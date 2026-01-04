@@ -4,7 +4,9 @@ import { Command } from 'commander';
 import { SerialPort } from 'serialport';
 import { get } from 'svelte/store';
 import { NodeSerialConnection } from './node-serial';
+import { ReplaySerialConnection } from './replay-serial';
 import { ContextRegistry, categorizeDevice, type DeviceContext, type DeviceContextParams } from './context-registry';
+import { createPerfettoCapture, type PerfettoCapture } from '../../webui/src/lib/perfetto-capture';
 import {
   createGetMachinePacket,
   createHeartbeatPacket,
@@ -18,14 +20,18 @@ import {
   processMachinePacket,
   processSynthesizePacket,
   processWavePacket,
+  validatePacketChecksum,
   type ChannelUpdate,
   type DecodedPacket,
   isMachinePacket,
   isWavePacket
 } from '../../webui/src/lib/packet-decoder';
-import { PackType } from '../../webui/src/lib/types';
+import { getDeviceLimits } from '../../webui/src/lib/device-limits';
+import { PackType } from './packet-types';
 import { debugEnabled } from '../../webui/src/lib/debug-logger';
 import { getMachineTypeString } from '../../webui/src/lib/machine-utils';
+import { perfetto } from '../../third_party/retrobus-perfetto/ts/src/proto/perfetto_pb.js';
+import { loadReplayChunks } from './perfetto-replay';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
@@ -36,12 +42,29 @@ const program = new Command();
 
 debugEnabled.set(false);
 
+const DEFAULT_WAVE_GAP_NS = 1_000_000_000;
+
 program.option('--debug', 'Enable Kaitai/debug logging');
 
 program.hook('preAction', (thisCommand) => {
   const opts = thisCommand.optsWithGlobals();
   debugEnabled.set(Boolean(opts.debug));
 });
+
+function createMonotonicNowNs(): () => number {
+  const start = process.hrtime.bigint();
+  return () => Number(process.hrtime.bigint() - start);
+}
+
+function createReplayNowNs(): { nowNs: () => number; setNowNs: (value: number) => void } {
+  let current = 0;
+  return {
+    nowNs: () => current,
+    setNowNs: (value: number) => {
+      current = value;
+    }
+  };
+}
 
 function normalizeId(value?: string | number): number[] {
   if (value === undefined || value === null) {
@@ -141,6 +164,14 @@ function createCsvWriter(outputPath?: string): CsvWriter {
     },
     close: async () => {}
   };
+}
+
+function writeBinaryFile(path: string, data: Uint8Array): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const stream = createWriteStream(path);
+    stream.once('error', reject);
+    stream.end(data, () => resolve());
+  });
 }
 
 function parseDurationSeconds(value?: string): number | null {
@@ -307,6 +338,8 @@ interface ContextCommandOptions {
 interface RecordCommandOptions {
   duration?: string;
   outputCsv?: string;
+  outputPerfetto?: string;
+  replayPerfetto?: string;
 }
 
 async function handleContextCommand(
@@ -445,27 +478,72 @@ async function handleRecordCommand(
   const channel = parseChannelArg('0');
   const durationSeconds = parseDurationSeconds(options.duration);
   const outputPath = options.outputCsv;
+  const perfettoPath = options.outputPerfetto;
+  const replayPerfettoPath = options.replayPerfetto;
   const writer = createCsvWriter(outputPath);
   const log = (message: string) => {
     process.stderr.write(`${message}\n`);
   };
+  const deviceLimits = getDeviceLimits(context.machineType);
+  if (!deviceLimits) {
+    throw new Error(`Unknown device type "${context.machineType}". Cannot determine max specs.`);
+  }
 
   if (get(debugEnabled)) {
     debugEnabled.set(false);
     log('Debug logging disabled during recording to keep CSV output clean.');
   }
 
-  const connection = new NodeSerialConnection({ portPath: context.portPath });
+  const connection = replayPerfettoPath
+    ? new ReplaySerialConnection()
+    : new NodeSerialConnection({ portPath: context.portPath });
+  const replayClock = replayPerfettoPath ? createReplayNowNs() : null;
+  const perfettoNowNs = perfettoPath
+    ? replayClock
+      ? replayClock.nowNs
+      : createMonotonicNowNs()
+    : null;
+  const perfettoCapture: PerfettoCapture | null = perfettoPath && perfettoNowNs
+    ? createPerfettoCapture(perfetto, {
+        processName: `mdp-cli ${alias}`,
+        nowNs: perfettoNowNs,
+        startNs: 0,
+        pid: process.pid,
+        rawThreadName: 'UART_RX',
+        alertThreadName: 'Alerts',
+        format: 'trace'
+      })
+    : null;
+  const unsubscribePacketObserver = perfettoCapture
+    ? connection.registerPacketObserver((packet) => {
+        const validation = validatePacketChecksum(packet);
+        if (!validation || validation.ok) return;
+        perfettoCapture.recordAlert({
+          type: 'checksum_failed',
+          channel: validation.channel,
+          packetType: validation.packetType,
+          packetSize: validation.size,
+          checksum: validation.actual,
+          expectedChecksum: validation.expected,
+          note: 'XOR checksum mismatch'
+        });
+      })
+    : null;
+  const unsubscribeRaw = perfettoCapture
+    ? connection.registerRawDataHandler((chunk) => perfettoCapture.recordRawChunk(chunk))
+    : null;
   try {
     await connection.connect();
-    await connection.sendPacket(createSetChannelPacket(channel));
-    await delay(50);
-
-    connection.startHeartbeat(() => createHeartbeatPacket(), 1000);
+    if (!replayPerfettoPath) {
+      await connection.sendPacket(createSetChannelPacket(channel));
+      await delay(50);
+      connection.startHeartbeat(() => createHeartbeatPacket(), 1000);
+    }
 
     let runningTimeUs = 0;
     let pointCount = 0;
     let hasWaveData = false;
+    let lastWavePacketNs: number | null = null;
     const ignoredChannels = new Set<number>();
 
     const unsubscribe = connection.registerPacketHandler(PackType.WAVE, (packet) => {
@@ -485,6 +563,24 @@ async function handleRecordCommand(
         log(`Receiving wave data for channel ${channel}...`);
       }
 
+      if (perfettoCapture && perfettoNowNs) {
+        const packetNs = perfettoNowNs();
+        if (lastWavePacketNs !== null) {
+          const deltaNs = packetNs - lastWavePacketNs;
+          if (deltaNs > DEFAULT_WAVE_GAP_NS) {
+            perfettoCapture.recordAlert({
+              type: 'delta_t_oos',
+              channel,
+              value: deltaNs / 1_000_000_000,
+              limit: DEFAULT_WAVE_GAP_NS / 1_000_000_000,
+              unit: 's',
+              deltaNs
+            });
+          }
+        }
+        lastWavePacketNs = packetNs;
+      }
+
       const result = extractWaveSamples(decoded, runningTimeUs);
       if (!result) return;
 
@@ -494,6 +590,36 @@ async function handleRecordCommand(
           `${sample.timeSeconds.toFixed(6)},${sample.voltage.toFixed(6)},${sample.current.toFixed(6)}`
         );
         pointCount += 1;
+        if (perfettoCapture) {
+          if (deviceLimits && sample.voltage > deviceLimits.maxVoltage) {
+            perfettoCapture.recordAlert({
+              type: 'voltage_oos',
+              channel,
+              value: sample.voltage,
+              limit: deviceLimits.maxVoltage,
+              unit: 'V'
+            });
+          }
+          if (deviceLimits && sample.current > deviceLimits.maxCurrent) {
+            perfettoCapture.recordAlert({
+              type: 'current_oos',
+              channel,
+              value: sample.current,
+              limit: deviceLimits.maxCurrent,
+              unit: 'A'
+            });
+          }
+          const power = sample.voltage * sample.current;
+          if (deviceLimits && power > deviceLimits.maxPower) {
+            perfettoCapture.recordAlert({
+              type: 'power_oos',
+              channel,
+              value: power,
+              limit: deviceLimits.maxPower,
+              unit: 'W'
+            });
+          }
+        }
       });
     });
 
@@ -523,9 +649,19 @@ async function handleRecordCommand(
         durationTimer = null;
       }
       unsubscribe();
+      if (unsubscribeRaw) {
+        unsubscribeRaw();
+      }
+      if (unsubscribePacketObserver) {
+        unsubscribePacketObserver();
+      }
       connection.stopHeartbeat();
       await connection.disconnect();
       await writer.close();
+      if (perfettoCapture && perfettoPath) {
+        await writeBinaryFile(perfettoPath, perfettoCapture.serialize());
+        log(`Perfetto trace written to ${perfettoPath}.`);
+      }
       const duration = runningTimeUs / 1_000_000;
       log(`Recording stopped (${reason}). ${pointCount} samples over ${duration.toFixed(3)}s.`);
       restoreConsole();
@@ -533,10 +669,25 @@ async function handleRecordCommand(
     };
 
     process.once('SIGINT', onSigint);
-    if (durationSeconds) {
+    if (durationSeconds && !replayPerfettoPath) {
       durationTimer = setTimeout(() => {
         void stop('duration elapsed');
       }, durationSeconds * 1000);
+    }
+
+    if (replayPerfettoPath) {
+      const chunks = loadReplayChunks(replayPerfettoPath);
+      const durationLimitNs = durationSeconds ? durationSeconds * 1_000_000_000 : null;
+      const replayConnection = connection as ReplaySerialConnection;
+      for (const chunk of chunks) {
+        if (durationLimitNs !== null && chunk.timestampNs > durationLimitNs) {
+          break;
+        }
+        replayClock?.setNowNs(chunk.timestampNs);
+        replayConnection.ingestChunk(chunk.bytes);
+      }
+      await stop('replay complete');
+      return;
     }
 
     await done;
@@ -582,6 +733,8 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
       .description('Record waveform data to CSV (stdout by default)')
       .option('--duration <sec>', 'Recording duration in seconds')
       .option('--output-csv <path>', 'Write CSV to a file instead of stdout')
+      .option('--output-perfetto <path>', 'Write Perfetto trace to a file')
+      .option('--replay-perfetto <path>', 'Replay raw chunks from a Perfetto trace instead of live serial')
       .action(async (options: RecordCommandOptions) => {
         await handleRecordCommand(alias, context, options);
       });

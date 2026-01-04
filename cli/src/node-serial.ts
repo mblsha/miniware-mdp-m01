@@ -1,5 +1,5 @@
 import { SerialPort } from 'serialport';
-import type { PacketHandler, SerialConfig } from '../../webui/src/lib/types';
+import type { PacketHandler, RawDataHandler, SerialConfig } from './serial-types';
 
 const DEFAULT_CONFIG: SerialConfig = {
   baudRate: 115200,
@@ -20,6 +20,8 @@ export class NodeSerialConnection {
   private port: SerialPort | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private readonly packetHandlers = new Map<number, PacketHandler[]>();
+  private readonly rawDataHandlers = new Set<RawDataHandler>();
+  private readonly packetObservers = new Set<PacketHandler>();
   private receiveBuffer = Buffer.alloc(0);
 
   constructor(options: NodeSerialConnectionOptions) {
@@ -120,6 +122,20 @@ export class NodeSerialConnection {
     };
   }
 
+  registerRawDataHandler(handler: RawDataHandler): () => void {
+    this.rawDataHandlers.add(handler);
+    return () => {
+      this.rawDataHandlers.delete(handler);
+    };
+  }
+
+  registerPacketObserver(handler: PacketHandler): () => void {
+    this.packetObservers.add(handler);
+    return () => {
+      this.packetObservers.delete(handler);
+    };
+  }
+
   waitForPacket(packetType: number, timeoutMs = 3000): Promise<number[] | null> {
     return new Promise((resolve) => {
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -155,6 +171,13 @@ export class NodeSerialConnection {
   }
 
   private handleIncomingData(chunk: Buffer): void {
+    for (const handler of this.rawDataHandlers) {
+      try {
+        handler(chunk);
+      } catch (err) {
+        console.error('Raw data handler error:', err);
+      }
+    }
     this.receiveBuffer = Buffer.concat([this.receiveBuffer, chunk]);
     this.processIncomingData();
   }
@@ -206,6 +229,13 @@ export class NodeSerialConnection {
   private handlePacket(packet: number[]): void {
     if (!packet || packet.length < 3) {
       return;
+    }
+    for (const handler of this.packetObservers) {
+      try {
+        handler(packet);
+      } catch (err) {
+        console.error('Packet observer error:', err);
+      }
     }
     const packetType = packet[2];
     const handlers = this.packetHandlers.get(packetType) ?? [];
