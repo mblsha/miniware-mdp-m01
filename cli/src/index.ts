@@ -5,6 +5,7 @@ import { SerialPort } from 'serialport';
 import { get } from 'svelte/store';
 import { NodeSerialConnection } from './node-serial';
 import { ReplaySerialConnection } from './replay-serial';
+import { WaveTimestampReconciler, type WaveSample } from '../../webui/src/lib/wave-reconciler';
 import { ContextRegistry, categorizeDevice, type DeviceContext, type DeviceContextParams } from './context-registry';
 import { createPerfettoCapture, type PerfettoCapture } from '../../webui/src/lib/perfetto-capture';
 import {
@@ -43,6 +44,8 @@ const program = new Command();
 debugEnabled.set(false);
 
 const DEFAULT_WAVE_GAP_NS = 1_000_000_000;
+const DEFAULT_RECONCILE_DELAY_NS = 2_000_000_000;
+const DEFAULT_RECONCILE_TAIL_NS = 500_000_000;
 
 program.option('--debug', 'Enable Kaitai/debug logging');
 
@@ -289,43 +292,6 @@ async function waitForChannelStatus(
   return processed[channel] ?? processed[0];
 }
 
-type WaveSample = {
-  timeSeconds: number;
-  voltage: number;
-  current: number;
-};
-
-function extractWaveSamples(
-  packet: DecodedPacket,
-  runningTimeUs: number
-): { samples: WaveSample[]; nextRunningTimeUs: number } | null {
-  if (!isWavePacket(packet)) return null;
-
-  const wave = packet.data;
-  const samples: WaveSample[] = [];
-  const samplesPerGroup = packet.size === 126 ? 2 : packet.size === 206 ? 4 : 0;
-
-  wave.groups.forEach((group) => {
-    const groupElapsedTimeUs = group.timestamp / 10;
-    const pointsInGroup = samplesPerGroup || group.items.length || 1;
-    const timePerSampleUs = pointsInGroup > 0 ? groupElapsedTimeUs / pointsInGroup : 0;
-
-    for (let i = 0; i < pointsInGroup; i++) {
-      const item = group.items[i];
-      if (!item) break;
-      const sampleTimeUs = runningTimeUs + i * timePerSampleUs;
-      samples.push({
-        timeSeconds: sampleTimeUs / 1_000,
-        voltage: item.voltage,
-        current: item.current
-      });
-    }
-
-    runningTimeUs += groupElapsedTimeUs;
-  });
-
-  return { samples, nextRunningTimeUs: runningTimeUs };
-}
 
 interface ContextCommandOptions {
   channel?: string;
@@ -498,11 +464,8 @@ async function handleRecordCommand(
     ? new ReplaySerialConnection()
     : new NodeSerialConnection({ portPath: context.portPath });
   const replayClock = replayPerfettoPath ? createReplayNowNs() : null;
-  const perfettoNowNs = perfettoPath
-    ? replayClock
-      ? replayClock.nowNs
-      : createMonotonicNowNs()
-    : null;
+  const recordNowNs = replayClock ? replayClock.nowNs : createMonotonicNowNs();
+  const perfettoNowNs = perfettoPath ? recordNowNs : null;
   const perfettoCapture: PerfettoCapture | null = perfettoPath && perfettoNowNs
     ? createPerfettoCapture(perfetto, {
         processName: `mdp-cli ${alias}`,
@@ -540,52 +503,17 @@ async function handleRecordCommand(
       connection.startHeartbeat(() => createHeartbeatPacket(), 1000);
     }
 
-    let runningTimeUs = 0;
     let pointCount = 0;
     let hasWaveData = false;
     let lastWavePacketNs: number | null = null;
     const ignoredChannels = new Set<number>();
+    const reconciler = new WaveTimestampReconciler(
+      DEFAULT_RECONCILE_DELAY_NS,
+      DEFAULT_RECONCILE_TAIL_NS
+    );
 
-    const unsubscribe = connection.registerPacketHandler(PackType.WAVE, (packet) => {
-      const decoded = decodePacket(packet);
-      if (!decoded || !isWavePacket(decoded)) return;
-
-      if (decoded.data.channel !== channel) {
-        if (!ignoredChannels.has(decoded.data.channel)) {
-          ignoredChannels.add(decoded.data.channel);
-          log(`Ignoring wave data from channel ${decoded.data.channel}.`);
-        }
-        return;
-      }
-
-      if (!hasWaveData) {
-        hasWaveData = true;
-        log(`Receiving wave data for channel ${channel}...`);
-      }
-
-      if (perfettoCapture && perfettoNowNs) {
-        const packetNs = perfettoNowNs();
-        if (lastWavePacketNs !== null) {
-          const deltaNs = packetNs - lastWavePacketNs;
-          if (deltaNs > DEFAULT_WAVE_GAP_NS) {
-            perfettoCapture.recordAlert({
-              type: 'delta_t_oos',
-              channel,
-              value: deltaNs / 1_000_000_000,
-              limit: DEFAULT_WAVE_GAP_NS / 1_000_000_000,
-              unit: 's',
-              deltaNs
-            });
-          }
-        }
-        lastWavePacketNs = packetNs;
-      }
-
-      const result = extractWaveSamples(decoded, runningTimeUs);
-      if (!result) return;
-
-      runningTimeUs = result.nextRunningTimeUs;
-      result.samples.forEach((sample) => {
+    const emitSamples = (samples: WaveSample[]) => {
+      samples.forEach((sample) => {
         writer.writeLine(
           `${sample.timeSeconds.toFixed(6)},${sample.voltage.toFixed(6)},${sample.current.toFixed(6)}`
         );
@@ -621,6 +549,43 @@ async function handleRecordCommand(
           }
         }
       });
+    };
+
+    const unsubscribe = connection.registerPacketHandler(PackType.WAVE, (packet) => {
+      const decoded = decodePacket(packet);
+      if (!decoded || !isWavePacket(decoded)) return;
+
+      if (decoded.data.channel !== channel) {
+        if (!ignoredChannels.has(decoded.data.channel)) {
+          ignoredChannels.add(decoded.data.channel);
+          log(`Ignoring wave data from channel ${decoded.data.channel}.`);
+        }
+        return;
+      }
+
+      if (!hasWaveData) {
+        hasWaveData = true;
+        log(`Receiving wave data for channel ${channel}...`);
+      }
+
+      const packetNs = recordNowNs();
+      if (perfettoCapture && perfettoNowNs && lastWavePacketNs !== null) {
+        const deltaNs = packetNs - lastWavePacketNs;
+        if (deltaNs > DEFAULT_WAVE_GAP_NS) {
+          perfettoCapture.recordAlert({
+            type: 'delta_t_oos',
+            channel,
+            value: deltaNs / 1_000_000_000,
+            limit: DEFAULT_WAVE_GAP_NS / 1_000_000_000,
+            unit: 's',
+            deltaNs
+          });
+        }
+      }
+      lastWavePacketNs = packetNs;
+
+      const adjustedSamples = reconciler.pushPacket(decoded, packetNs);
+      emitSamples(adjustedSamples);
     });
 
     writer.writeLine('time_s,voltage_v,current_a');
@@ -649,6 +614,8 @@ async function handleRecordCommand(
         durationTimer = null;
       }
       unsubscribe();
+      const remainingSamples = reconciler.flushAll();
+      emitSamples(remainingSamples);
       if (unsubscribeRaw) {
         unsubscribeRaw();
       }
@@ -662,7 +629,7 @@ async function handleRecordCommand(
         await writeBinaryFile(perfettoPath, perfettoCapture.serialize());
         log(`Perfetto trace written to ${perfettoPath}.`);
       }
-      const duration = runningTimeUs / 1_000_000;
+      const duration = reconciler.getLastEmittedNs() / 1_000_000_000;
       log(`Recording stopped (${reason}). ${pointCount} samples over ${duration.toFixed(3)}s.`);
       restoreConsole();
       resolveDone?.();
