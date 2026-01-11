@@ -223,6 +223,19 @@ describe('ContextRegistry', () => {
       expect(registry.uniqueContextsByCategory.psu).toHaveLength(2);
       expect(registry.uniqueContextsByCategory.load).toHaveLength(0);
     });
+
+    it('should keep channels from the same port as unique entries', () => {
+      const contexts: DeviceContextParams[] = [
+        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906', channel: 0 },
+        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906', channel: 1 }
+      ];
+
+      const registry = new ContextRegistry(contexts);
+
+      expect(registry.uniqueContextsByCategory.psu).toHaveLength(2);
+      expect(registry.getContext('psu1')?.channel).toBe(0);
+      expect(registry.getContext('psu2')?.channel).toBe(1);
+    });
   });
 
   describe('describe()', () => {
@@ -267,6 +280,17 @@ describe('ContextRegistry', () => {
 
       expect(description).toContain('  psu (use psu1, psu2)');
       expect(description).toContain('  load (use load1, load2)');
+    });
+
+    it('should include channel numbers when available', () => {
+      const contexts: DeviceContextParams[] = [
+        { portPath: '/dev/ttyUSB0', category: 'load', machineType: 'L1060', channel: 1 }
+      ];
+
+      const registry = new ContextRegistry(contexts);
+      const description = registry.describe();
+
+      expect(description).toContain('  load -> LOAD (L1060) channel 1');
     });
   });
 
@@ -325,6 +349,18 @@ describe('ContextRegistry', () => {
       // Both registries should have same ordering despite different input order
       expect(registry1.getContext('load1')?.portPath).toBe('/dev/ttyUSB1');
       expect(registry2.getContext('load1')?.portPath).toBe('/dev/ttyUSB1');
+    });
+
+    it('should order channels consistently for the same port', () => {
+      const contexts: DeviceContextParams[] = [
+        { portPath: '/dev/ttyUSB0', category: 'load', machineType: 'L1060', channel: 1 },
+        { portPath: '/dev/ttyUSB0', category: 'load', machineType: 'L1060', channel: 0 }
+      ];
+
+      const registry = new ContextRegistry(contexts);
+
+      expect(registry.getContext('load1')?.channel).toBe(0);
+      expect(registry.getContext('load2')?.channel).toBe(1);
     });
   });
 });

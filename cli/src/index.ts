@@ -6,7 +6,18 @@ import { get } from 'svelte/store';
 import { NodeSerialConnection } from './node-serial';
 import { ReplaySerialConnection } from './replay-serial';
 import { WaveTimestampReconciler, type WaveSample } from '../../webui/src/lib/wave-reconciler';
-import { ContextRegistry, categorizeDevice, type DeviceContext, type DeviceContextParams } from './context-registry';
+import {
+  ContextRegistry,
+  categorizeDevice,
+  type DeviceCategory,
+  type DeviceContext,
+  type DeviceContextParams
+} from './context-registry';
+import {
+  buildContextsFromChannels,
+  selectChannelFromChannels,
+  selectMachineTypeFromChannels
+} from './context-detection';
 import { createPerfettoCapture, type PerfettoCapture } from '../../webui/src/lib/perfetto-capture';
 import {
   createGetMachinePacket,
@@ -188,10 +199,11 @@ function parseDurationSeconds(value?: string): number | null {
 }
 const STATUS_TIMEOUT_MS = 5000;
 
-async function detectMachineTypeFromSynthesize(
+
+async function fetchSynthesizeChannels(
   connection: NodeSerialConnection,
   timeoutMs = 2500
-): Promise<string | null> {
+): Promise<ChannelUpdate[] | null> {
   try {
     await connection.sendPacket(createHeartbeatPacket());
   } catch {
@@ -213,7 +225,25 @@ async function detectMachineTypeFromSynthesize(
     return null;
   }
 
-  return processed[0].machineType ?? null;
+  return processed;
+}
+
+async function detectChannelFromSynthesize(
+  connection: NodeSerialConnection,
+  category: DeviceCategory,
+  timeoutMs = 2500
+): Promise<{ channel: number; update: ChannelUpdate } | null> {
+  const processed = await fetchSynthesizeChannels(connection, timeoutMs);
+  if (!processed || processed.length === 0) {
+    return null;
+  }
+
+  const selected = selectChannelFromChannels(processed, category);
+  if (!selected) {
+    return null;
+  }
+
+  return { channel: selected.channel, update: selected };
 }
 
 async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
@@ -226,19 +256,26 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
       await connection.connect();
       await connection.sendPacket(createGetMachinePacket());
       const response = await connection.waitForPacket(PackType.MACHINE, 5000);
+      const decoded = response ? decodePacket(response) : null;
+      const info = decoded ? processMachinePacket(decoded) : null;
+
       if (!response) {
-        console.warn(`No machine response from ${port.path}; defaulting to PSU context.`);
-        contexts.push({
-          portPath: port.path,
-          category: 'psu',
-          machineType: 'Unknown'
-        });
+        console.warn(`No machine response from ${port.path}; probing synthesize data instead.`);
+      } else if (!info) {
+        console.warn(`Unable to decode machine packet from ${port.path}; probing synthesize data instead.`);
+      }
+
+      const synthesizeChannels = await fetchSynthesizeChannels(connection);
+      const channelContexts = synthesizeChannels
+        ? buildContextsFromChannels(port.path, synthesizeChannels)
+        : [];
+
+      if (channelContexts.length > 0) {
+        contexts.push(...channelContexts);
         continue;
       }
-      const decoded = decodePacket(response);
-      const info = decoded ? processMachinePacket(decoded) : null;
+
       if (!info) {
-        console.warn(`Unable to decode machine packet from ${port.path}; defaulting to PSU context.`);
         contexts.push({
           portPath: port.path,
           category: 'psu',
@@ -250,13 +287,19 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
       const machineData = decoded && isMachinePacket(decoded) ? decoded.data : null;
       const fallbackLabel =
         machineData?.machineName ?? (machineData ? getMachineTypeString(machineData.machineTypeRaw) : undefined);
-      const channelMachineTypes = await detectMachineTypeFromSynthesize(connection);
+      const channelMachineTypes = synthesizeChannels
+        ? selectMachineTypeFromChannels(synthesizeChannels)
+        : null;
       const machineType = channelMachineTypes ?? fallbackLabel ?? info.type;
       const category = categorizeDevice(machineType);
+      const channelHint = synthesizeChannels
+        ? selectChannelFromChannels(synthesizeChannels, category)
+        : null;
       contexts.push({
         portPath: port.path,
         category,
-        machineType
+        machineType,
+        channel: channelHint?.channel
       });
     } catch (error) {
       console.warn(`Failed to probe ${port.path}:`, error instanceof Error ? error.message : error);
@@ -313,7 +356,6 @@ async function handleContextCommand(
   options: ContextCommandOptions,
   outputState?: string
 ): Promise<void> {
-  const channel = parseChannelArg(options.channel ?? '0');
   const wantsStatus = Boolean(options.status || options.statusJson);
   const wantsSets = Boolean(options.setVoltage || options.setCurrent);
   const wantsOutput = typeof outputState === 'string';
@@ -328,9 +370,32 @@ async function handleContextCommand(
   const connection = new NodeSerialConnection({ portPath: context.portPath });
   await connection.connect();
   try {
-    const baseline = wantsStatus || wantsSets ? await waitForChannelStatus(connection, channel) : null;
-    if ((wantsStatus || wantsSets) && !baseline) {
-      throw new Error('No synthesize data received yet for the requested channel');
+    let channel: number;
+    let baseline: ChannelUpdate | null = null;
+
+    if (options.channel !== undefined) {
+      channel = parseChannelArg(options.channel);
+    } else if (typeof context.channel === 'number') {
+      channel = context.channel;
+    } else {
+      const detected = await detectChannelFromSynthesize(connection, context.category);
+      if (detected) {
+        channel = detected.channel;
+        baseline = detected.update;
+      } else if (context.category === 'load') {
+        throw new Error('Unable to auto-detect device channel; pass --channel explicitly.');
+      } else {
+        channel = 0;
+      }
+    }
+
+    if (wantsStatus || wantsSets) {
+      if (!baseline) {
+        baseline = await waitForChannelStatus(connection, channel);
+      }
+      if (!baseline) {
+        throw new Error('No synthesize data received yet for the requested channel');
+      }
     }
 
     const parsedVoltage = options.setVoltage !== undefined ? Number(options.setVoltage) : undefined;
@@ -440,7 +505,7 @@ async function handleRecordCommand(
     process.stderr.write(`${format(...args)}\n`);
   };
 
-  const channel = parseChannelArg('0');
+  let channel = typeof context.channel === 'number' ? context.channel : 0;
   const durationSeconds = parseDurationSeconds(options.duration);
   const outputPath = options.outputCsv;
   const perfettoPath = options.outputPerfetto;
@@ -497,6 +562,16 @@ async function handleRecordCommand(
   try {
     await connection.connect();
     if (!replayPerfettoPath) {
+      if (typeof context.channel !== 'number') {
+        const detected = connection instanceof NodeSerialConnection
+          ? await detectChannelFromSynthesize(connection, context.category)
+          : null;
+        if (detected) {
+          channel = detected.channel;
+        } else if (context.category === 'load') {
+          throw new Error('Unable to auto-detect device channel; run `devices` and choose the correct device alias.');
+        }
+      }
       await connection.sendPacket(createSetChannelPacket(channel));
       await delay(50);
       connection.startHeartbeat(() => createHeartbeatPacket(), 1000);
@@ -685,7 +760,7 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
       .command(alias)
       .description(`Control ${context.machineType} (${alias})`)
       .argument('[state]', 'Output state (on/off)')
-      .option('--channel <number>', 'Channel index (0-5)', '0')
+      .option('--channel <number>', 'Channel index (0-5)')
       .option('--status', 'Print textual status')
       .option('--status-json', 'Print JSON status')
       .option('--set-voltage <voltage>', 'Set target voltage (V)')
@@ -703,6 +778,23 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
       .option('--replay-perfetto <path>', 'Replay raw chunks from a Perfetto trace instead of live serial')
       .action(async (options: RecordCommandOptions) => {
         await handleRecordCommand(alias, context, options);
+      });
+  });
+
+  (['psu', 'load'] as DeviceCategory[]).forEach((category) => {
+    if (registry.getAmbiguousCategories().includes(category)) {
+      return;
+    }
+    if (registry.getContext(category)) {
+      return;
+    }
+    program
+      .command(category)
+      .description(`No ${category.toUpperCase()} device detected`)
+      .action(() => {
+        throw new Error(
+          `No ${category.toUpperCase()} device detected. Run \`devices\` to list available contexts.`
+        );
       });
   });
 }
