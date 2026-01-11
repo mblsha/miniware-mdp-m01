@@ -9,6 +9,7 @@ export interface DeviceContextParams {
   portPath: string;
   category: DeviceCategory;
   machineType: string;
+  channel?: number;
 }
 
 export interface DeviceContext extends DeviceContextParams {
@@ -46,8 +47,14 @@ export class ContextRegistry {
     });
 
     (['psu', 'load'] as DeviceCategory[]).forEach((category) => {
-      // Sort by portPath for stable ordering across reboots/topology changes
-      const devices = groups[category].sort((a, b) => a.portPath.localeCompare(b.portPath));
+      // Sort by portPath/channel for stable ordering across reboots/topology changes
+      const devices = groups[category].sort((a, b) => {
+        const portCmp = a.portPath.localeCompare(b.portPath);
+        if (portCmp !== 0) return portCmp;
+        const aChannel = a.channel ?? -1;
+        const bChannel = b.channel ?? -1;
+        return aChannel - bChannel;
+      });
       if (devices.length === 0) {
         return;
       }
@@ -71,7 +78,7 @@ export class ContextRegistry {
 
   private pushUnique(context: DeviceContext): void {
     const list = this.uniqueContextsByCategory[context.category];
-    if (!list.some((entry) => entry.portPath === context.portPath)) {
+    if (!list.some((entry) => entry.portPath === context.portPath && entry.channel === context.channel)) {
       list.push(context);
     }
   }
@@ -90,10 +97,17 @@ export class ContextRegistry {
 
   describe(): string[] {
     const lines: string[] = ['Detected device contexts:'];
-    this.getAliases().forEach((alias) => {
-      const ctx = this.aliasMap.get(alias);
-      if (!ctx) return;
-      lines.push(`  ${alias} -> ${ctx.category.toUpperCase()} (${ctx.machineType})`);
+    const sortedContexts = Array.from(this.aliasMap.values()).sort((a, b) => {
+      const aChannel = typeof a.channel === 'number' ? a.channel : Number.POSITIVE_INFINITY;
+      const bChannel = typeof b.channel === 'number' ? b.channel : Number.POSITIVE_INFINITY;
+      if (aChannel !== bChannel) {
+        return aChannel - bChannel;
+      }
+      return a.alias.localeCompare(b.alias);
+    });
+    sortedContexts.forEach((ctx) => {
+      const channel = typeof ctx.channel === 'number' ? ` channel ${ctx.channel}` : '';
+      lines.push(`  ${ctx.alias} -> ${ctx.category.toUpperCase()} (${ctx.machineType})${channel}`);
     });
 
     if (this.ambiguousCategories.size > 0) {
