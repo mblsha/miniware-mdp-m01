@@ -1,5 +1,4 @@
 {
-  "extends": "@tsconfig/svelte/tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
@@ -8,6 +7,9 @@
     "skipLibCheck": true,
     "allowJs": true,
     "checkJs": true,
+    "verbatimModuleSyntax": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
     
     /* Bundler mode */
     "moduleResolution": "bundler",
