@@ -30,7 +30,7 @@
 
   onDestroy(() => {
     if (ownsRuntime) {
-      resolvedRuntime.destroy();
+      void resolvedRuntime.destroy();
     }
   });
   

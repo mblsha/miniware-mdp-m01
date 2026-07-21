@@ -6,12 +6,14 @@ on:
     paths:
       - 'webui/**'
       - 'cli/**'
+      - 'cpp/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main, master]
     paths:
       - 'webui/**'
       - 'cli/**'
+      - 'cpp/**'
       - '.github/workflows/ci.yml'
 
 # Explicit minimal permissions for all jobs
@@ -190,6 +192,28 @@ jobs:
       - name: Run type check
         run: npm run type-check
 
+  cpp-tests:
+    name: C++ Parser Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build qt6-base-dev libgtest-dev kaitai-struct-compiler
+
+      - name: Configure with sanitizers
+        run: cmake -S cpp -B cpp/build-ci -G Ninja -DMDP_ENABLE_SANITIZERS=ON
+
+      - name: Build
+        run: cmake --build cpp/build-ci --parallel 2
+
+      - name: Run tests
+        run: ctest --test-dir cpp/build-ci --output-on-failure
+
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
@@ -233,7 +257,7 @@ jobs:
   summary:
     name: Summary
     runs-on: ubuntu-latest
-    needs: [webui-lint, webui-type-check, webui-unit-tests, cli-lint, cli-type-check, cli-unit-tests]
+    needs: [webui-lint, webui-type-check, webui-unit-tests, cli-lint, cli-type-check, cli-unit-tests, cpp-tests]
     if: always()
 
     steps:
@@ -245,13 +269,15 @@ jobs:
           echo "CLI Lint: ${{ needs.cli-lint.result }}"
           echo "CLI Type Check: ${{ needs.cli-type-check.result }}"
           echo "CLI Unit Tests: ${{ needs.cli-unit-tests.result }}"
+          echo "C++ Parser Tests: ${{ needs.cpp-tests.result }}"
 
           if [[ "${{ needs.webui-lint.result }}" != "success" || \
                 "${{ needs.webui-type-check.result }}" != "success" || \
                 "${{ needs.webui-unit-tests.result }}" != "success" || \
                 "${{ needs.cli-lint.result }}" != "success" || \
                 "${{ needs.cli-type-check.result }}" != "success" || \
-                "${{ needs.cli-unit-tests.result }}" != "success" ]]; then
+                "${{ needs.cli-unit-tests.result }}" != "success" || \
+                "${{ needs.cpp-tests.result }}" != "success" ]]; then
             echo "One or more CI checks failed"
             exit 1
           else

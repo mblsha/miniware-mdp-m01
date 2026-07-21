@@ -405,5 +405,3 @@ export function createTimeseriesStore() {
 }
 
 export type TimeseriesStore = ReturnType<typeof createTimeseriesStore>;
-
-export const timeseriesStore = createTimeseriesStore();

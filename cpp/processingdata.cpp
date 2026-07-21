@@ -2,23 +2,11 @@
 #include <QVector>
 #include <QDebug>
 #include <QPointF>
-#include <QtCharts/QChartView>
-#include <QtCharts/QLineSeries>
-#include <QtCharts/QAreaSeries>
-#include <QtCharts/QValueAxis>
-#include <QtCharts/QSplineSeries>
-#include <QDesktopServices>
 
 processingData::processingData(QObject *parent) : QObject(parent)
 {
-    series_V = new QLineSeries();
-    series_V->setName(tr("(单位:V)"));
-
-    series_I = new QLineSeries();
-    series_I->setName(tr("(单位:A)"));
-
-    series_V->setPen(QPen(QBrush(QColor(255, 162,0)),2));
-    series_I->setPen(QPen(QBrush(QColor(85, 85, 255)),2));
+    series_V = &voltageSeries;
+    series_I = &currentSeries;
 
     voltageData.clear();
     electData.clear();
@@ -39,8 +27,6 @@ void processingData::slotSendNowCh(char ch)
     sendBuff[PACK_CH_INDEX] = static_cast<char>(ch);
 
     slotComSendPack(PACK_SET_CH, "",static_cast<char>(ch));
-//    slotComSendPack(PACK_SET_CH, "",static_cast<char>(ch));
-    slotComSendPack(PACK_SET_CH, "",static_cast<char>(ch));
 
     now_ch = ch;
 }
@@ -52,8 +38,8 @@ void processingData::slotComSendPack(processingData::PACK_TYPE packType, QByteAr
     sendBuff.resize(PACK_HEAD_MAX);
 
     //hzl:msvc编译报错修改
-    sendBuff[PACK_HEAD_INDEX0] = reinterpret_cast<int>(0x5a);
-    sendBuff[PACK_HEAD_INDEX1] = reinterpret_cast<int>(0x5a);
+    sendBuff[PACK_HEAD_INDEX0] = static_cast<char>(0x5a);
+    sendBuff[PACK_HEAD_INDEX1] = static_cast<char>(0x5a);
     //sendBuff[PACK_HEAD_INDEX0] = 0x5a;
     //sendBuff[PACK_HEAD_INDEX1] = 0x5a;
 
@@ -108,93 +94,77 @@ void processingData::slotCleanWave()
 */
 void processingData::slotDisposeRawPack(QByteArray buffer)
 {
-    QVector<QByteArray>packVector;
-    //包头
-    QByteArray packHead;
-    packHead.append(0x5a);
-    packHead.append(0x5a);
+    rawPackBuffer.append(buffer);
+    const QByteArray packHead = QByteArray::fromHex("5a5a");
 
-    int index = 0;
-    int thisSize = 0;
-    int tmp_index;
-    while((index = buffer.indexOf(packHead,index)) != -1)
+    while (true)
     {
-        tmp_index = index + (PACK_SIZE_INDEX - PACK_HEAD_INDEX0);
+        if (rawPackBuffer.size() < 2) return;
 
-        //获取包大小,如果超过下标,则结束
-        if(tmp_index >= buffer.size())
+        const qsizetype headerIndex = rawPackBuffer.indexOf(packHead);
+        if (headerIndex < 0)
         {
-            //thisSize = 0;
-            break;
+            const bool keepHeaderPrefix = static_cast<uint8_t>(rawPackBuffer.back()) == 0x5a;
+            rawPackBuffer = keepHeaderPrefix ? rawPackBuffer.right(1) : QByteArray();
+            return;
         }
+        if (headerIndex > 0) rawPackBuffer.remove(0, headerIndex);
+        if (rawPackBuffer.size() < 4) return;
 
-        thisSize = static_cast<int>(buffer.at(tmp_index));
-
-        //qDebug() << (uint8_t)this_size;
-
-        //剩下数据不足一个包
-        if(index + thisSize > buffer.size())
+        const uint8_t packType = static_cast<uint8_t>(rawPackBuffer.at(PACK_TYPE_INDEX));
+        const uint8_t packetSize = static_cast<uint8_t>(rawPackBuffer.at(PACK_SIZE_INDEX));
+        if (!isValidPacketSize(packType, packetSize))
         {
-            //thisSize = 0;
-            break;
+            rawPackBuffer.remove(0, 1);
+            continue;
         }
+        if (rawPackBuffer.size() < packetSize) return;
 
-        //QByteArray tmp_buf;
-        //提取出数据
-        packVector.push_back(buffer.mid(index,thisSize));
-
-        index++;
-    }
-
-    //用于处理解析出来的数据包
-    for(int j = 0;j < packVector.size();j++)
-    {
-        //检验数据包是否正确
-        if(!packCheeckSelf(const_cast<QByteArray &>(packVector.at(j))))
+        const QByteArray packet = rawPackBuffer.left(packetSize);
+        rawPackBuffer.remove(0, packetSize);
+        if(!packCheeckSelf(packet))
         {
             qDebug() << "pack_error";
             continue;
         }
-
-        uint8_t pack_type = static_cast<uint8_t>(packVector.at(j).at(PACK_TYPE_INDEX));
 
         //QString timeStr;
         //QTime time=QTime::currentTime();
         //timeStr="["+time.toString("hh:mm:ss.zzz")+"]";
         //qDebug()<<timeStr;
 
-        switch (pack_type)
+        switch (packType)
         {
             case PACK_SYNTHESIZE:
                 //qDebug()<<"SYNTHESIZE";
-                processSynthesizePack(packVector.at(j));
+                processSynthesizePack(packet);
                 waitSynPack=false;
             break;
             case PACK_UPDAT_CH:
                 //qDebug()<<"updat";
-                processUpdatCh(packVector.at(j));
+                processUpdatCh(packet);
             break;
             case PACK_ADDR:
                 //qDebug()<<"addr";
-                processAddrPack(packVector.at(j));
+                processAddrPack(packet);
                 emit signalsUpdatUiAddr();
             break;
             case PACK_WAVE:
                 //qDebug()<<"wave";
                 if(!waitWaveFlag && !waitSynPack)
                 {
-                    processWavePack(packVector.at(j));
+                    processWavePack(packet);
                 }
             break;
             case PACK_MACHINE:
                 //qDebug()<<"machine";
-                processMachineType(packVector.at(j));
+                processMachineType(packet);
 
             break;
             case PACK_ERR_240:
                 emit signalErr240ToUi();
             break;
-            default:qDebug() << "error pack"<<packVector.at(j);
+            default:qDebug() << "ignored packet type" << packType;
         }
     }
 }
@@ -306,7 +276,6 @@ void processingData::slotSendReadAllAddrToPc()
 void processingData::slotSendToDfu()
 {
     slotComSendPack(PACK_RESET_TO_DFU);
-    QDesktopServices::openUrl(QUrl("explorer"));
 }
 
 void processingData::slotQTimerWave()
@@ -492,13 +461,13 @@ void processingData::processSynthesizePack(QByteArray buffer)
             uint8_t G = static_cast<uint8_t>(static_cast<uint16_t>((tmp_565) & RGB565_GREEN) >> 3);
             uint8_t B = static_cast<uint8_t>(static_cast<uint16_t>((tmp_565) & RGB565_BLUE) << 3);
 
-            if(p->color != QColor(R,G,B))
+            if(p->color != RgbColor(R,G,B))
             {
                 p->colorUpdatFlag = true;
             }
-            //p->colorUpdatFlag = (p->color != QColor(R,G,B))?true:false;
+            //p->colorUpdatFlag = (p->color != RgbColor(R,G,B))?true:false;
 
-            p->color = QColor(R,G,B);
+            p->color = RgbColor(R,G,B);
        }
 
        //报错
@@ -692,20 +661,46 @@ void processingData::processUpdatCh(QByteArray buffer)
 
 }
 
-bool processingData::packCheeckSelf(QByteArray &buffer)
+bool processingData::isValidPacketSize(uint8_t type, uint8_t size) const
 {
-    char *tmp_p = buffer.data();
-    uint8_t *buf_p = reinterpret_cast<uint8_t *>(tmp_p);
+    switch (type)
+    {
+        case PACK_SYNTHESIZE: return size == 156;
+        case PACK_WAVE: return size == 126 || size == 206;
+        case PACK_ADDR: return size == 42;
+        case PACK_UPDAT_CH:
+        case PACK_MACHINE:
+        case PACK_SET_ISOUTPUT:
+        case PACK_RGB: return size == 7;
+        case PACK_GET_ADDR:
+        case PACK_SET_CH:
+        case PACK_START_ATUO_MATCH:
+        case PACK_STOP_ATUO_MATCH:
+        case PACK_RESET_TO_DFU:
+        case PACK_GET_MACHINE:
+        case PACK_HEARTBEAT:
+        case PACK_ERR_240: return size == 6;
+        case PACK_SET_ADDR: return size == 12;
+        case PACK_SET_V:
+        case PACK_SET_I: return size == 10;
+        case PACK_SET_ALL_ADDR: return size == 42;
+        default: return false;
+    }
+}
 
+bool processingData::packCheeckSelf(const QByteArray &buffer) const
+{
+    if (buffer.size() < PACK_HEAD_MAX) return false;
+    const auto *buf_p = reinterpret_cast<const uint8_t *>(buffer.constData());
+    if (buf_p[PACK_HEAD_INDEX0] != 0x5a || buf_p[PACK_HEAD_INDEX1] != 0x5a) return false;
+    const uint8_t packetSize = buf_p[PACK_SIZE_INDEX];
+    if (packetSize != buffer.size() || !isValidPacketSize(buf_p[PACK_TYPE_INDEX], packetSize)) return false;
 
-    //存放传输过来的数据
-    uint8_t cheeck = buf_p[PACK_CHECK];
-    uint8_t size = buf_p[PACK_SIZE_INDEX] - PACK_HEAD_MAX;
-
-
+    const uint8_t cheeck = buf_p[PACK_CHECK];
+    const qsizetype dataSize = buffer.size() - PACK_HEAD_MAX;
     buf_p += PACK_HEAD_MAX;
     uint8_t tmpCheeck = 0;  //用存放本地运算的
-    for(int i = 0;i < size;i++)
+    for(qsizetype i = 0; i < dataSize; i++)
     {
         tmpCheeck ^= buf_p[i];
     }
@@ -749,14 +744,9 @@ void processingData::processMachineType(QByteArray buffer)
     buf_p += PACK_HEAD_MAX;
     //qDebug() << buffer.toHex();
 
-    if(buf_p[0] == haveLcd)
-    {
-        machineType = haveLcd;
-    }
-    else
-    {
-         machineType = noLcd;
-    }
+    if(buf_p[0] == haveLcd) machineType = haveLcd;
+    else if(buf_p[0] == noLcd) machineType = noLcd;
+    else machineType = noType;
 
     emit signalSetMachine();
 }

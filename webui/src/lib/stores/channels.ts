@@ -1,4 +1,4 @@
-import { derived, writable } from 'svelte/store';
+import { derived, get, writable } from 'svelte/store';
 import type { Readable, Writable } from 'svelte/store';
 import type { Channel, WaveformPoint } from '../types';
 import { processAddressPacket, processMachinePacket, processSynthesizePacket } from '../packet-decoder';
@@ -8,6 +8,7 @@ import { createSetChannelPacket, createSetCurrentPacket, createSetOutputPacket, 
 import { debugError } from '../debug-logger';
 import type { PacketBus } from '../services/packet-bus';
 import type { SerialConnection } from '../serial';
+import { validateDeviceTargets } from '../device-limits';
 
 export type ChannelStore = ReturnType<typeof createChannelStore>;
 
@@ -30,6 +31,7 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
   const { serial, packets } = options;
   const DEFAULT_RECONCILE_DELAY_NS = 2_000_000_000;
   const DEFAULT_RECONCILE_TAIL_NS = 500_000_000;
+  const MAX_WAVEFORM_POINTS = 100_000;
   const waveReconcilers = new Map<number, WaveTimestampReconciler>();
 
   const getInitialState = (): Channel[] =>
@@ -89,8 +91,8 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
     }
 
     const voltage = typeof channelData.voltage === 'number' ? channelData.voltage : Number.NaN;
-    if (!Number.isFinite(voltage) || voltage < 0 || voltage > 50) {
-      warnings.push(`Voltage out of range: ${Number.isFinite(voltage) ? voltage.toFixed(3) : 'NaN'}V (should be 0V to 50V)`);
+    if (!Number.isFinite(voltage) || voltage < 0 || voltage > 60) {
+      warnings.push(`Voltage out of range: ${Number.isFinite(voltage) ? voltage.toFixed(3) : 'NaN'}V (should be 0V to 60V)`);
       isValid = false;
     }
 
@@ -159,6 +161,9 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
         ch.waveformData = [];
       }
       ch.waveformData.push(...newPoints);
+      if (ch.waveformData.length > MAX_WAVEFORM_POINTS) {
+        ch.waveformData.splice(0, ch.waveformData.length - MAX_WAVEFORM_POINTS);
+      }
 
       return chs;
     });
@@ -210,6 +215,9 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
   }
 
   async function setVoltage(channel: number, voltage: number, current: number): Promise<void> {
+    const channelData = get(channels)[channel];
+    if (!channelData) throw new RangeError('Channel must be an integer between 0 and 5');
+    validateDeviceTargets(channelData.machineType, voltage, current);
     const packet = createSetVoltagePacket(channel, voltage, current);
     await serial.sendPacket(packet);
 
@@ -220,6 +228,9 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
   }
 
   async function setCurrent(channel: number, voltage: number, current: number): Promise<void> {
+    const channelData = get(channels)[channel];
+    if (!channelData) throw new RangeError('Channel must be an integer between 0 and 5');
+    validateDeviceTargets(channelData.machineType, voltage, current);
     const packet = createSetCurrentPacket(channel, voltage, current);
     await serial.sendPacket(packet);
 
@@ -264,6 +275,12 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
               current: sample.current
             }))
           );
+          if (chs[channel].waveformData.length > MAX_WAVEFORM_POINTS) {
+            chs[channel].waveformData.splice(
+              0,
+              chs[channel].waveformData.length - MAX_WAVEFORM_POINTS
+            );
+          }
         }
       }
       return chs;

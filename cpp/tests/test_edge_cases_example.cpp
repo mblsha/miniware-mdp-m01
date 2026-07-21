@@ -136,13 +136,13 @@ TEST_F(EdgeCaseTest, TestMultiplePacketsInBuffer) {
     QByteArray buffer;
     
     // Add three valid packets to buffer
-    QByteArray data1(0, 0);  // Empty data for heartbeat
+    QByteArray data1;  // Empty data for heartbeat
     QByteArray packet1 = createPacket(processingData::PACK_HEARTBEAT, 0, data1);
     
     QByteArray data2(1, 0x03);  // Channel 3
     QByteArray packet2 = createPacket(processingData::PACK_UPDAT_CH, 0, data2);
     
-    QByteArray data3(0, 0);  // Empty for get machine
+    QByteArray data3;  // Empty for get machine
     QByteArray packet3 = createPacket(processingData::PACK_GET_MACHINE, 0, data3);
     
     // Combine all packets
@@ -159,6 +159,39 @@ TEST_F(EdgeCaseTest, TestMultiplePacketsInBuffer) {
     if (channelSpy.count() > 0) {
         EXPECT_EQ(channelSpy.at(0).at(0).toInt(), 3);
     }
+}
+
+TEST_F(EdgeCaseTest, TestPacketSplitAcrossReads) {
+    const QByteArray packet = createPacket(
+        processingData::PACK_MACHINE,
+        0,
+        QByteArray(1, static_cast<char>(processingData::haveLcd))
+    );
+    QSignalSpy machineSpy(processor, &processingData::signalSetMachine);
+
+    processor->slotDisposeRawPack(packet.left(3));
+    EXPECT_EQ(machineSpy.count(), 0);
+    processor->slotDisposeRawPack(packet.mid(3, 2));
+    EXPECT_EQ(machineSpy.count(), 0);
+    processor->slotDisposeRawPack(packet.mid(5));
+
+    EXPECT_EQ(machineSpy.count(), 1);
+    EXPECT_EQ(processor->machineType, processingData::haveLcd);
+}
+
+TEST_F(EdgeCaseTest, TestMalformedFrameRecoversToNextPacket) {
+    QByteArray malformed = QByteArray::fromHex("5a5a15000000");
+    const QByteArray valid = createPacket(
+        processingData::PACK_MACHINE,
+        0,
+        QByteArray(1, static_cast<char>(processingData::noLcd))
+    );
+    QSignalSpy machineSpy(processor, &processingData::signalSetMachine);
+
+    processor->slotDisposeRawPack(malformed + valid);
+
+    EXPECT_EQ(machineSpy.count(), 1);
+    EXPECT_EQ(processor->machineType, processingData::noLcd);
 }
 
 // ========== 2. Parser-Specific Edge Cases ==========
@@ -215,8 +248,8 @@ TEST_F(EdgeCaseTest, TestSynthesizeColorEdgeCases) {
     
     // Create synthesize data with specific RGB values
     for (int ch = 0; ch < 6; ch++) {
-        // Basic channel data (first 17 bytes)
-        synData.append(QByteArray(17, 0));
+        // Channel fields through output state (first 20 bytes)
+        synData.append(QByteArray(20, 0));
         
         // Add specific color values for testing
         if (ch == 0) {
@@ -237,7 +270,7 @@ TEST_F(EdgeCaseTest, TestSynthesizeColorEdgeCases) {
         }
         
         // Complete the channel data
-        synData.append(QByteArray(5, 0));  // error + padding
+        synData.append(QByteArray(2, 0));  // error + end marker
     }
     
     QByteArray packet = createPacket(processingData::PACK_SYNTHESIZE, 0, synData);
@@ -458,7 +491,7 @@ TEST_F(EdgeCaseTest, TestChecksumCalculation) {
     uint8_t expectedChecksum = 0xAA ^ 0x55 ^ 0xFF ^ 0x00;
     EXPECT_EQ(expectedChecksum, 0x00);
     
-    QByteArray packet = createPacket(processingData::PACK_HEARTBEAT, 0, testData);
+    QByteArray packet = createPacket(processingData::PACK_SET_V, 0, testData);
     
     // Verify checksum in packet
     EXPECT_EQ(static_cast<uint8_t>(packet[5]), expectedChecksum);

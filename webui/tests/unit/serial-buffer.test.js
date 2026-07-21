@@ -150,11 +150,11 @@ describe('SerialConnection Buffer Management', () => {
         receivedPackets.push(packet);
         packetTypes.push('heartbeat');
       });
-      serialConnection.registerPacketHandler(0x16, (packet) => {
+      serialConnection.registerPacketHandler(0x15, (packet) => {
         receivedPackets.push(packet);
         packetTypes.push('machine');
       });
-      serialConnection.registerPacketHandler(0x15, (packet) => {
+      serialConnection.registerPacketHandler(0x14, (packet) => {
         receivedPackets.push(packet);
         packetTypes.push('update_channel');
       });
@@ -250,7 +250,7 @@ describe('SerialConnection Buffer Management', () => {
       const part2 = packet.slice(2);    // Rest of packet
 
       const receivedPackets = [];
-      serialConnection.registerPacketHandler(0x16, (packet) => {
+      serialConnection.registerPacketHandler(0x15, (packet) => {
         receivedPackets.push(packet);
       });
 
@@ -322,7 +322,7 @@ describe('SerialConnection Buffer Management', () => {
 
       const receivedTypes = [];
       serialConnection.registerPacketHandler(0x22, () => receivedTypes.push('heartbeat'));
-      serialConnection.registerPacketHandler(0x16, () => receivedTypes.push('machine'));
+      serialConnection.registerPacketHandler(0x15, () => receivedTypes.push('machine'));
       serialConnection.registerPacketHandler(0x12, () => receivedTypes.push('wave'));
 
       let chunkIndex = 0;
@@ -349,13 +349,13 @@ describe('SerialConnection Buffer Management', () => {
   function createMachinePacket(machineType) {
     const data = [machineType];
     const checksum = data[0];
-    return [0x5A, 0x5A, 0x16, 0x07, 0xEE, checksum, ...data];
+    return [0x5A, 0x5A, 0x15, 0x07, 0xEE, checksum, ...data];
   }
 
   function createUpdateChannelPacket(channel) {
     const data = [channel];
     const checksum = data[0];
-    return [0x5A, 0x5A, 0x15, 0x07, 0xEE, checksum, ...data];
+    return [0x5A, 0x5A, 0x14, 0x07, 0xEE, checksum, ...data];
   }
 
   function createWavePacket() {

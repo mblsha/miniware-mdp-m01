@@ -442,7 +442,7 @@ var MiniwareMdpM01 = (function() {
       get: function() {
         if (this._m_machineName !== undefined)
           return this._m_machineName;
-        this._m_machineName = (this.machineTypeRaw == 16 ? "M01 (LCD)" : "M02 (No LCD)");
+        this._m_machineName = (this.machineTypeRaw == 16 ? "M01 (LCD)" : (this.machineTypeRaw == 17 ? "M02 (No LCD)" : "Unknown"));
         return this._m_machineName;
       }
     });

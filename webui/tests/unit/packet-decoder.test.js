@@ -397,7 +397,7 @@ describe('Packet Decoder', () => {
       const processed = processMachinePacket(decoded);
       
       expect(processed).toBeTruthy();
-      expect(processed.type).toBe('M02');
+      expect(processed.type).toBe('Unknown');
       expect(processed.hasLCD).toBe(false);
     });
 

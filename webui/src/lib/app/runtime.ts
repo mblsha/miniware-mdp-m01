@@ -17,7 +17,7 @@ export type AppRuntime = {
   sparklines: SparklineStore;
   timeseries: TimeseriesStore;
   timeseriesIntegration: TimeseriesIntegration;
-  destroy: () => void;
+  destroy: () => Promise<void>;
 };
 
 export function createRuntime(options?: { serial?: SerialConnection }): AppRuntime {
@@ -31,11 +31,13 @@ export function createRuntime(options?: { serial?: SerialConnection }): AppRunti
   const sparklines = createSparklineStore({ channels: channels.channels });
   const timeseriesIntegration = createTimeseriesIntegration({ packets, timeseries, channels });
 
-  const destroy = (): void => {
+  const destroy = async (): Promise<void> => {
     sparklines.destroy();
     timeseriesIntegration.destroy();
+    timeseries.stopAutoCleanup();
     channels.destroy();
     packets.stop();
+    await serial.disconnect();
   };
 
   return {

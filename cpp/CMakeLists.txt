@@ -3,9 +3,10 @@ project(mdp_parser VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+option(MDP_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
 # Find required Qt components
-find_package(Qt6 REQUIRED COMPONENTS Core Charts Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Test)
 
 # Enable Qt MOC
 set(CMAKE_AUTOMOC ON)
@@ -57,7 +58,8 @@ include(FetchContent)
 FetchContent_Declare(
     kaitai_struct_cpp_stl_runtime
     GIT_REPOSITORY https://github.com/kaitai-io/kaitai_struct_cpp_stl_runtime.git
-    GIT_TAG        master
+    GIT_TAG        0.11
+    GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(kaitai_struct_cpp_stl_runtime)
 
@@ -85,7 +87,6 @@ endif()
 # Link Qt libraries and Kaitai runtime
 target_link_libraries(mdp_parser PRIVATE 
     Qt6::Core
-    Qt6::Charts
     kaitai_struct_cpp_stl_runtime
 )
 
@@ -123,6 +124,7 @@ qt_add_executable(mdp_parser_test
     tests/test_rgb_generator.cpp
     tests/test_reset_to_dfu_generator.cpp
     tests/test_kaitai_parser.cpp
+    tests/test_edge_cases_example.cpp
     processingdata.cpp
     processingdata.h
     machine.h
@@ -137,7 +139,6 @@ endif()
 # Link test libraries
 target_link_libraries(mdp_parser_test PRIVATE 
     Qt6::Core
-    Qt6::Charts
     Qt6::Test
     GTest::gtest_main
     GTest::gtest
@@ -149,6 +150,13 @@ target_include_directories(mdp_parser_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${KAITAI_GENERATED_DIR}
 )
+
+if(MDP_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    foreach(target mdp_parser mdp_parser_test)
+        target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+    endforeach()
+endif()
 
 # Add tests
 include(GoogleTest)

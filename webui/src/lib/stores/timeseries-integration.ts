@@ -8,6 +8,7 @@ import type { SynthesizeChannel } from '../types/kaitai';
 import type { PacketBus } from '../services/packet-bus';
 import type { ChannelStore } from './channels';
 import type { TimeseriesStore, TimeSeriesPoint } from './timeseries';
+import { WaveTimestampReconciler, type WaveSample } from '../wave-reconciler';
 
 function getOperatingMode(channel: SynthesizeChannel): string {
   // L1060
@@ -72,6 +73,22 @@ export function createTimeseriesIntegration(options: {
   destroy: () => void;
 } {
   const { packets, timeseries, channels } = options;
+  const waveReconcilers = new Map<number, WaveTimestampReconciler>();
+  const waveTimeOrigins = new Map<number, number>();
+
+  const addWaveSamples = (channel: number, sessionStart: number, samples: WaveSample[]): void => {
+    if (samples.length === 0) return;
+    const timeOrigin = waveTimeOrigins.get(channel) ?? samples[0].timeSeconds;
+    waveTimeOrigins.set(channel, timeOrigin);
+    timeseries.addDataPoints(samples.map((sample) => ({
+      channel,
+      timestamp: sessionStart + (sample.timeSeconds - timeOrigin) * 1000,
+      data: {
+        voltage: sample.voltage,
+        current: sample.current,
+      },
+    })));
+  };
 
   const unsubscribes = [
     packets.onSynthesize.subscribe((packet) => {
@@ -108,30 +125,23 @@ export function createTimeseriesIntegration(options: {
       const channel = packet.data.channel;
       if (!activeSession.channels.has(channel)) return;
 
-      const points: TimeSeriesPoint[] = [];
-
-      packet.data.groups.forEach((group) => {
-        group.items.forEach((item, index: number) => {
-          points.push({
-            channel,
-            timestamp: group.timestamp + index * 10,
-            data: {
-              voltage: item.voltage,
-              current: item.current,
-            },
-          });
-        });
-      });
-
-      if (points.length > 0) {
-        timeseries.addDataPoints(points);
-      }
+      const reconciler = waveReconcilers.get(channel) ?? new WaveTimestampReconciler(0, 0);
+      waveReconcilers.set(channel, reconciler);
+      const nowNs = Math.round(performance.now() * 1_000_000);
+      const samples = reconciler.pushPacket(packet, nowNs);
+      addWaveSamples(
+        channel,
+        activeSession.startTime,
+        samples.length > 0 ? samples : reconciler.flushAll()
+      );
     }),
   ];
 
   function startRecording(channelList: number[]): string {
     const sessionId = timeseries.createSession(channelList);
     channelList.forEach((channel) => {
+      waveReconcilers.set(channel, new WaveTimestampReconciler(0, 0));
+      waveTimeOrigins.delete(channel);
       channels.startRecording(channel);
     });
     return sessionId;
@@ -144,6 +154,12 @@ export function createTimeseriesIntegration(options: {
     const channelData = get(channels.channels);
     channelData.forEach((ch, index) => {
       if (ch.recording) {
+        const reconciler = waveReconcilers.get(index);
+        if (reconciler) {
+          addWaveSamples(index, activeSession.startTime, reconciler.flushAll());
+          waveReconcilers.delete(index);
+          waveTimeOrigins.delete(index);
+        }
         channels.stopRecording(index);
       }
     });
@@ -298,6 +314,8 @@ export function createTimeseriesIntegration(options: {
 
   function destroy(): void {
     unsubscribes.forEach((unsubscribe) => unsubscribe());
+    waveReconcilers.clear();
+    waveTimeOrigins.clear();
   }
 
   return {

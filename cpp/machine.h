@@ -2,7 +2,26 @@
 #define MACHINE_H
 
 #include <cstdint>
-#include <QColor>
+
+class RgbColor {
+public:
+    RgbColor(int red = 0, int green = 0, int blue = 0)
+        : redValue(red), greenValue(green), blueValue(blue) {}
+
+    int red() const { return redValue; }
+    int green() const { return greenValue; }
+    int blue() const { return blueValue; }
+    bool operator!=(const RgbColor &other) const {
+        return redValue != other.redValue
+            || greenValue != other.greenValue
+            || blueValue != other.blueValue;
+    }
+
+private:
+    int redValue;
+    int greenValue;
+    int blueValue;
+};
 
 // Mock machine class based on usage in processingdata.cpp
 class machine {
@@ -71,7 +90,7 @@ public:
     bool machineTypeUpdatFlag;
     
     // Visual
-    QColor color;
+    RgbColor color;
     bool colorUpdatFlag;
     
     // Other
@@ -118,7 +137,7 @@ public:
         machineType = 0;
         machineTypeUpdatFlag = false;
         
-        color = QColor(0, 0, 0);
+        color = RgbColor(0, 0, 0);
         colorUpdatFlag = false;
         
         NO = 0;

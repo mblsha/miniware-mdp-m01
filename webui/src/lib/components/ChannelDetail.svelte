@@ -7,6 +7,7 @@
   import type { Channel, WaveformPoint } from '$lib/types';
   import type { ChannelStore } from '$lib/stores/channels';
   import { getRuntime } from '$lib/app/context';
+  import { getDeviceLimits } from '$lib/device-limits';
   
   export let channelStore: ChannelStore | undefined = undefined;
   export let channel = 0;
@@ -29,6 +30,7 @@
   $: channels = resolvedChannelStore.channels;
   $: channelData = $channels[channel];
   $: isRecording = channelData?.recording ?? false;
+  $: deviceLimits = getDeviceLimits(channelData?.machineType ?? '');
   
   let targetVoltage = 0;
   let targetCurrent = 0;
@@ -130,7 +132,7 @@
                 type="number" 
                 bind:value={targetVoltage} 
                 min="0" 
-                max="30" 
+                max={deviceLimits?.maxVoltage ?? 0}
                 step="0.001"
                 data-testid="voltage-input"
               />
@@ -144,7 +146,7 @@
                 type="number" 
                 bind:value={targetCurrent} 
                 min="0" 
-                max="5" 
+                max={deviceLimits?.maxCurrent ?? 0}
                 step="0.001"
               />
             </label>

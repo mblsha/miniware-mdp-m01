@@ -25,15 +25,16 @@ int main(int argc, char *argv[])
     // Send a test heartbeat packet
     processor.slotHeartBeat();
     
-    // Test parsing a synthesize packet (minimal example)
+    // Test parsing a valid machine response packet.
     // Format: 5A 5A [type] [size] [ch] [checksum] [data...]
     QByteArray testPacket;
     testPacket.append(static_cast<char>(0x5A));  // Header 1
     testPacket.append(static_cast<char>(0x5A));  // Header 2
-    testPacket.append(static_cast<char>(0x11));  // PACK_SYNTHESIZE
-    testPacket.append(static_cast<char>(0x06));  // Size (header size)
+    testPacket.append(static_cast<char>(0x15));  // PACK_MACHINE
+    testPacket.append(static_cast<char>(0x07));  // Size
     testPacket.append(static_cast<char>(0x00));  // Channel 0
-    testPacket.append(static_cast<char>(0x00));  // Checksum (will be validated)
+    testPacket.append(static_cast<char>(0x10));  // Checksum
+    testPacket.append(static_cast<char>(0x10));  // M01 with LCD
     
     qDebug() << "\nTesting packet parsing...";
     processor.slotDisposeRawPack(testPacket);

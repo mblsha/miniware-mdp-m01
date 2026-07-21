@@ -115,7 +115,7 @@ QCoreApplication* ProcessingDataTest::app = nullptr;
 // Test PACK_WAVE parsing with 126-byte packet (2 points per group)
 TEST_F(ProcessingDataTest, TestWavePacket126Bytes) {
     // First send a synthesize packet to allow wave processing
-    QByteArray synData(processingData::syn_pack_max - 6, 0); // Empty synthesize data
+    QByteArray synData(150, 0); // Six 25-byte channel records
     QByteArray synPacket = createPacket(processingData::PACK_SYNTHESIZE, 0, synData);
     processor->slotDisposeRawPack(synPacket);
     
@@ -176,7 +176,7 @@ TEST_F(ProcessingDataTest, TestWavePacket126Bytes) {
 // Test PACK_WAVE parsing with 206-byte packet (4 points per group)
 TEST_F(ProcessingDataTest, TestWavePacket206Bytes) {
     // First send a synthesize packet to allow wave processing
-    QByteArray synData(processingData::syn_pack_max - 6, 0);
+    QByteArray synData(150, 0);
     QByteArray synPacket = createPacket(processingData::PACK_SYNTHESIZE, 0, synData);
     processor->slotDisposeRawPack(synPacket);
     
@@ -247,7 +247,7 @@ TEST_F(ProcessingDataTest, TestInvalidChecksum) {
 // Test multiple wave packets
 TEST_F(ProcessingDataTest, TestMultipleWavePackets) {
     // First send a synthesize packet to allow wave processing
-    QByteArray synData(processingData::syn_pack_max - 6, 0);
+    QByteArray synData(150, 0);
     QByteArray synPacket = createPacket(processingData::PACK_SYNTHESIZE, 0, synData);
     processor->slotDisposeRawPack(synPacket);
     
@@ -299,4 +299,3 @@ TEST_F(ProcessingDataTest, TestWaveDataGeneration) {
     // 10 groups * (4 bytes time + 4 points * 4 bytes) = 10 * 20 = 200 bytes
     EXPECT_EQ(data206.size(), 200);
 }
-
