@@ -1,5 +1,6 @@
 import { SerialPort } from 'serialport';
 import type { PacketHandler, RawDataHandler, SerialConfig } from './serial-types';
+import { extractProtocolPackets } from '../../webui/src/lib/protocol';
 
 const DEFAULT_CONFIG: SerialConfig = {
   baudRate: 115200,
@@ -46,30 +47,39 @@ export class NodeSerialConnection {
 
     this.port = port;
 
-    await new Promise<void>((resolve, reject) => {
-      const onError = (error: Error) => {
-        cleanup();
-        reject(error);
-      };
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error) => {
+          cleanup();
+          reject(error);
+        };
 
-      const onOpen = () => {
-        cleanup();
-        port.on('data', (chunk: Buffer) => this.handleIncomingData(chunk));
-        port.on('error', (err: Error) => {
-          console.error('Serial port error:', err);
-        });
-        resolve();
-      };
+        const onOpen = () => {
+          cleanup();
+          port.on('data', (chunk: Buffer) => this.handleIncomingData(chunk));
+          port.on('error', (err: Error) => {
+            this.stopHeartbeat();
+            console.error('Serial port error:', err);
+          });
+          resolve();
+        };
 
-      const cleanup = () => {
-        port.removeListener('open', onOpen);
-        port.removeListener('error', onError);
-      };
+        const cleanup = () => {
+          port.removeListener('open', onOpen);
+          port.removeListener('error', onError);
+        };
 
-      port.once('open', onOpen);
-      port.once('error', onError);
-      port.open();
-    });
+        port.once('open', onOpen);
+        port.once('error', onError);
+        port.open();
+      });
+    } catch (error) {
+      this.port = null;
+      if (port.isOpen) {
+        await new Promise<void>((resolve) => port.close(() => resolve()));
+      }
+      throw error;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -79,13 +89,18 @@ export class NodeSerialConnection {
       return;
     }
 
-    await new Promise<void>((resolve) => {
-      this.port?.once('close', () => resolve());
-      this.port?.close(() => resolve());
-    });
-
+    const port = this.port;
     this.port = null;
-    this.receiveBuffer = Buffer.alloc(0);
+    try {
+      if (port.isOpen) {
+        await new Promise<void>((resolve, reject) => {
+          port.close((error) => error ? reject(error) : resolve());
+        });
+      }
+    } finally {
+      port.removeAllListeners('data');
+      this.receiveBuffer = Buffer.alloc(0);
+    }
   }
 
   async sendPacket(packet: number[] | Uint8Array): Promise<void> {
@@ -93,11 +108,12 @@ export class NodeSerialConnection {
       throw new Error('Serial port not open');
     }
 
+    const port = this.port;
     const data = packet instanceof Uint8Array ? packet : Uint8Array.from(packet);
     await new Promise<void>((resolve, reject) => {
-      this.port?.write(data, (error) => {
+      port.write(data, (error) => {
         if (error) return reject(error);
-        resolve();
+        port.drain((drainError) => drainError ? reject(drainError) : resolve());
       });
     });
   }
@@ -183,47 +199,11 @@ export class NodeSerialConnection {
   }
 
   private processIncomingData(): void {
-    while (this.receiveBuffer.length >= 6) {
-      const headerIndex = this.findHeader();
-      if (headerIndex === -1) {
-        if (this.receiveBuffer.length > 256) {
-          this.receiveBuffer = Buffer.alloc(0);
-        }
-        break;
-      }
-
-      if (headerIndex > 0) {
-        this.receiveBuffer = this.receiveBuffer.slice(headerIndex);
-      }
-
-      if (this.receiveBuffer.length < 4) {
-        break;
-      }
-
-      const packetSize = this.receiveBuffer[3];
-      if (packetSize < 6) {
-        // Drop one byte to avoid a tight loop on malformed sizes.
-        this.receiveBuffer = this.receiveBuffer.slice(1);
-        continue;
-      }
-      if (this.receiveBuffer.length < packetSize) {
-        break;
-      }
-
-      const packetBuffer = this.receiveBuffer.slice(0, packetSize);
-      const numericPacket = Array.from(packetBuffer.values());
-      this.handlePacket(numericPacket);
-      this.receiveBuffer = this.receiveBuffer.slice(packetSize);
+    const { packets, remainder } = extractProtocolPackets(this.receiveBuffer);
+    this.receiveBuffer = Buffer.from(remainder);
+    for (const packet of packets) {
+      this.handlePacket(packet);
     }
-  }
-
-  private findHeader(): number {
-    for (let i = 0; i <= this.receiveBuffer.length - 2; i++) {
-      if (this.receiveBuffer[i] === 0x5A && this.receiveBuffer[i + 1] === 0x5A) {
-        return i;
-      }
-    }
-    return -1;
   }
 
   private handlePacket(packet: number[]): void {

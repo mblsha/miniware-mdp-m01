@@ -1,6 +1,8 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
 import type { SerialConfig, PacketHandler } from './types';
 import { decodePacket, isSynthesizePacket, isWavePacket, type SynthesizePacket, type WavePacket } from './packet-decoder';
+import { createGetMachinePacket, createHeartbeatPacket } from './packet-encoder';
+import { extractProtocolPackets } from './protocol';
 /// <reference path="./types/web-serial.d.ts" />
 
 export const ConnectionStatus = {
@@ -10,7 +12,7 @@ export const ConnectionStatus = {
   ERROR: 'error'
 } as const;
 
-export type DeviceType = 'M01' | 'M02';
+export type DeviceType = 'M01' | 'M02' | 'Unknown';
 
 export type DeviceInfo = {
   type: DeviceType;
@@ -56,6 +58,9 @@ export class SerialConnection {
   }
 
   async connect() {
+    if (this.port || this.reader || this.writer) {
+      await this.disconnect();
+    }
     try {
       this.statusStore.set(ConnectionStatus.CONNECTING);
       this.errorStore.set(null);
@@ -72,20 +77,12 @@ export class SerialConnection {
         ]
       };
       
-      try {
-        // Try with filters first
-        this.port = await navigator.serial.requestPort(filters);
-      } catch (error: unknown) {
-        // If user cancels or no matching devices, show all devices as fallback
-        if (error instanceof Error && 
-            (error.name === 'NotFoundError' || error.name === 'AbortError')) {
-          console.warn('No Miniware devices found or user cancelled. Showing all devices...');
-          this.port = await navigator.serial.requestPort();
-        } else {
-          throw error;
-        }
-      }
+      this.port = await navigator.serial.requestPort(filters);
       await this.port.open(SERIAL_CONFIG);
+
+      if (!this.port.readable || !this.port.writable) {
+        throw new Error('Selected serial port did not provide readable and writable streams');
+      }
 
       this.reader = this.port.readable.getReader();
       this.writer = this.port.writable.getWriter();
@@ -102,6 +99,7 @@ export class SerialConnection {
       this.getMachineType().catch(console.error);
 
     } catch (error: unknown) {
+      await this.closeResources(false).catch(() => undefined);
       this.statusStore.set(ConnectionStatus.ERROR);
       this.errorStore.set(error instanceof Error ? error.message : String(error));
       throw error;
@@ -109,28 +107,49 @@ export class SerialConnection {
   }
 
   async disconnect() {
+    await this.closeResources(true);
+  }
+
+  private async closeResources(setDisconnected: boolean): Promise<void> {
     this.stopHeartbeat();
-    
-    if (this.reader) {
-      await this.reader.cancel();
-      this.reader = null;
+    const reader = this.reader;
+    const writer = this.writer;
+    const port = this.port;
+    this.reader = null;
+    this.writer = null;
+    this.port = null;
+
+    let firstError: unknown = null;
+    try {
+      await reader?.cancel();
+    } catch (error) {
+      firstError ??= error;
+    } finally {
+      reader?.releaseLock?.();
     }
-    
-    if (this.writer) {
-      await this.writer.close();
-      this.writer = null;
+
+    try {
+      await writer?.close();
+    } catch (error) {
+      firstError ??= error;
+    } finally {
+      writer?.releaseLock?.();
     }
-    
-    if (this.port) {
-      await this.port.close();
-      this.port = null;
+
+    try {
+      await port?.close();
+    } catch (error) {
+      firstError ??= error;
+    } finally {
+      this.receiveBuffer = new Uint8Array(0);
+      this.deviceTypeStore.set(null);
+      if (setDisconnected) {
+        this.statusStore.set(ConnectionStatus.DISCONNECTED);
+        this.errorStore.set(null);
+      }
     }
-    
-    // Clear receive buffer
-    this.receiveBuffer = new Uint8Array(0);
-    
-    this.statusStore.set(ConnectionStatus.DISCONNECTED);
-    this.deviceTypeStore.set(null);
+
+    if (firstError && setDisconnected) throw firstError;
   }
 
   async readLoop() {
@@ -154,8 +173,10 @@ export class SerialConnection {
         console.error('Read error:', error);
         // Don't break immediately if not a disconnect error
         if (this.port && this.port.readable) {
+          this.stopHeartbeat();
           this.statusStore.set(ConnectionStatus.ERROR);
           this.errorStore.set(error instanceof Error ? error.message : String(error));
+          await this.closeResources(false).catch(() => undefined);
         }
         break; // Always break the loop on error
       }
@@ -163,49 +184,10 @@ export class SerialConnection {
   }
 
   processIncomingData() {
-    while (this.receiveBuffer.length >= 6) {
-      // Find packet header (0x5A 0x5A)
-      let headerIndex = -1;
-      for (let i = 0; i <= this.receiveBuffer.length - 2; i++) {
-        if (this.receiveBuffer[i] === 0x5A && this.receiveBuffer[i + 1] === 0x5A) {
-          headerIndex = i;
-          break;
-        }
-      }
-
-      // No valid header found
-      if (headerIndex === -1) {
-        // If we have more than 256 bytes without a header, clear buffer to prevent memory issues
-        if (this.receiveBuffer.length > 256) {
-          this.receiveBuffer = new Uint8Array(0);
-        }
-        break;
-      }
-
-      // Remove any garbage before header
-      if (headerIndex > 0) {
-        this.receiveBuffer = this.receiveBuffer.slice(headerIndex);
-      }
-
-      // Check if we have enough data for the complete packet
-      if (this.receiveBuffer.length < 4) {
-        break; // Need at least 4 bytes to read size
-      }
-      
-      const packetSize = this.receiveBuffer[3];
-      
-      if (this.receiveBuffer.length < packetSize) {
-        // Not enough data yet for complete packet
-        break;
-      }
-      
-      // Extract complete packet
-      const packet = this.receiveBuffer.slice(0, packetSize);
-      
-      this.handlePacket(Array.from(packet)); // Convert to array for compatibility
-      
-      // Remove processed packet from buffer
-      this.receiveBuffer = this.receiveBuffer.slice(packetSize);
+    const { packets, remainder } = extractProtocolPackets(this.receiveBuffer);
+    this.receiveBuffer = remainder;
+    for (const packet of packets) {
+      this.handlePacket(packet);
     }
   }
 
@@ -239,26 +221,25 @@ export class SerialConnection {
   }
 
   startHeartbeat(): void {
+    this.stopHeartbeat();
     this.heartbeatInterval = window.setInterval(() => {
       this.sendHeartbeat().catch(console.error);
     }, 1000);
   }
 
   stopHeartbeat(): void {
-    if (this.heartbeatInterval) {
+    if (this.heartbeatInterval !== null) {
       window.clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
   }
 
   async sendHeartbeat(): Promise<void> {
-    const packet = [0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00];
-    await this.sendPacket(packet);
+    await this.sendPacket(createHeartbeatPacket());
   }
 
   async getMachineType(): Promise<void> {
-    const packet = [0x5A, 0x5A, 0x21, 0x06, 0xEE, 0x00];
-    await this.sendPacket(packet);
+    await this.sendPacket(createGetMachinePacket());
   }
 
   setDeviceType(deviceType: DeviceInfo | null): void {

@@ -3,15 +3,24 @@
 
 #include <QObject>
 #include "machine.h"
-#include <QtCharts/QChartView>
-#include <QtCharts/QLineSeries>
-#include <QtCharts/QAreaSeries>
-#include <QtCharts/QValueAxis>
-#include <QtCharts/QSplineSeries>
 #include <QTimer>
 #include <QTime>
+#include <QPointF>
+#include <QList>
 
 QT_USE_NAMESPACE
+
+class SampleSeries
+{
+public:
+    void clear() { points.clear(); }
+    void replace(const QList<QPointF> &values) { points = values; }
+    qsizetype count() const { return points.count(); }
+    QPointF at(qsizetype index) const { return points.at(index); }
+
+private:
+    QList<QPointF> points;
+};
 
 #define RGB888_RED      0x00ff0000
 #define RGB888_GREEN    0x0000ff00
@@ -137,8 +146,8 @@ public:
 
     void setWaveMaxIndex(uint32_t Index){WaveMaxIndex = static_cast<int>(Index);/*slotCleanWave();*/}
 
-    QLineSeries  *series_V;
-    QLineSeries  *series_I;
+    SampleSeries *series_V = nullptr;
+    SampleSeries *series_I = nullptr;
 
 signals:
     //发送数据
@@ -208,17 +217,20 @@ private:
     //处理更新通道包。
     void processUpdatCh(QByteArray buffer);
     //校验数据包。
-    bool packCheeckSelf(QByteArray &buffer);
+    bool packCheeckSelf(const QByteArray &buffer) const;
+    bool isValidPacketSize(uint8_t type, uint8_t size) const;
     //处理设备类型数据包。
     void processMachineType(QByteArray buffer);
 
     QTimer WaveTimer;
+    SampleSeries voltageSeries;
+    SampleSeries currentSeries;
     //电压，电流波形数据。
     QList<QPointF> voltageData;
     QList<QPointF> electData;
     bool cleanWaveFlag = false;
 
-//    QByteArray RawPack;
+    QByteArray rawPackBuffer;
     int WaveMaxIndex = 4000;
     int WaveNowIndex = 0;
 

@@ -187,7 +187,7 @@ describe('ChannelDetail Component', () => {
       expect(voltageInput).toHaveAttribute('step', '0.001');
       
       expect(currentInput).toHaveAttribute('min', '0');
-      expect(currentInput).toHaveAttribute('max', '5');
+      expect(currentInput).toHaveAttribute('max', '10');
       expect(currentInput).toHaveAttribute('step', '0.001');
     });
 

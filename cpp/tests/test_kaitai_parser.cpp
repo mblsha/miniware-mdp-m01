@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <sstream>
 #include <cstring>
+#include <stdexcept>
 #include "miniware_mdp_m01.h"
 #include <kaitai/kaitaistream.h>
 
@@ -32,6 +33,15 @@ protected:
     
     // Helper to parse QByteArray with Kaitai
     std::unique_ptr<miniware_mdp_m01_t> parseWithKaitai(const QByteArray& data) {
+        // Kaitai C++ 0.11 can run generated cleanup before all packet members
+        // are initialized when the leading validation throws. Reject malformed
+        // framing before entering generated code, as production readers do.
+        if (data.size() < 2 ||
+            static_cast<uint8_t>(data.at(0)) != 0x5A ||
+            static_cast<uint8_t>(data.at(1)) != 0x5A) {
+            throw std::invalid_argument("invalid MDP packet magic");
+        }
+
         std::string dataStr(data.constData(), data.size());
         std::istringstream iss(dataStr);
         auto ks = std::make_unique<kaitai::kstream>(&iss);

@@ -213,7 +213,7 @@ types:
       has_lcd:
         value: machine_type_raw == 0x10
       machine_name:
-        value: 'machine_type_raw == 0x10 ? "M01 (LCD)" : "M02 (No LCD)"'
+        value: 'machine_type_raw == 0x10 ? "M01 (LCD)" : (machine_type_raw == 0x11 ? "M02 (No LCD)" : "Unknown")'
     seq:
       - id: channel
         type: u1

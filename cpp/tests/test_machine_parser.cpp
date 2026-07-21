@@ -150,7 +150,7 @@ TEST_F(MachinePacketTest, TestMachineTypeNoLcd) {
     EXPECT_EQ(machine->machine_name(), "M02 (No LCD)");
 }
 
-// Test unknown machine type (should default to noLcd)
+// Test unknown machine type (should remain explicitly unknown)
 TEST_F(MachinePacketTest, TestUnknownMachineType) {
     QSignalSpy machineSpy(processor, &processingData::signalSetMachine);
     
@@ -161,8 +161,7 @@ TEST_F(MachinePacketTest, TestUnknownMachineType) {
     // Process the packet
     processor->slotDisposeRawPack(packet);
     
-    // Unknown types should be set to noLcd
-    EXPECT_EQ(processor->machineType, processingData::noLcd);
+    EXPECT_EQ(processor->machineType, processingData::noType);
     
     // Signal should still be emitted
     EXPECT_EQ(machineSpy.count(), 1);
@@ -173,7 +172,7 @@ TEST_F(MachinePacketTest, TestUnknownMachineType) {
     auto* machine = static_cast<miniware_mdp_m01_t::machine_t*>(kaitai->packets()->at(0)->data());
     EXPECT_EQ(machine->machine_type_raw(), 0xFF);
     EXPECT_FALSE(machine->has_lcd()); // Unknown types are not LCD
-    EXPECT_EQ(machine->machine_name(), "M02 (No LCD)"); // Unknown defaults to M02
+    EXPECT_EQ(machine->machine_name(), "Unknown");
 }
 
 // Test invalid checksum handling

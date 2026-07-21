@@ -3,30 +3,32 @@ import { writable } from 'svelte/store';
 import { getMachineTypeString } from './machine-utils';
 import type { DecodedPacket } from './packet-decoder';
 import type { AddressData, AddressEntry, MachineData, SynthesizeChannel, SynthesizeData, WaveData } from './types/kaitai';
+import { PackType } from './protocol';
 
 // Debug logging enabled state
 export const debugEnabled = writable(true); // Default enabled
 
 // Packet type name mappings
 export const PACKET_TYPE_NAMES = {
-  17: 'SYNTHESIZE',    // 0x11
-  18: 'WAVE',          // 0x12  
-  19: 'ADDR',          // 0x13
-  20: 'UPDATE_CH',     // 0x14
-  21: 'MACHINE',       // 0x15
-  22: 'SET_ISOUTPUT',  // 0x16
-  23: 'GET_ADDR',      // 0x17
-  24: 'SET_ADDR',      // 0x18
-  25: 'SET_CH',        // 0x19
-  26: 'SET_V',         // 0x1A
-  27: 'SET_I',         // 0x1B
-  28: 'SET_ALL_ADDR',  // 0x1C
-  29: 'START_AUTO_MATCH', // 0x1D
-  30: 'STOP_AUTO_MATCH',  // 0x1E
-  31: 'RESET_TO_DFU',     // 0x1F
-  32: 'RGB',              // 0x20
-  33: 'GET_MACHINE',      // 0x21
-  34: 'HEARTBEAT'         // 0x22
+  [PackType.SYNTHESIZE]: 'SYNTHESIZE',
+  [PackType.WAVE]: 'WAVE',
+  [PackType.ADDR]: 'ADDR',
+  [PackType.UPDAT_CH]: 'UPDATE_CH',
+  [PackType.MACHINE]: 'MACHINE',
+  [PackType.SET_ISOUTPUT]: 'SET_ISOUTPUT',
+  [PackType.GET_ADDR]: 'GET_ADDR',
+  [PackType.SET_ADDR]: 'SET_ADDR',
+  [PackType.SET_CH]: 'SET_CH',
+  [PackType.SET_V]: 'SET_V',
+  [PackType.SET_I]: 'SET_I',
+  [PackType.SET_ALL_ADDR]: 'SET_ALL_ADDR',
+  [PackType.START_AUTO_MATCH]: 'START_AUTO_MATCH',
+  [PackType.STOP_AUTO_MATCH]: 'STOP_AUTO_MATCH',
+  [PackType.RESET_TO_DFU]: 'RESET_TO_DFU',
+  [PackType.RGB]: 'RGB',
+  [PackType.GET_MACHINE]: 'GET_MACHINE',
+  [PackType.HEARTBEAT]: 'HEARTBEAT',
+  [PackType.ERR_240]: 'ERR_240',
 };
 
 export function getPacketTypeName(typeNumber: number): string {

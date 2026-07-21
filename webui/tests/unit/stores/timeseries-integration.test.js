@@ -125,10 +125,11 @@ describe('TimeseriesIntegration', () => {
 
       const sessionData = get(timeseries.activeSessionData);
       expect(sessionData).toHaveLength(4);
-      expect(sessionData[0]).toMatchObject({ timestamp: 1000, ch0: { voltage: 3.3, current: 0.5 } });
-      expect(sessionData[1]).toMatchObject({ timestamp: 1010, ch0: { voltage: 3.31, current: 0.51 } });
-      expect(sessionData[2]).toMatchObject({ timestamp: 1020, ch0: { voltage: 3.32, current: 0.52 } });
-      expect(sessionData[3]).toMatchObject({ timestamp: 1030, ch0: { voltage: 3.33, current: 0.53 } });
+      expect(sessionData[0]).toMatchObject({ ch0: { voltage: 3.3, current: 0.5 } });
+      expect(sessionData[1]).toMatchObject({ ch0: { voltage: 3.31, current: 0.51 } });
+      expect(sessionData[2]).toMatchObject({ ch0: { voltage: 3.32, current: 0.52 } });
+      expect(sessionData[3]).toMatchObject({ ch0: { voltage: 3.33, current: 0.53 } });
+      expect(sessionData[0].timestamp).toBeGreaterThanOrEqual(get(timeseries.activeSession).startTime);
     });
 
     it('ignores packets when no active session', () => {

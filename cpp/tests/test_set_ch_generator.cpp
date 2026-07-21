@@ -128,16 +128,11 @@ TEST_F(SetChannelGeneratorTest, TestSendNowChFunction) {
     // Set channel 5 using the dedicated function
     processor->slotSendNowCh(5);
     
-    // Note: slotSendNowCh sends the packet TWICE (based on the code)
-    EXPECT_EQ(sendSpy.count(), 2);
+    EXPECT_EQ(sendSpy.count(), 1);
     
-    // Verify both packets are identical
-    if (sendSpy.count() >= 2) {
-        QByteArray packet1 = sendSpy.at(0).at(0).toByteArray();
-        QByteArray packet2 = sendSpy.at(1).at(0).toByteArray();
-        
-        EXPECT_EQ(packet1, packet2);
-        EXPECT_EQ(static_cast<uint8_t>(packet1[4]), 5);  // Channel
+    if (sendSpy.count() == 1) {
+        QByteArray packet = sendSpy.at(0).at(0).toByteArray();
+        EXPECT_EQ(static_cast<uint8_t>(packet[4]), 5);  // Channel
     }
     
     // Verify now_ch was updated

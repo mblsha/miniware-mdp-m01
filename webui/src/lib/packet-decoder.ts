@@ -5,16 +5,9 @@ import { get } from 'svelte/store';
 import type { DeviceInfo } from './serial.js';
 import type { Channel, WaveformPoint } from './types';
 import type { AddressData, AddressEntry, MachineData, SynthesizeChannel, SynthesizeData, UpdateChannelData, WaveData } from './types/kaitai';
+import { PackType } from './protocol';
 
-export const PackType = {
-  SYNTHESIZE: 0x11,
-  WAVE: 0x12,
-  ADDR: 0x13,
-  UPDAT_CH: 0x14,
-  MACHINE: 0x15,
-  SET_ISOUTPUT: 0x16,
-  ERR_240: 0x23
-} as const;
+export { PackType } from './protocol';
 
 type PacketBase<TData> = {
   packType: number;
@@ -387,7 +380,11 @@ export function processMachinePacket(packet: DecodedPacket | null): DeviceInfo |
   
   const machine = packet.data;
   
-  const type = machine.machineTypeRaw === 0x10 ? 'M01' : 'M02';
+  const type = machine.machineTypeRaw === 0x10
+    ? 'M01'
+    : machine.machineTypeRaw === 0x11
+      ? 'M02'
+      : 'Unknown';
   const hasLCD = machine.hasLcd ?? (machine.machineTypeRaw === 0x10);
   return { type, hasLCD } satisfies DeviceInfo;
 }

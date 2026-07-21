@@ -1,20 +1,36 @@
-// Packet types from protocol
-export const PacketType = {
-  // Host -> Device
-  SET_ISOUTPUT: 0x16,
-  GET_ADDR: 0x17,
-  SET_ADDR: 0x18,
-  SET_CH: 0x19,
-  SET_V: 0x1A,
-  SET_I: 0x1B,
-  SET_ALL_ADDR: 0x1C,
-  START_AUTO_MATCH: 0x1D,
-  STOP_AUTO_MATCH: 0x1E,
-  RESET_TO_DFU: 0x1F,
-  RGB: 0x20,
-  GET_MACHINE: 0x21,
-  HEARTBEAT: 0x22
-};
+import { PacketType } from './protocol';
+
+export { PacketType } from './protocol';
+
+const MAX_CHANNEL = 5;
+const BROADCAST_CHANNEL = 0xEE;
+const MAX_U16 = 0xFFFF;
+
+function assertIntegerInRange(name: string, value: number, min: number, max: number): void {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new RangeError(`${name} must be an integer between ${min} and ${max}`);
+  }
+}
+
+function assertChannel(channel: number, allowBroadcast = false): void {
+  if (allowBroadcast && channel === BROADCAST_CHANNEL) return;
+  assertIntegerInRange('Channel', channel, 0, MAX_CHANNEL);
+}
+
+function assertByte(name: string, value: number): void {
+  assertIntegerInRange(name, value, 0, 0xFF);
+}
+
+function toU16Milliunits(name: string, value: number): number {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${name} must be a finite non-negative number`);
+  }
+  const encoded = Math.round(value * 1000);
+  if (encoded > MAX_U16) {
+    throw new RangeError(`${name} exceeds the protocol maximum of 65.535`);
+  }
+  return encoded;
+}
 
 function calculateChecksum(data: number[]): number {
   let checksum = 0;
@@ -25,6 +41,9 @@ function calculateChecksum(data: number[]): number {
 }
 
 function createPacket(type: number, channel: number, data: number[] = []): number[] {
+  assertByte('Packet type', type);
+  assertChannel(channel, true);
+  data.forEach((byte, index) => assertByte(`Data byte ${index}`, byte));
   const size = 6 + data.length;
   const packet = [0x5A, 0x5A, type, size, channel];
   
@@ -44,12 +63,14 @@ export function createGetMachinePacket(): number[] {
 }
 
 export function createSetChannelPacket(channel: number): number[] {
+  assertChannel(channel);
   return createPacket(PacketType.SET_CH, channel);
 }
 
 function createVoltageCurrentPacket(type: number, channel: number, voltage: number, current: number): number[] {
-  const voltageMv = Math.round(voltage * 1000);
-  const currentMa = Math.round(current * 1000);
+  assertChannel(channel);
+  const voltageMv = toU16Milliunits('Voltage', voltage);
+  const currentMa = toU16Milliunits('Current', current);
 
   const data = [
     voltageMv & 0xFF,
@@ -70,6 +91,7 @@ export function createSetCurrentPacket(channel: number, voltage: number, current
 }
 
 export function createSetOutputPacket(channel: number, enabled: boolean): number[] {
+  assertChannel(channel);
   const data = [enabled ? 1 : 0];
   return createPacket(PacketType.SET_ISOUTPUT, channel, data);
 }
@@ -79,9 +101,12 @@ export function createGetAddressPacket(): number[] {
 }
 
 export function createSetAddressPacket(channel: number, address: number[], frequencyOffset: number): number[] {
+  assertChannel(channel);
   if (address.length !== 5) {
     throw new Error('Address must be 5 bytes');
   }
+  address.forEach((byte, index) => assertByte(`Address byte ${index}`, byte));
+  assertIntegerInRange('Frequency offset', frequencyOffset, 0, 83);
   
   const data = [...address, frequencyOffset];
   return createPacket(PacketType.SET_ADDR, channel, data);
@@ -97,6 +122,8 @@ export function createSetAllAddressPacket(addresses: Array<{address: number[], f
     if (addr.address.length !== 5) {
       throw new Error('Each address must be 5 bytes');
     }
+    addr.address.forEach((byte, index) => assertByte(`Address byte ${index}`, byte));
+    assertIntegerInRange('Frequency offset', addr.frequencyOffset, 0, 83);
     data.push(...addr.address, addr.frequencyOffset);
   }
   

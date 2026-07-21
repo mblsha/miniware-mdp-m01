@@ -19,9 +19,9 @@
     "commander": "^11.0.0",
     "kaitai-struct": "^0.10.0",
     "long": "^5.2.4",
-    "protobufjs": "^7.2.6",
+    "protobufjs": "^8.7.1",
     "serialport": "^11.0.0",
-    "svelte": "^5.35.2"
+    "svelte": "^5.56.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.31.0",

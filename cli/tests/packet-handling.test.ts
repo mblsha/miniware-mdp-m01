@@ -12,7 +12,7 @@ import {
   createHeartbeatPacket,
   createGetMachinePacket,
   PacketType
-} from './helpers/packet-helpers';
+} from '../../webui/src/lib/packet-encoder';
 
 describe('Packet Creation Tests', () => {
   describe('Packet Header Format', () => {

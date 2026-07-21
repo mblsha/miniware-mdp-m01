@@ -37,12 +37,13 @@ import {
   isMachinePacket,
   isWavePacket
 } from '../../webui/src/lib/packet-decoder';
-import { getDeviceLimits } from '../../webui/src/lib/device-limits';
+import { getDeviceLimits, validateDeviceTargets } from '../../webui/src/lib/device-limits';
 import { PackType } from './packet-types';
 import { debugEnabled } from '../../webui/src/lib/debug-logger';
 import { getMachineTypeString } from '../../webui/src/lib/machine-utils';
 import { perfetto } from '../../third_party/retrobus-perfetto/ts/src/proto/perfetto_pb.js';
 import { loadReplayChunks } from './perfetto-replay';
+import { requestChannelStatus, requestPacket, requestSynthesizeChannels } from './device-requests';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
@@ -152,6 +153,12 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function assertAppliedTarget(name: string, actual: number | undefined, expected: number): void {
+  if (actual === undefined || Math.abs(actual - expected) > 0.001) {
+    throw new Error(`${name} was not acknowledged by the device (expected ${expected}, received ${actual ?? 'unknown'})`);
+  }
+}
+
 type CsvWriter = {
   writeLine: (line: string) => void;
   close: () => Promise<void>;
@@ -160,13 +167,36 @@ type CsvWriter = {
 function createCsvWriter(outputPath?: string): CsvWriter {
   if (outputPath) {
     const stream = createWriteStream(outputPath, { encoding: 'utf8' });
+    let streamError: Error | null = null;
+    stream.on('error', (error) => {
+      streamError = error;
+    });
     return {
       writeLine: (line) => {
+        if (streamError) throw streamError;
         stream.write(`${line}\n`);
       },
       close: () =>
-        new Promise((resolve) => {
-          stream.end(() => resolve());
+        new Promise((resolve, reject) => {
+          if (streamError) {
+            reject(streamError);
+            return;
+          }
+          const cleanup = () => {
+            stream.removeListener('error', onError);
+            stream.removeListener('finish', onFinish);
+          };
+          const onError = (error: Error) => {
+            cleanup();
+            reject(error);
+          };
+          const onFinish = () => {
+            cleanup();
+            resolve();
+          };
+          stream.once('error', onError);
+          stream.once('finish', onFinish);
+          stream.end();
         })
     };
   }
@@ -204,28 +234,7 @@ async function fetchSynthesizeChannels(
   connection: NodeSerialConnection,
   timeoutMs = 2500
 ): Promise<ChannelUpdate[] | null> {
-  try {
-    await connection.sendPacket(createHeartbeatPacket());
-  } catch {
-    // ignore heartbeat failure during detection
-  }
-
-  const packet = await connection.waitForPacket(PackType.SYNTHESIZE, timeoutMs);
-  if (!packet) {
-    return null;
-  }
-
-  const decoded = decodePacket(packet);
-  if (!decoded) {
-    return null;
-  }
-
-  const processed = processSynthesizePacket(decoded);
-  if (!processed || processed.length === 0) {
-    return null;
-  }
-
-  return processed;
+  return requestSynthesizeChannels(connection, timeoutMs);
 }
 
 async function detectChannelFromSynthesize(
@@ -254,8 +263,12 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
     const connection = new NodeSerialConnection({ portPath: port.path });
     try {
       await connection.connect();
-      await connection.sendPacket(createGetMachinePacket());
-      const response = await connection.waitForPacket(PackType.MACHINE, 5000);
+      const response = await requestPacket(
+        connection,
+        PackType.MACHINE,
+        createGetMachinePacket(),
+        5000
+      );
       const decoded = response ? decodePacket(response) : null;
       const info = decoded ? processMachinePacket(decoded) : null;
 
@@ -316,22 +329,7 @@ async function waitForChannelStatus(
   channel: number,
   timeoutMs = STATUS_TIMEOUT_MS
 ): Promise<ChannelUpdate | null> {
-  const packet = await connection.waitForPacket(PackType.SYNTHESIZE, timeoutMs);
-  if (!packet) {
-    return null;
-  }
-
-  const decoded = decodePacket(packet);
-  if (!decoded) {
-    return null;
-  }
-
-  const processed = processSynthesizePacket(decoded);
-  if (!processed || processed.length === 0) {
-    return null;
-  }
-
-  return processed[channel] ?? processed[0];
+  return requestChannelStatus(connection, channel, timeoutMs);
 }
 
 
@@ -357,7 +355,7 @@ async function handleContextCommand(
   outputState?: string
 ): Promise<void> {
   const wantsStatus = Boolean(options.status || options.statusJson);
-  const wantsSets = Boolean(options.setVoltage || options.setCurrent);
+  const wantsSets = options.setVoltage !== undefined || options.setCurrent !== undefined;
   const wantsOutput = typeof outputState === 'string';
   const normalizedOutputState = wantsOutput ? (outputState ?? '').toLowerCase() : undefined;
 
@@ -409,27 +407,31 @@ async function handleContextCommand(
       throw new Error('Target current must be a valid number');
     }
 
-    if (parsedVoltage !== undefined) {
-      const currentTarget =
-        parsedCurrent ??
-        baseline?.targetCurrent ??
-        baseline?.current ??
-        0;
+    const voltageTarget = parsedVoltage ?? baseline?.targetVoltage ?? baseline?.voltage;
+    const currentTarget = parsedCurrent ?? baseline?.targetCurrent ?? baseline?.current;
+
+    if (wantsSets) {
+      if (voltageTarget === undefined || currentTarget === undefined) {
+        throw new Error('Unable to preserve the companion setpoint without current device status');
+      }
+      validateDeviceTargets(
+        baseline?.machineType ?? context.machineType,
+        voltageTarget,
+        currentTarget
+      );
+    }
+
+    if (parsedVoltage !== undefined && voltageTarget !== undefined && currentTarget !== undefined) {
       await connection.sendPacket(createSetChannelPacket(channel));
       await delay(50);
-      await connection.sendPacket(createSetVoltagePacket(channel, parsedVoltage, currentTarget));
+      await connection.sendPacket(createSetVoltagePacket(channel, voltageTarget, currentTarget));
       await delay(50);
     }
 
-    if (parsedCurrent !== undefined) {
-      const voltageTarget =
-        parsedVoltage ??
-        baseline?.targetVoltage ??
-        baseline?.voltage ??
-        0;
+    if (parsedCurrent !== undefined && voltageTarget !== undefined && currentTarget !== undefined) {
       await connection.sendPacket(createSetChannelPacket(channel));
       await delay(50);
-      await connection.sendPacket(createSetCurrentPacket(channel, voltageTarget, parsedCurrent));
+      await connection.sendPacket(createSetCurrentPacket(channel, voltageTarget, currentTarget));
       await delay(50);
     }
 
@@ -443,8 +445,23 @@ async function handleContextCommand(
       await delay(50);
     }
 
-    const finalStatus =
-      wantsStatus || wantsSets ? await waitForChannelStatus(connection, channel) : baseline;
+    const finalStatus = wantsSets || wantsOutput
+      ? await waitForChannelStatus(connection, channel)
+      : baseline;
+    if ((wantsStatus || wantsSets || wantsOutput) && !finalStatus) {
+      throw new Error('Device did not acknowledge the command with synthesize status');
+    }
+    if (finalStatus && wantsSets) {
+      if (parsedVoltage !== undefined) {
+        assertAppliedTarget('Voltage target', finalStatus.targetVoltage, voltageTarget!);
+      }
+      if (parsedCurrent !== undefined) {
+        assertAppliedTarget('Current target', finalStatus.targetCurrent, currentTarget!);
+      }
+    }
+    if (finalStatus && wantsOutput && finalStatus.isOutput !== (normalizedOutputState === 'on')) {
+      throw new Error(`Output ${normalizedOutputState?.toUpperCase()} was not acknowledged by the device`);
+    }
 
     if (options.statusJson && finalStatus) {
       const payload = {
@@ -480,7 +497,7 @@ async function handleContextCommand(
         `${alias} channel ${channel} updated: ${voltage.toFixed(3)} V / ${current.toFixed(3)} A`
       );
     } else if (wantsOutput && !wantsStatus && !options.statusJson && !wantsSets) {
-      console.log(`${alias} channel ${channel} output ${normalizedOutputState?.toUpperCase()}`);
+      console.log(`${alias} channel ${channel} output ${finalStatus?.isOutput ? 'ON' : 'OFF'}`);
     }
   } finally {
     await connection.disconnect();
@@ -492,32 +509,24 @@ async function handleRecordCommand(
   context: DeviceContext,
   options: RecordCommandOptions
 ): Promise<void> {
+  let channel = typeof context.channel === 'number' ? context.channel : 0;
+  const durationSeconds = parseDurationSeconds(options.duration);
+  const outputPath = options.outputCsv;
+  const perfettoPath = options.outputPerfetto;
+  const replayPerfettoPath = options.replayPerfetto;
+  const deviceLimits = getDeviceLimits(context.machineType);
+  if (!deviceLimits) {
+    throw new Error(`Unknown device type "${context.machineType}". Cannot determine max specs.`);
+  }
   const originalConsoleLog = console.log;
   const originalConsoleWarn = console.warn;
   const restoreConsole = () => {
     console.log = originalConsoleLog;
     console.warn = originalConsoleWarn;
   };
-  console.log = (...args: unknown[]) => {
-    process.stderr.write(`${format(...args)}\n`);
-  };
-  console.warn = (...args: unknown[]) => {
-    process.stderr.write(`${format(...args)}\n`);
-  };
-
-  let channel = typeof context.channel === 'number' ? context.channel : 0;
-  const durationSeconds = parseDurationSeconds(options.duration);
-  const outputPath = options.outputCsv;
-  const perfettoPath = options.outputPerfetto;
-  const replayPerfettoPath = options.replayPerfetto;
-  const writer = createCsvWriter(outputPath);
   const log = (message: string) => {
     process.stderr.write(`${message}\n`);
   };
-  const deviceLimits = getDeviceLimits(context.machineType);
-  if (!deviceLimits) {
-    throw new Error(`Unknown device type "${context.machineType}". Cannot determine max specs.`);
-  }
 
   if (get(debugEnabled)) {
     debugEnabled.set(false);
@@ -559,6 +568,18 @@ async function handleRecordCommand(
   const unsubscribeRaw = perfettoCapture
     ? connection.registerRawDataHandler((chunk) => perfettoCapture.recordRawChunk(chunk))
     : null;
+  const writer = createCsvWriter(outputPath);
+  console.log = (...args: unknown[]) => {
+    process.stderr.write(`${format(...args)}\n`);
+  };
+  console.warn = (...args: unknown[]) => {
+    process.stderr.write(`${format(...args)}\n`);
+  };
+  let unsubscribeWave: (() => void) | null = null;
+  let durationTimer: ReturnType<typeof setTimeout> | null = null;
+  let onSigint: (() => void) | null = null;
+  let connectionClosed = false;
+  let writerClosed = false;
   try {
     await connection.connect();
     if (!replayPerfettoPath) {
@@ -625,7 +646,7 @@ async function handleRecordCommand(
       });
     };
 
-    const unsubscribe = connection.registerPacketHandler(PackType.WAVE, (packet) => {
+    unsubscribeWave = connection.registerPacketHandler(PackType.WAVE, (packet) => {
       const decoded = decodePacket(packet);
       if (!decoded || !isWavePacket(decoded)) return;
 
@@ -668,26 +689,26 @@ async function handleRecordCommand(
     );
 
     let stopRequested = false;
-    let durationTimer: ReturnType<typeof setTimeout> | null = null;
     let resolveDone: (() => void) | null = null;
 
     const done = new Promise<void>((resolve) => {
       resolveDone = resolve;
     });
 
-    const onSigint = () => {
+    onSigint = () => {
       void stop('interrupted');
     };
 
     const stop = async (reason: string) => {
       if (stopRequested) return;
       stopRequested = true;
-      process.removeListener('SIGINT', onSigint);
+      if (onSigint) process.removeListener('SIGINT', onSigint);
       if (durationTimer) {
         clearTimeout(durationTimer);
         durationTimer = null;
       }
-      unsubscribe();
+      unsubscribeWave?.();
+      unsubscribeWave = null;
       const remainingSamples = reconciler.flushAll();
       emitSamples(remainingSamples);
       if (unsubscribeRaw) {
@@ -698,7 +719,9 @@ async function handleRecordCommand(
       }
       connection.stopHeartbeat();
       await connection.disconnect();
+      connectionClosed = true;
       await writer.close();
+      writerClosed = true;
       if (perfettoCapture && perfettoPath) {
         await writeBinaryFile(perfettoPath, perfettoCapture.serialize());
         log(`Perfetto trace written to ${perfettoPath}.`);
@@ -733,8 +756,21 @@ async function handleRecordCommand(
 
     await done;
   } catch (error) {
-    restoreConsole();
+    if (onSigint) process.removeListener('SIGINT', onSigint);
+    if (durationTimer) clearTimeout(durationTimer);
+    unsubscribeWave?.();
+    unsubscribeRaw?.();
+    unsubscribePacketObserver?.();
+    connection.stopHeartbeat();
+    if (!connectionClosed) {
+      await connection.disconnect().catch(() => undefined);
+    }
+    if (!writerClosed) {
+      await writer.close().catch(() => undefined);
+    }
     throw error;
+  } finally {
+    restoreConsole();
   }
 }
 
@@ -890,24 +926,27 @@ program
     const portPath = await resolvePort(options.port);
     const connection = new NodeSerialConnection({ portPath });
     await connection.connect();
-    const responsePromise = connection.waitForPacket(PackType.MACHINE, timeout);
-    await connection.sendPacket(createGetMachinePacket());
-    const response = await responsePromise;
-    if (!response) {
-      console.log('No machine response received.');
-      await connection.disconnect();
-      return;
-    }
-    const decoded = decodePacket(response);
-    const info = decoded ? processMachinePacket(decoded) : null;
-    if (info) {
+    try {
+      const response = await requestPacket(
+        connection,
+        PackType.MACHINE,
+        createGetMachinePacket(),
+        timeout
+      );
+      if (!response) {
+        throw new Error('No machine response received');
+      }
+      const decoded = decodePacket(response);
+      const info = decoded ? processMachinePacket(decoded) : null;
+      if (!info) {
+        throw new Error('Failed to decode machine packet');
+      }
       console.log('Device Information:');
       console.log(`  Type : ${info.type}`);
       console.log(`  LCD  : ${info.hasLCD ? 'present' : 'absent'}`);
-    } else {
-      console.log('Failed to decode machine packet.');
+    } finally {
+      await connection.disconnect();
     }
-    await connection.disconnect();
   });
 
 program
@@ -919,24 +958,48 @@ program
   .argument('<channel>', 'Channel index (0-5)')
   .action(async (channelArg, options) => {
     const channel = parseChannelArg(channelArg);
-    const voltage = options.targetVoltage ? Number(options.targetVoltage) : 0;
-    const current = options.targetCurrent ? Number(options.targetCurrent) : 0;
-    if (!Number.isFinite(voltage) || !Number.isFinite(current)) {
-      throw new Error('Voltage and current must be valid numbers');
+    if (options.targetVoltage === undefined && options.targetCurrent === undefined) {
+      throw new Error('Provide --target-voltage, --target-current, or both');
     }
+    const requestedVoltage = options.targetVoltage === undefined ? undefined : Number(options.targetVoltage);
+    const requestedCurrent = options.targetCurrent === undefined ? undefined : Number(options.targetCurrent);
 
     const portPath = await resolvePort(options.port);
     const connection = new NodeSerialConnection({ portPath });
     await connection.connect();
+    try {
+      const baseline = await waitForChannelStatus(connection, channel);
+      if (!baseline) throw new Error('No synthesize data received for the requested channel');
+      const voltage = requestedVoltage ?? baseline.targetVoltage ?? baseline.voltage;
+      const current = requestedCurrent ?? baseline.targetCurrent ?? baseline.current;
+      if (voltage === undefined || current === undefined) {
+        throw new Error('Unable to preserve the companion setpoint');
+      }
+      validateDeviceTargets(baseline.machineType ?? 'Unknown', voltage, current);
 
-    await connection.sendPacket(createSetChannelPacket(channel));
-    await delay(50);
-    await connection.sendPacket(createSetVoltagePacket(channel, voltage, current));
-    await delay(50);
-    await connection.sendPacket(createSetCurrentPacket(channel, voltage, current));
+      await connection.sendPacket(createSetChannelPacket(channel));
+      await delay(50);
+      if (requestedVoltage !== undefined) {
+        await connection.sendPacket(createSetVoltagePacket(channel, voltage, current));
+        await delay(50);
+      }
+      if (requestedCurrent !== undefined) {
+        await connection.sendPacket(createSetCurrentPacket(channel, voltage, current));
+        await delay(50);
+      }
 
-    console.log(`Set channel ${channel} to ${voltage.toFixed(2)}V / ${current.toFixed(3)}A`);
-    await connection.disconnect();
+      const acknowledged = await waitForChannelStatus(connection, channel);
+      if (!acknowledged) throw new Error('Device did not acknowledge the setpoint command');
+      if (requestedVoltage !== undefined) {
+        assertAppliedTarget('Voltage target', acknowledged.targetVoltage, voltage);
+      }
+      if (requestedCurrent !== undefined) {
+        assertAppliedTarget('Current target', acknowledged.targetCurrent, current);
+      }
+      console.log(`Set channel ${channel} to ${voltage.toFixed(3)}V / ${current.toFixed(3)}A`);
+    } finally {
+      await connection.disconnect();
+    }
   });
 
 program
@@ -955,13 +1018,20 @@ program
     const portPath = await resolvePort(options.port);
     const connection = new NodeSerialConnection({ portPath });
     await connection.connect();
-
-    await connection.sendPacket(createSetChannelPacket(channel));
-    await delay(50);
-    await connection.sendPacket(createSetOutputPacket(channel, normalized === 'on'));
-
-    console.log(`Channel ${channel} output ${normalized.toUpperCase()}`);
-    await connection.disconnect();
+    try {
+      await connection.sendPacket(createSetChannelPacket(channel));
+      await delay(50);
+      const enabled = normalized === 'on';
+      await connection.sendPacket(createSetOutputPacket(channel, enabled));
+      await delay(50);
+      const acknowledged = await waitForChannelStatus(connection, channel);
+      if (!acknowledged || acknowledged.isOutput !== enabled) {
+        throw new Error(`Device did not acknowledge output ${normalized.toUpperCase()}`);
+      }
+      console.log(`Channel ${channel} output ${acknowledged.isOutput ? 'ON' : 'OFF'}`);
+    } finally {
+      await connection.disconnect();
+    }
   });
 
 async function run(): Promise<void> {

@@ -10,7 +10,7 @@ import {
   createSetCurrentPacket,
   createSetOutputPacket,
   createHeartbeatPacket
-} from './helpers/packet-helpers';
+} from '../../webui/src/lib/packet-encoder';
 
 describe('Command Handler Tests', () => {
   describe('Set Voltage Command', () => {

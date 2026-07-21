@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { timeseriesStore } from '$lib/stores/timeseries.js';
+import { createTimeseriesStore } from '$lib/stores/timeseries.js';
+
+let timeseriesStore;
 
 describe('TimeseriesStore', () => {
   beforeEach(() => {
-    // Reset store before each test
-    timeseriesStore.reset();
+    timeseriesStore = createTimeseriesStore();
     vi.useFakeTimers();
   });
 

@@ -78,9 +78,8 @@ describe('Packet Encoder', () => {
       expect(packet).toEqual([0x5A, 0x5A, 0x19, 0x06, 0x05, 0x00]);
     });
 
-    it('should handle channel 255', () => {
-      const packet = createSetChannelPacket(255);
-      expect(packet).toEqual([0x5A, 0x5A, 0x19, 0x06, 0xFF, 0x00]);
+    it('should reject channels outside the device range', () => {
+      expect(() => createSetChannelPacket(255)).toThrow('Channel must be an integer between 0 and 5');
     });
   });
 
@@ -274,25 +273,16 @@ describe('Packet Encoder', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle negative voltage/current by taking absolute value', () => {
-      const packet = createSetVoltagePacket(0, -3.3, -0.5);
-      const voltage = (packet[6] | (packet[7] << 8));
-      const current = (packet[8] | (packet[9] << 8));
-      
-      // Should handle negative as 0 or throw error
-      // Based on implementation, it might convert to positive
-      expect(voltage).toBeGreaterThanOrEqual(0);
-      expect(current).toBeGreaterThanOrEqual(0);
+    it('should reject negative voltage/current values', () => {
+      expect(() => createSetVoltagePacket(0, -3.3, -0.5)).toThrow(
+        'Voltage must be a finite non-negative number'
+      );
     });
 
-    it('should handle very large voltage/current values', () => {
-      const packet = createSetVoltagePacket(0, 1000, 1000);
-      const voltage = (packet[6] | (packet[7] << 8));
-      const current = (packet[8] | (packet[9] << 8));
-      
-      // Should either clamp or wrap around
-      expect(voltage).toBeLessThanOrEqual(65535);
-      expect(current).toBeLessThanOrEqual(65535);
+    it('should reject values that exceed the protocol representation', () => {
+      expect(() => createSetVoltagePacket(0, 1000, 1000)).toThrow(
+        'Voltage exceeds the protocol maximum of 65.535'
+      );
     });
   });
 });

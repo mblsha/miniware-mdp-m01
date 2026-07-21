@@ -129,6 +129,10 @@ describe('Channel Store', () => {
     });
 
     it('setVoltage sends packet and updates target values', async () => {
+      channelStore.channels.update((channels) => {
+        channels[1].machineType = 'P906';
+        return channels;
+      });
       await channelStore.setVoltage(1, 5.0, 1.0);
 
       expect(serial.sendPacket).toHaveBeenCalled();
@@ -139,6 +143,10 @@ describe('Channel Store', () => {
     });
 
     it('setCurrent sends packet and updates target values', async () => {
+      channelStore.channels.update((channels) => {
+        channels[2].machineType = 'P906';
+        return channels;
+      });
       await channelStore.setCurrent(2, 3.3, 2.0);
 
       expect(serial.sendPacket).toHaveBeenCalled();
