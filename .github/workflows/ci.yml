@@ -203,7 +203,11 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build qt6-base-dev libgtest-dev kaitai-struct-compiler
+          sudo apt-get install -y ninja-build qt6-base-dev libgtest-dev default-jre-headless
+          curl -fsSLo /tmp/kaitai-struct-compiler.deb \
+            https://github.com/kaitai-io/kaitai_struct_compiler/releases/download/0.11/kaitai-struct-compiler_0.11_all.deb
+          echo "28d6b6ec917e394ed41cb6f62169a8f6b584d9a5242cbe0785b0568d95e032ea  /tmp/kaitai-struct-compiler.deb" | sha256sum -c -
+          sudo apt-get install -y /tmp/kaitai-struct-compiler.deb
 
       - name: Configure with sanitizers
         run: cmake -S cpp -B cpp/build-ci -G Ninja -DMDP_ENABLE_SANITIZERS=ON
