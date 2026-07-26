@@ -273,9 +273,15 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
       const info = decoded ? processMachinePacket(decoded) : null;
 
       if (!response) {
-        console.warn(`No machine response from ${port.path}; probing synthesize data instead.`);
+        console.warn(
+          `No machine-identification response from ${port.path}; ` +
+          'probing live channel-status packets instead.'
+        );
       } else if (!info) {
-        console.warn(`Unable to decode machine packet from ${port.path}; probing synthesize data instead.`);
+        console.warn(
+          `Unable to decode the machine-identification packet from ${port.path}; ` +
+          'probing live channel-status packets instead.'
+        );
       }
 
       const synthesizeChannels = await fetchSynthesizeChannels(connection);
