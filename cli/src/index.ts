@@ -48,6 +48,7 @@ import {
   requestPacket,
   requestSynthesizeChannelsWithRetry
 } from './device-requests';
+import { parseOutputOnAfterSeconds } from './record-schedule';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
@@ -364,6 +365,7 @@ interface RecordCommandOptions {
   outputCsv?: string;
   outputPerfetto?: string;
   replayPerfetto?: string;
+  outputOnAfter?: string;
 }
 
 async function handleContextCommand(
@@ -532,6 +534,11 @@ async function handleRecordCommand(
   const outputPath = options.outputCsv;
   const perfettoPath = options.outputPerfetto;
   const replayPerfettoPath = options.replayPerfetto;
+  const outputOnAfterSeconds = parseOutputOnAfterSeconds(
+    options.outputOnAfter,
+    durationSeconds,
+    replayPerfettoPath
+  );
   const deviceLimits = getDeviceLimits(context.machineType);
   if (!deviceLimits) {
     throw new Error(`Unknown device type "${context.machineType}". Cannot determine max specs.`);
@@ -595,6 +602,9 @@ async function handleRecordCommand(
   };
   let unsubscribeWave: (() => void) | null = null;
   let durationTimer: ReturnType<typeof setTimeout> | null = null;
+  let outputOnTimer: ReturnType<typeof setTimeout> | null = null;
+  let outputOnTransition: Promise<void> | null = null;
+  let outputOnError: Error | null = null;
   let onSigint: (() => void) | null = null;
   let connectionClosed = false;
   let writerClosed = false;
@@ -725,6 +735,13 @@ async function handleRecordCommand(
         clearTimeout(durationTimer);
         durationTimer = null;
       }
+      if (outputOnTimer) {
+        clearTimeout(outputOnTimer);
+        outputOnTimer = null;
+      }
+      if (outputOnTransition) {
+        await outputOnTransition;
+      }
       unsubscribeWave?.();
       unsubscribeWave = null;
       const remainingSamples = reconciler.flushAll();
@@ -751,6 +768,33 @@ async function handleRecordCommand(
     };
 
     process.once('SIGINT', onSigint);
+    if (outputOnAfterSeconds !== null) {
+      outputOnTimer = setTimeout(() => {
+        outputOnTimer = null;
+        outputOnTransition = (async () => {
+          await connection.sendPacket(createSetChannelPacket(channel));
+          await delay(50);
+          await connection.sendPacket(createSetOutputPacket(channel, true));
+          await delay(50);
+          const acknowledged = connection instanceof NodeSerialConnection
+            ? await waitForChannelStatus(connection, channel)
+            : null;
+          if (!acknowledged || !acknowledged.isOutput) {
+            throw new Error(
+              `Scheduled output ON was not acknowledged for channel ${channel}`
+            );
+          }
+          log(
+            `Scheduled output ON acknowledged for channel ${channel} ` +
+            `after ${outputOnAfterSeconds.toFixed(3)}s.`
+          );
+        })().catch((error: unknown) => {
+          outputOnError = error instanceof Error
+            ? error
+            : new Error(String(error));
+        });
+      }, outputOnAfterSeconds * 1000);
+    }
     if (durationSeconds && !replayPerfettoPath) {
       durationTimer = setTimeout(() => {
         void stop('duration elapsed');
@@ -773,9 +817,13 @@ async function handleRecordCommand(
     }
 
     await done;
+    if (outputOnError) {
+      throw outputOnError;
+    }
   } catch (error) {
     if (onSigint) process.removeListener('SIGINT', onSigint);
     if (durationTimer) clearTimeout(durationTimer);
+    if (outputOnTimer) clearTimeout(outputOnTimer);
     unsubscribeWave?.();
     unsubscribeRaw?.();
     unsubscribePacketObserver?.();
@@ -830,6 +878,10 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
       .option('--output-csv <path>', 'Write CSV to a file instead of stdout')
       .option('--output-perfetto <path>', 'Write Perfetto trace to a file')
       .option('--replay-perfetto <path>', 'Replay raw chunks from a Perfetto trace instead of live serial')
+      .option(
+        '--output-on-after <sec>',
+        'Turn the selected output on during capture after this delay'
+      )
       .action(async (options: RecordCommandOptions) => {
         await handleRecordCommand(alias, context, options);
       });
