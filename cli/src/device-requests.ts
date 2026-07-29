@@ -41,6 +41,25 @@ export async function requestSynthesizeChannels(
   return processed && processed.length > 0 ? processed : null;
 }
 
+export async function requestSynthesizeChannelsWithRetry(
+  connection: RequestConnection,
+  timeoutMs = 2500,
+  attempts = 3
+): Promise<ChannelUpdate[] | null> {
+  if (!Number.isInteger(attempts) || attempts < 1) {
+    throw new RangeError('Synthesize request attempts must be a positive integer');
+  }
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const channels = await requestSynthesizeChannels(connection, timeoutMs);
+    if (channels) {
+      return channels;
+    }
+  }
+
+  return null;
+}
+
 export async function requestChannelStatus(
   connection: RequestConnection,
   channel: number,
