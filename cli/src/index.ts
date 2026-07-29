@@ -43,7 +43,11 @@ import { debugEnabled } from '../../webui/src/lib/debug-logger';
 import { getMachineTypeString } from '../../webui/src/lib/machine-utils';
 import { perfetto } from '../../third_party/retrobus-perfetto/ts/src/proto/perfetto_pb.js';
 import { loadReplayChunks } from './perfetto-replay';
-import { requestChannelStatus, requestPacket, requestSynthesizeChannels } from './device-requests';
+import {
+  requestChannelStatus,
+  requestPacket,
+  requestSynthesizeChannelsWithRetry
+} from './device-requests';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
@@ -234,7 +238,7 @@ async function fetchSynthesizeChannels(
   connection: NodeSerialConnection,
   timeoutMs = 2500
 ): Promise<ChannelUpdate[] | null> {
-  return requestSynthesizeChannels(connection, timeoutMs);
+  return requestSynthesizeChannelsWithRetry(connection, timeoutMs);
 }
 
 async function detectChannelFromSynthesize(
@@ -310,6 +314,14 @@ async function discoverDeviceContexts(): Promise<DeviceContextParams[]> {
         ? selectMachineTypeFromChannels(synthesizeChannels)
         : null;
       const machineType = channelMachineTypes ?? fallbackLabel ?? info.type;
+      if (!getDeviceLimits(machineType)) {
+        console.warn(
+          `Controller ${port.path} identified as ${machineType}, but no ` +
+          'P905/P906/L1060 channel status was received after three attempts; ' +
+          'not exposing it as a controllable PSU/load context.'
+        );
+        continue;
+      }
       const category = categorizeDevice(machineType);
       const channelHint = synthesizeChannels
         ? selectChannelFromChannels(synthesizeChannels, category)

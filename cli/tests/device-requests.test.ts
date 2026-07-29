@@ -13,7 +13,11 @@ vi.mock('../../webui/src/lib/packet-decoder', () => ({
     machineType: 'P906',
   }],
 }));
-import { requestChannelStatus, requestPacket } from '../src/device-requests';
+import {
+  requestChannelStatus,
+  requestPacket,
+  requestSynthesizeChannelsWithRetry
+} from '../src/device-requests';
 import { PackType } from '../src/packet-types';
 import { createGetMachinePacket } from '../../webui/src/lib/packet-encoder';
 import {
@@ -71,5 +75,38 @@ describe('device request sequencing', () => {
     };
 
     await expect(requestChannelStatus(connection, 99, 50)).resolves.toBeNull();
+  });
+
+  it('retries transiently missing synthesize status before device selection', async () => {
+    const packet = [0x5A, 0x5A, PackType.SYNTHESIZE, 156];
+    let waits = 0;
+    const connection = {
+      waitForPacket: async () => {
+        waits += 1;
+        return waits < 3 ? null : packet;
+      },
+      sendPacket: async () => undefined,
+    };
+
+    await expect(
+      requestSynthesizeChannelsWithRetry(connection, 50, 3)
+    ).resolves.toEqual([
+      expect.objectContaining({
+        channel: 0,
+        machineType: 'P906',
+      }),
+    ]);
+    expect(waits).toBe(3);
+  });
+
+  it('rejects an invalid synthesize retry count', async () => {
+    const connection = {
+      waitForPacket: async () => null,
+      sendPacket: async () => undefined,
+    };
+
+    await expect(
+      requestSynthesizeChannelsWithRetry(connection, 50, 0)
+    ).rejects.toThrow('positive integer');
   });
 });
