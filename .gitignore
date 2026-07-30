@@ -1,3 +1,4 @@
 webui/playwright-report/
 webui/test-results/
 cli/node_modules/
+cli/.work/
