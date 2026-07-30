@@ -1,4 +1,5 @@
 import { createWriteStream } from 'node:fs';
+import { rename, writeFile } from 'node:fs/promises';
 import { format } from 'node:util';
 import { Command } from 'commander';
 import { SerialPort } from 'serialport';
@@ -49,6 +50,16 @@ import {
   requestSynthesizeChannelsWithRetry
 } from './device-requests';
 import { parseOutputOnAfterSeconds } from './record-schedule';
+import {
+  buildRecordClockSync,
+  parseRecordCorrelation
+} from './record-correlation';
+import {
+  addMeasurement,
+  createMeasurementAccumulator,
+  finishMeasurements,
+  parseMetadataPath
+} from './record-provenance';
 
 const TARGET_VENDOR_ID = 0x0416;
 const TARGET_PRODUCT_ID = 0xdc01;
@@ -364,8 +375,11 @@ interface RecordCommandOptions {
   duration?: string;
   outputCsv?: string;
   outputPerfetto?: string;
+  outputMetadata?: string;
   replayPerfetto?: string;
   outputOnAfter?: string;
+  transitionId?: string;
+  clockSyncJson?: string;
 }
 
 async function handleContextCommand(
@@ -533,7 +547,13 @@ async function handleRecordCommand(
   const durationSeconds = parseDurationSeconds(options.duration);
   const outputPath = options.outputCsv;
   const perfettoPath = options.outputPerfetto;
+  const metadataPath = parseMetadataPath(options.outputMetadata);
   const replayPerfettoPath = options.replayPerfetto;
+  const correlation = parseRecordCorrelation(
+    options.transitionId,
+    options.clockSyncJson,
+    replayPerfettoPath
+  );
   const outputOnAfterSeconds = parseOutputOnAfterSeconds(
     options.outputOnAfter,
     durationSeconds,
@@ -575,11 +595,39 @@ async function handleRecordCommand(
         format: 'trace'
       })
     : null;
-  const unsubscribePacketObserver = perfettoCapture
+  if (perfettoCapture && correlation.transitionId) {
+    perfettoCapture.recordMarker({
+      name: 'transition:capture-created',
+      timestampNs: 0,
+      annotations: {
+        transition_id: correlation.transitionId,
+        phase: 'capture-created'
+      }
+    });
+  }
+  let rawChunkCount = 0;
+  let rawByteCount = 0;
+  let checksumFailureCount = 0;
+  let gapCount = 0;
+  let wavePacketCount = 0;
+  const measurementAccumulator = createMeasurementAccumulator();
+  const captureStartedAt = new Date().toISOString();
+  const captureStartedRealtimeNs = (BigInt(Date.now()) * 1_000_000n).toString();
+  let controllerMachine: {
+    type: string;
+    raw_type: number;
+    name: string | null;
+    has_lcd: boolean;
+  } | null = null;
+  let initialStatus: ChannelUpdate | null = null;
+  let finalStatus: ChannelUpdate | null = null;
+  const needsPacketDiagnostics = Boolean(perfettoCapture || metadataPath);
+  const unsubscribePacketObserver = needsPacketDiagnostics
     ? connection.registerPacketObserver((packet) => {
         const validation = validatePacketChecksum(packet);
         if (!validation || validation.ok) return;
-        perfettoCapture.recordAlert({
+        checksumFailureCount += 1;
+        perfettoCapture?.recordAlert({
           type: 'checksum_failed',
           channel: validation.channel,
           packetType: validation.packetType,
@@ -590,8 +638,12 @@ async function handleRecordCommand(
         });
       })
     : null;
-  const unsubscribeRaw = perfettoCapture
-    ? connection.registerRawDataHandler((chunk) => perfettoCapture.recordRawChunk(chunk))
+  const unsubscribeRaw = needsPacketDiagnostics
+    ? connection.registerRawDataHandler((chunk) => {
+        rawChunkCount += 1;
+        rawByteCount += chunk.byteLength;
+        perfettoCapture?.recordRawChunk(chunk);
+      })
     : null;
   const writer = createCsvWriter(outputPath);
   console.log = (...args: unknown[]) => {
@@ -611,6 +663,25 @@ async function handleRecordCommand(
   try {
     await connection.connect();
     if (!replayPerfettoPath) {
+      if (!(connection instanceof NodeSerialConnection)) {
+        throw new Error('Live recording requires a serial connection');
+      }
+      const machineResponse = await requestPacket(
+        connection,
+        PackType.MACHINE,
+        createGetMachinePacket(),
+        5000
+      );
+      const machineDecoded = machineResponse ? decodePacket(machineResponse) : null;
+      const machineInfo = machineDecoded ? processMachinePacket(machineDecoded) : null;
+      if (machineDecoded && machineInfo && isMachinePacket(machineDecoded)) {
+        controllerMachine = {
+          type: machineInfo.type,
+          raw_type: machineDecoded.data.machineTypeRaw,
+          name: machineDecoded.data.machineName ?? null,
+          has_lcd: machineInfo.hasLCD
+        };
+      }
       if (typeof context.channel !== 'number') {
         const detected = connection instanceof NodeSerialConnection
           ? await detectChannelFromSynthesize(connection, context.category)
@@ -623,7 +694,39 @@ async function handleRecordCommand(
       }
       await connection.sendPacket(createSetChannelPacket(channel));
       await delay(50);
+      initialStatus = connection instanceof NodeSerialConnection
+        ? await waitForChannelStatus(connection, channel)
+        : null;
+      finalStatus = initialStatus;
       connection.startHeartbeat(() => createHeartbeatPacket(), 1000);
+    }
+    if (
+      correlation.transitionId &&
+      correlation.syncJsonPath &&
+      perfettoNowNs
+    ) {
+      const traceBeforeNs = perfettoNowNs();
+      const hostRealtimeNs = BigInt(Date.now()) * 1_000_000n;
+      const traceAfterNs = perfettoNowNs();
+      const sync = buildRecordClockSync(
+        correlation.transitionId,
+        traceBeforeNs,
+        traceAfterNs,
+        hostRealtimeNs
+      );
+      const temporaryPath = `${correlation.syncJsonPath}.tmp`;
+      await writeFile(temporaryPath, `${JSON.stringify(sync, null, 2)}\n`);
+      await rename(temporaryPath, correlation.syncJsonPath);
+      perfettoCapture?.recordMarker({
+        name: 'transition:capture-ready',
+        timestampNs: sync.trace_timestamp_ns,
+        annotations: {
+          transition_id: correlation.transitionId,
+          phase: 'capture-ready',
+          host_realtime_ns: sync.host_realtime_ns,
+          bracket_uncertainty_ns: sync.bracket_uncertainty_ns
+        }
+      });
     }
 
     let pointCount = 0;
@@ -637,6 +740,7 @@ async function handleRecordCommand(
 
     const emitSamples = (samples: WaveSample[]) => {
       samples.forEach((sample) => {
+        addMeasurement(measurementAccumulator, sample.voltage, sample.current);
         writer.writeLine(
           `${sample.timeSeconds.toFixed(6)},${sample.voltage.toFixed(6)},${sample.current.toFixed(6)}`
         );
@@ -690,11 +794,13 @@ async function handleRecordCommand(
         hasWaveData = true;
         log(`Receiving wave data for channel ${channel}...`);
       }
+      wavePacketCount += 1;
 
       const packetNs = recordNowNs();
       if (perfettoCapture && perfettoNowNs && lastWavePacketNs !== null) {
         const deltaNs = packetNs - lastWavePacketNs;
         if (deltaNs > DEFAULT_WAVE_GAP_NS) {
+          gapCount += 1;
           perfettoCapture.recordAlert({
             type: 'delta_t_oos',
             channel,
@@ -742,6 +848,9 @@ async function handleRecordCommand(
       if (outputOnTransition) {
         await outputOnTransition;
       }
+      if (!replayPerfettoPath && connection instanceof NodeSerialConnection) {
+        finalStatus = await waitForChannelStatus(connection, channel).catch(() => finalStatus);
+      }
       unsubscribeWave?.();
       unsubscribeWave = null;
       const remainingSamples = reconciler.flushAll();
@@ -762,6 +871,45 @@ async function handleRecordCommand(
         log(`Perfetto trace written to ${perfettoPath}.`);
       }
       const duration = reconciler.getLastEmittedNs() / 1_000_000_000;
+      if (metadataPath) {
+        const metadata = {
+          schema: 1,
+          created_at: captureStartedAt,
+          completed_at: new Date().toISOString(),
+          capture_started_host_realtime_ns: captureStartedRealtimeNs,
+          alias,
+          transition_id: correlation.transitionId,
+          stop_reason: reason,
+          requested_duration_s: durationSeconds,
+          emitted_duration_s: duration,
+          controller: {
+            port_path: replayPerfettoPath ? null : context.portPath,
+            selected_machine_type: context.machineType,
+            machine: controllerMachine,
+            channel,
+            initial_status: initialStatus,
+            final_status: finalStatus
+          },
+          transport: {
+            raw_chunks: rawChunkCount,
+            raw_bytes: rawByteCount,
+            wave_packets: wavePacketCount,
+            checksum_failures: checksumFailureCount,
+            gaps_over_1s: gapCount,
+            ignored_wave_channels: [...ignoredChannels].sort((left, right) => left - right)
+          },
+          measurement: finishMeasurements(measurementAccumulator),
+          host: {
+            node: process.version,
+            platform: process.platform,
+            arch: process.arch
+          }
+        };
+        const temporaryPath = `${metadataPath}.tmp`;
+        await writeFile(temporaryPath, `${JSON.stringify(metadata, null, 2)}\n`);
+        await rename(temporaryPath, metadataPath);
+        log(`Capture metadata written to ${metadataPath}.`);
+      }
       log(`Recording stopped (${reason}). ${pointCount} samples over ${duration.toFixed(3)}s.`);
       restoreConsole();
       resolveDone?.();
@@ -877,10 +1025,19 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
       .option('--duration <sec>', 'Recording duration in seconds')
       .option('--output-csv <path>', 'Write CSV to a file instead of stdout')
       .option('--output-perfetto <path>', 'Write Perfetto trace to a file')
+      .option('--output-metadata <path>', 'Write atomic capture provenance JSON')
       .option('--replay-perfetto <path>', 'Replay raw chunks from a Perfetto trace instead of live serial')
       .option(
         '--output-on-after <sec>',
         'Turn the selected output on during capture after this delay'
+      )
+      .option(
+        '--transition-id <id>',
+        'Attach a stable experiment transition ID to the Perfetto capture'
+      )
+      .option(
+        '--clock-sync-json <path>',
+        'Write the transition trace/realtime clock relationship as JSON'
       )
       .action(async (options: RecordCommandOptions) => {
         await handleRecordCommand(alias, context, options);

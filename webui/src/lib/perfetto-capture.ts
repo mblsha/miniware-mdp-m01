@@ -95,7 +95,14 @@ export type PerfettoAlert = {
 export type PerfettoCapture = {
   recordRawChunk: (chunk: Uint8Array) => void;
   recordAlert: (alert: PerfettoAlert) => void;
+  recordMarker: (marker: PerfettoMarker) => void;
   serialize: () => Uint8Array;
+};
+
+export type PerfettoMarker = {
+  name: string;
+  annotations?: Record<string, string | number | boolean>;
+  timestampNs?: number;
 };
 
 const TRACK_EVENT_TYPE_INSTANT = 3;
@@ -256,6 +263,18 @@ export function createPerfettoCapture(
     addInstantEvent(alertThreadUuid, `alert:${alert.type}`, annotations, timestampNs);
   };
 
+  const recordMarker = (marker: PerfettoMarker): void => {
+    const annotations = Object.entries(marker.annotations ?? {}).map(
+      ([name, value]) => buildAnnotation(name, value)
+    );
+    addInstantEvent(
+      alertThreadUuid,
+      marker.name,
+      annotations,
+      marker.timestampNs ?? options.nowNs()
+    );
+  };
+
   const serialize = (): Uint8Array => {
     if (format === 'trace') {
       const trace: TraceMessage = { packet: packets };
@@ -275,6 +294,7 @@ export function createPerfettoCapture(
   return {
     recordRawChunk,
     recordAlert,
+    recordMarker,
     serialize
   };
 }
