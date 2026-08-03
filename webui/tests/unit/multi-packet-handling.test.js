@@ -9,8 +9,9 @@ vi.mock('$lib/kaitai-wrapper.js', () => {
   MockMiniwareMdpM01.PackType = {
     SYNTHESIZE: 0x11,
     WAVE: 0x12,
-    HEARTBEAT: 0x22,
-    MACHINE: 0x16
+    UPDATE_CH: 0x14,
+    MACHINE: 0x15,
+    ERROR: 0x23
   };
   
   return {
@@ -27,29 +28,21 @@ describe('Multi-Packet Handling Analysis', () => {
   describe('packet-decoder.js with multiple packets', () => {
     it('should FAIL when decodePacket receives multiple packets', () => {
       // Create two small packets
-      const packet1 = [0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00]; // Heartbeat (6 bytes)
-      const packet2 = [0x5A, 0x5A, 0x16, 0x07, 0xEE, 0x10, 0x10]; // Machine (7 bytes)
+      const packet1 = [0x5A, 0x5A, 0x23, 0x06, 0xEE, 0x00]; // Legacy error (6 bytes)
+      const packet2 = [0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x10, 0x10]; // Machine (7 bytes)
       
       // Combine them
       const multiPacketData = [...packet1, ...packet2];
-      
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       
       // Try to decode multi-packet data - this WILL FAIL
       const result = decodePacket(multiPacketData);
       
       expect(result).toBeNull();
-      // Check that malformed data was logged
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '🚨 MALFORMED DATA: Packet size mismatch'
-      );
-      
-      consoleSpy.mockRestore();
     });
 
     it('should succeed with individual packets', () => {
-      const packet1 = [0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00];
-      const packet2 = [0x5A, 0x5A, 0x16, 0x07, 0xEE, 0x10, 0x10];
+      const packet1 = [0x5A, 0x5A, 0x23, 0x06, 0xEE, 0x00];
+      const packet2 = [0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x10, 0x10];
       
       // Mock the Kaitai parser since we're testing the validation logic
       vi.doMock('$lib/kaitai-wrapper.js', () => ({
@@ -71,25 +64,25 @@ describe('Multi-Packet Handling Analysis', () => {
       const serialConnection = new SerialConnection();
       
       // Create multiple packets
-      const heartbeat = [0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00];
-      const machine = [0x5A, 0x5A, 0x16, 0x07, 0xEE, 0x10, 0x10];
-      const update = [0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x02, 0x02];
+      const error = [0x5A, 0x5A, 0x23, 0x06, 0xEE, 0x00];
+      const machine = [0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x10, 0x10];
+      const update = [0x5A, 0x5A, 0x14, 0x07, 0x02, 0x02, 0x02];
       
-      const allPackets = [...heartbeat, ...machine, ...update];
+      const allPackets = [...error, ...machine, ...update];
       
       const receivedPackets = [];
       const receivedTypes = [];
       
       // Register handlers
-      serialConnection.registerPacketHandler(0x22, (packet) => {
+      serialConnection.registerPacketHandler(0x23, (packet) => {
         receivedPackets.push(packet);
-        receivedTypes.push('heartbeat');
+        receivedTypes.push('error');
       });
-      serialConnection.registerPacketHandler(0x16, (packet) => {
+      serialConnection.registerPacketHandler(0x15, (packet) => {
         receivedPackets.push(packet);
         receivedTypes.push('machine');
       });
-      serialConnection.registerPacketHandler(0x15, (packet) => {
+      serialConnection.registerPacketHandler(0x14, (packet) => {
         receivedPackets.push(packet);
         receivedTypes.push('update');
       });
@@ -100,11 +93,11 @@ describe('Multi-Packet Handling Analysis', () => {
       
       // Should process all 3 packets
       expect(receivedPackets.length).toBe(3);
-      expect(receivedTypes).toEqual(['heartbeat', 'machine', 'update']);
+      expect(receivedTypes).toEqual(['error', 'machine', 'update']);
       expect(serialConnection.receiveBuffer.length).toBe(0);
       
       // Verify individual packets are correct
-      expect(receivedPackets[0]).toEqual(heartbeat);
+      expect(receivedPackets[0]).toEqual(error);
       expect(receivedPackets[1]).toEqual(machine);
       expect(receivedPackets[2]).toEqual(update);
     });
@@ -113,7 +106,7 @@ describe('Multi-Packet Handling Analysis', () => {
       const serialConnection = new SerialConnection();
       
       // Create packets of different sizes
-      const smallPacket = [0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00]; // 6 bytes
+      const smallPacket = [0x5A, 0x5A, 0x23, 0x06, 0xEE, 0x00]; // 6 bytes
       const mediumPacket = createMachinePacket(0x11); // 7 bytes
       const largePacket = createSynthesizePacket(); // 156 bytes
       
@@ -122,8 +115,8 @@ describe('Multi-Packet Handling Analysis', () => {
       const processedSizes = [];
       
       // Register handler to track packet sizes
-      serialConnection.registerPacketHandler(0x22, (packet) => processedSizes.push(packet.length));
-      serialConnection.registerPacketHandler(0x16, (packet) => processedSizes.push(packet.length));
+      serialConnection.registerPacketHandler(0x23, (packet) => processedSizes.push(packet.length));
+      serialConnection.registerPacketHandler(0x15, (packet) => processedSizes.push(packet.length));
       serialConnection.registerPacketHandler(0x11, (packet) => processedSizes.push(packet.length));
       
       serialConnection.receiveBuffer = new Uint8Array(allData);
@@ -137,8 +130,8 @@ describe('Multi-Packet Handling Analysis', () => {
       // This shows what would happen if someone tried to use packet-decoder 
       // directly on multi-packet data (they would lose packets)
       
-      const packet1 = [0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00];
-      const packet2 = [0x5A, 0x5A, 0x16, 0x07, 0xEE, 0x10, 0x10];
+      const packet1 = [0x5A, 0x5A, 0x23, 0x06, 0xEE, 0x00];
+      const packet2 = [0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x10, 0x10];
       const multiPacketData = [...packet1, ...packet2];
       
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -151,8 +144,8 @@ describe('Multi-Packet Handling Analysis', () => {
       const serialConnection = new SerialConnection();
       const receivedPackets = [];
       
-      serialConnection.registerPacketHandler(0x22, (packet) => receivedPackets.push(packet));
-      serialConnection.registerPacketHandler(0x16, (packet) => receivedPackets.push(packet));
+      serialConnection.registerPacketHandler(0x23, (packet) => receivedPackets.push(packet));
+      serialConnection.registerPacketHandler(0x15, (packet) => receivedPackets.push(packet));
       
       serialConnection.receiveBuffer = new Uint8Array(multiPacketData);
       serialConnection.processIncomingData();
@@ -167,11 +160,11 @@ describe('Multi-Packet Handling Analysis', () => {
   function createMachinePacket(machineType) {
     const data = [machineType];
     const checksum = data[0];
-    return [0x5A, 0x5A, 0x16, 0x07, 0xEE, checksum, ...data];
+    return [0x5A, 0x5A, 0x15, 0x07, 0xEE, checksum, ...data];
   }
 
   function createSynthesizePacket() {
-    const packet = [0x5A, 0x5A, 0x11, 156, 0xEE];
+    const packet = [0x5A, 0x5A, 0x11, 156, 0x00];
     const data = [];
 
     // 6 channels, 25 bytes each = 150 bytes
@@ -190,7 +183,7 @@ describe('Multi-Packet Handling Analysis', () => {
       data.push(0);                        // lock
       data.push(0);                        // status
       data.push(0);                        // outputOn
-      data.push(0, 0, 0);                  // color
+      data.push(0, 0, 0xEE);               // color and fixed firmware marker
       data.push(0);                        // error
       data.push(0xFF);                     // end marker
     }

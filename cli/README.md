@@ -26,3 +26,7 @@ All commands accept `--port` followed by the serial path and honor standard Mini
 
 - The CLI relies on `webui/src/lib` for packet parsing/encoding, so keep the Kaitai build up to date if you regenerate `mdp.ksy`.
 - Heartbeats are emitted automatically while `watch` is running; other commands send the required packets and exit cleanly.
+- M01 v2.02 does not ACK setters and does not answer each heartbeat with a status packet. `set` and `output` confirm against later SYNTHESIZE telemetry; a timeout means the requested state was not observed, not that the command was explicitly rejected.
+- SET_V and SET_I both transmit the complete voltage/current pair. The CLI preserves the companion value from current telemetry and sends one command without a SET_CH preamble, avoiding an unnecessary selected-channel/waveform side effect.
+- Each outbound frame is validated, queued, and issued as one serial write because the recovered device receive parser is sensitive to USB OUT transfer splitting and coalescing. See [`../cpp/MDP_PROTOCOL_OVERVIEW.md`](../cpp/MDP_PROTOCOL_OVERVIEW.md) for the firmware-derived implementation notes.
+- Incoming packet handlers receive only direction-, size-, channel-, and checksum-valid device frames. Capture/alert observers additionally see complete rejected candidates in wire order, preserving checksum diagnostics without exposing corrupt telemetry to command logic.

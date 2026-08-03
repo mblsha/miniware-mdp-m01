@@ -121,7 +121,7 @@ describe('Mock Packet Response Tests', () => {
       expect(packet[1]).toBe(0x5a);
       expect(packet[2]).toBe(0x11); // SYNTHESIZE type
       expect(packet[3]).toBe(156); // 6 header + 150 data (6 channels * 25 bytes)
-      expect(packet[4]).toBe(0xee); // Broadcast channel
+      expect(packet[4]).toBe(0); // Selected controller channel
     });
 
     it('should encode channel voltage/current correctly', () => {
@@ -351,7 +351,7 @@ describe('Mock Connection Packet Handling', () => {
       expect(receivedPacket![2]).toBe(0x15);
     });
 
-    it('should respond to HEARTBEAT with SYNTHESIZE packet', async () => {
+    it('should schedule SYNTHESIZE after multiple heartbeats, not ACK each one', async () => {
       let receivedPacket: number[] | null = null;
 
       connection.registerPacketHandler(0x11, (packet) => {
@@ -359,6 +359,11 @@ describe('Mock Connection Packet Handling', () => {
       });
 
       await connection.sendPacket(createHeartbeatPacket());
+
+      expect(receivedPacket).toBeNull();
+      for (let index = 1; index < 10; index += 1) {
+        await connection.sendPacket(createHeartbeatPacket());
+      }
 
       expect(receivedPacket).not.toBeNull();
       expect(receivedPacket![2]).toBe(0x11);

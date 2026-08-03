@@ -6,6 +6,7 @@ import {
   createAddressPacket,
   createMalformedPacket
 } from '../mocks/packet-data.js';
+import { createSetAddressPacket } from '$lib/packet-encoder.js';
 
 // Mock the kaitai-wrapper.js module
 vi.mock('$lib/kaitai-wrapper.js', () => {
@@ -123,7 +124,7 @@ vi.mock('$lib/kaitai-wrapper.js', () => {
         ch.temperature = ch.tempRaw / 10.0;
         channels.push(ch);
       }
-      return { channels, channel: 0, dummy: 0 };
+      return { channels, channel: this.channel, checksum: this.checksum };
     }
     
     _readWave() {
@@ -168,12 +169,10 @@ vi.mock('$lib/kaitai-wrapper.js', () => {
     }
     
     _readMachine() {
-      const channel = this.stream.readU1();
-      const dummy = this.stream.readU1();
       const machineTypeRaw = this.stream.readU1();
       return {
-        channel,
-        dummy,
+        channel: this.channel,
+        checksum: this.checksum,
         machineTypeRaw
       };
     }
@@ -341,7 +340,7 @@ describe('Packet Decoder', () => {
       
       // Check first channel
       const addr0 = processed[0];
-      expect(addr0.address).toEqual([1, 2, 3, 4, 5]);
+      expect(addr0.address).toEqual([5, 4, 3, 2, 1]);
       expect(addr0.frequency).toBe(2440);
     });
 
@@ -355,6 +354,18 @@ describe('Packet Decoder', () => {
         expect(processed[i].address).toEqual([0, 0, 0, 0, 0]);
         expect(processed[i].frequency).toBe(2400);
       }
+    });
+
+    it('normalizes reversed ADDR response bytes for a read-modify-write round trip', () => {
+      const processed = processAddressPacket(decodePacket(createAddressPacket()));
+      const writePacket = createSetAddressPacket(
+        0,
+        processed[0].address,
+        processed[0].frequency - 2400
+      );
+
+      expect(processed[0].address).toEqual([5, 4, 3, 2, 1]);
+      expect(writePacket.slice(6, 12)).toEqual([5, 4, 3, 2, 1, 40]);
     });
 
     it('should return null for invalid packet', () => {
@@ -415,6 +426,21 @@ describe('Packet Decoder', () => {
   });
 
   describe('Edge Cases', () => {
+    it('rejects a checksummed MACHINE frame with the wrong type-specific size', () => {
+      const payload = [0x10, 0x00];
+      const checksum = payload[0] ^ payload[1];
+      const wrongSize = new Uint8Array([
+        0x5A, 0x5A, PackType.MACHINE, 8, 0xEE, checksum, ...payload,
+      ]);
+
+      expect(decodePacket(wrongSize)).toBeNull();
+    });
+
+    it('rejects a host-to-device frame in the device response decoder', () => {
+      const heartbeat = new Uint8Array([0x5A, 0x5A, 0x22, 6, 0xEE, 0]);
+      expect(decodePacket(heartbeat)).toBeNull();
+    });
+
     it('should handle corrupted packet data gracefully', () => {
       const corruptedData = new Uint8Array([0x5A, 0x5A, 0x11, 0x9C, 0x00, 0xFF, 0x00, 0x00]);
       const decoded = decodePacket(corruptedData);

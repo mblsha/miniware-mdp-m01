@@ -80,9 +80,9 @@ vi.mock('$lib/kaitai-wrapper.js', () => {
           const size = stream.readU1();
           const dataSize = size - 4;
           
-          // Read channel and dummy
+          // Read channel and payload checksum from the common header
           const channel = stream.readU1();
-          const dummy = stream.readU1();
+          const checksum = stream.readU1();
           
           // Create mock packet data based on type
           let data;
@@ -101,7 +101,7 @@ vi.mock('$lib/kaitai-wrapper.js', () => {
               data = this._mockAddressData(stream);
               break;
             default:
-              data = { channel, dummy };
+              data = { channel, checksum };
           }
           
           this.packets.push({
@@ -139,7 +139,7 @@ vi.mock('$lib/kaitai-wrapper.js', () => {
         stream.readBytes(Math.min(dataSize, stream.buffer.byteLength - stream.pos));
       }
       
-      return { channel: 0, dummy: 0, channels };
+      return { channel: 0, checksum: 0, channels };
     }
     
     _mockWaveData(stream, dataSize, packetSize) {
@@ -159,12 +159,12 @@ vi.mock('$lib/kaitai-wrapper.js', () => {
         stream.readBytes(Math.min(dataSize, stream.buffer.byteLength - stream.pos));
       }
       
-      return { channel: 0, dummy: 0, groups, groupSize };
+      return { channel: 0, checksum: 0, groups, groupSize };
     }
     
     _mockMachineData(stream) {
       const machineTypeRaw = stream.pos < stream.buffer.byteLength ? stream.readU1() : 0x10;
-      return { channel: 0, dummy: 0, machineTypeRaw };
+      return { channel: 0, checksum: 0, machineTypeRaw };
     }
     
     _mockAddressData(stream) {
@@ -183,7 +183,7 @@ vi.mock('$lib/kaitai-wrapper.js', () => {
         stream.readBytes(remainingBytes);
       }
       
-      return { channel: 0, dummy: 0, addresses };
+      return { channel: 0, checksum: 0, addresses };
     }
   }
   

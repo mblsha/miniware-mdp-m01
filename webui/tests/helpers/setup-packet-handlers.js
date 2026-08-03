@@ -114,7 +114,7 @@ export function setupPacketHandlers(serialConnection, channelStore) {
   
   // Machine packet handler
   serialConnection.registerPacketHandler(0x15, (packet) => {
-    const machineType = packet[8]; // Machine type is at index 8 (after header + channel + dummy)
+    const machineType = packet[6]; // One-byte payload after the common header
     const deviceType = {
       type: machineType === 0x10 ? 'M01' : 'M02',
       haveLcd: machineType === 0x10

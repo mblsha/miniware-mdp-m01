@@ -33,6 +33,9 @@ function calculateChecksum(data) {
  * Create a complete packet with header and data
  */
 export function createPacket(type, size, channel, data) {
+  if (size !== 6 + data.length) {
+    throw new Error(`Packet size ${size} does not match ${data.length} payload bytes`);
+  }
   const packet = new Uint8Array(size);
   const header = createHeader(type, size, channel);
   
@@ -58,10 +61,6 @@ export function createPacket(type, size, channel, data) {
 export function createSynthesizePacket(channelData = []) {
   const data = new Uint8Array(150); // 6 channels * 25 bytes each
   let offset = 0;
-  
-  // Add channel and dummy bytes
-  data[offset++] = 0; // channel
-  data[offset++] = 0; // dummy
   
   // Fill 6 channels
   for (let i = 0; i < 6; i++) {
@@ -105,7 +104,7 @@ export function createSynthesizePacket(channelData = []) {
     // Color (3 bytes)
     data[offset++] = 0;
     data[offset++] = 0;
-    data[offset++] = 0;
+    data[offset++] = 0xEE;
     
     // Error and end marker
     data[offset++] = ch.error || 0;
@@ -124,11 +123,7 @@ export function createWavePacket(channel = 0, waveData = [], pointsPerGroup = 2)
   const dataSize = size - 6;
   const data = new Uint8Array(dataSize);
   
-  // Channel and dummy
-  data[0] = channel;
-  data[1] = 0;
-  
-  let offset = 2;
+  let offset = 0;
   
   // Create 10 groups
   for (let g = 0; g < groupCount; g++) {
@@ -181,7 +176,7 @@ export function createAddressPacket(addresses = []) {
     data[offset + 5] = frequency - 2400;
   }
   
-  return createPacket(PackType.ADDR, 42, 0, data);
+  return createPacket(PackType.ADDR, 42, 0xEE, data);
 }
 
 /**
@@ -191,7 +186,7 @@ export function createMachinePacket(machineType = 0x10) {
   const data = new Uint8Array(1);
   data[0] = machineType; // 0x10 = M01 with LCD, 0x11 = M02 without LCD
   
-  return createPacket(PackType.MACHINE, 7, 0, data);
+  return createPacket(PackType.MACHINE, 7, 0xEE, data);
 }
 
 /**
@@ -201,14 +196,14 @@ export function createUpdateChannelPacket(targetChannel = 0) {
   const data = new Uint8Array(1);
   data[0] = targetChannel;
   
-  return createPacket(PackType.UPDAT_CH, 7, 0, data);
+  return createPacket(PackType.UPDAT_CH, 7, targetChannel, data);
 }
 
 /**
  * Create an error 240 packet
  */
 export function createError240Packet() {
-  return createPacket(PackType.ERR_240, 6, 0, new Uint8Array(0));
+  return createPacket(PackType.ERR_240, 6, 0xEE, new Uint8Array(0));
 }
 
 /**
@@ -266,7 +261,7 @@ export function createMockSynthesizeData(channelData = []) {
   
   return {
     channel: 0,
-    dummy: 0,
+    checksum: 0,
     channels: channels
   };
 }
@@ -302,7 +297,7 @@ export function createMockWaveData(channel = 0, points = []) {
   
   return {
     channel: channel,
-    dummy: 0,
+    checksum: 0,
     groups: groups,
     get groupSize() { return pointsPerGroup; }
   };

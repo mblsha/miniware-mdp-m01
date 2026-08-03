@@ -4,7 +4,7 @@ import type { Channel, WaveformPoint } from '../types';
 import { processAddressPacket, processMachinePacket, processSynthesizePacket } from '../packet-decoder';
 import type { AddressPacket, ChannelUpdate, MachinePacket, SynthesizePacket, UpdateChannelPacket, WavePacket } from '../packet-decoder';
 import { WaveTimestampReconciler, type WaveSample } from '../wave-reconciler';
-import { createSetChannelPacket, createSetCurrentPacket, createSetOutputPacket, createSetVoltagePacket } from '../packet-encoder';
+import { executeOutputCommand, executeSelectChannelCommand, executeSetpointCommand } from '../command-executor';
 import { debugError } from '../debug-logger';
 import type { PacketBus } from '../services/packet-bus';
 import type { SerialConnection } from '../serial';
@@ -209,8 +209,7 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
   }
 
   async function setActiveChannel(channel: number): Promise<void> {
-    const packet = createSetChannelPacket(channel);
-    await serial.sendPacket(packet);
+    await executeSelectChannelCommand(serial, channel);
     activeChannel.set(channel);
   }
 
@@ -218,8 +217,7 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
     const channelData = get(channels)[channel];
     if (!channelData) throw new RangeError('Channel must be an integer between 0 and 5');
     validateDeviceTargets(channelData.machineType, voltage, current);
-    const packet = createSetVoltagePacket(channel, voltage, current);
-    await serial.sendPacket(packet);
+    await executeSetpointCommand(serial, channel, voltage, current, 'voltage');
 
     channels.update((chs) => {
       updateTargetValues(chs, channel, voltage, current);
@@ -231,8 +229,7 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
     const channelData = get(channels)[channel];
     if (!channelData) throw new RangeError('Channel must be an integer between 0 and 5');
     validateDeviceTargets(channelData.machineType, voltage, current);
-    const packet = createSetCurrentPacket(channel, voltage, current);
-    await serial.sendPacket(packet);
+    await executeSetpointCommand(serial, channel, voltage, current, 'current');
 
     channels.update((chs) => {
       updateTargetValues(chs, channel, voltage, current);
@@ -241,8 +238,7 @@ export function createChannelStore(options: { serial: SerialConnection; packets:
   }
 
   async function setOutput(channel: number, enabled: boolean): Promise<void> {
-    const packet = createSetOutputPacket(channel, enabled);
-    await serial.sendPacket(packet);
+    await executeOutputCommand(serial, channel, enabled);
   }
 
   function startRecording(channel: number): void {

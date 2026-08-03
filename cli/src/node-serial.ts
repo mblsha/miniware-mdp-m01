@@ -1,6 +1,6 @@
 import { SerialPort } from 'serialport';
 import type { PacketHandler, RawDataHandler, SerialConfig } from './serial-types';
-import { extractProtocolPackets } from '../../webui/src/lib/protocol';
+import { assertHostCommandPacket, extractProtocolPackets } from '../../webui/src/lib/protocol';
 
 const DEFAULT_CONFIG: SerialConfig = {
   baudRate: 115200,
@@ -24,6 +24,8 @@ export class NodeSerialConnection {
   private readonly rawDataHandlers = new Set<RawDataHandler>();
   private readonly packetObservers = new Set<PacketHandler>();
   private receiveBuffer = Buffer.alloc(0);
+  private writeQueue: Promise<void> = Promise.resolve();
+  private disconnecting = false;
 
   constructor(options: NodeSerialConnectionOptions) {
     this.portPath = options.portPath;
@@ -31,6 +33,9 @@ export class NodeSerialConnection {
   }
 
   async connect(): Promise<void> {
+    if (this.disconnecting) {
+      throw new Error('Serial port is disconnecting');
+    }
     if (this.port) {
       return;
     }
@@ -83,9 +88,12 @@ export class NodeSerialConnection {
   }
 
   async disconnect(): Promise<void> {
+    this.disconnecting = true;
     this.stopHeartbeat();
+    await this.writeQueue.catch(() => undefined);
 
     if (!this.port) {
+      this.disconnecting = false;
       return;
     }
 
@@ -100,22 +108,35 @@ export class NodeSerialConnection {
     } finally {
       port.removeAllListeners('data');
       this.receiveBuffer = Buffer.alloc(0);
+      this.writeQueue = Promise.resolve();
+      this.disconnecting = false;
     }
   }
 
   async sendPacket(packet: number[] | Uint8Array): Promise<void> {
-    if (!this.port) {
+    if (!this.port || this.disconnecting) {
       throw new Error('Serial port not open');
     }
 
     const port = this.port;
-    const data = packet instanceof Uint8Array ? packet : Uint8Array.from(packet);
-    await new Promise<void>((resolve, reject) => {
-      port.write(data, (error) => {
-        if (error) return reject(error);
-        port.drain((drainError) => drainError ? reject(drainError) : resolve());
+    const data = packet instanceof Uint8Array
+      ? new Uint8Array(packet)
+      : Uint8Array.from(packet);
+    assertHostCommandPacket(data);
+
+    // Keep each protocol frame as one serialport write and serialize callers.
+    // In particular, a periodic heartbeat must not overlap a control command.
+    const write = this.writeQueue.then(async () => {
+      if (this.port !== port) throw new Error('Serial port not open');
+      await new Promise<void>((resolve, reject) => {
+        port.write(data, (error) => {
+          if (error) return reject(error);
+          port.drain((drainError) => drainError ? reject(drainError) : resolve());
+        });
       });
     });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
   }
 
   registerPacketHandler(packetType: number, handler: PacketHandler): () => void {
@@ -199,14 +220,17 @@ export class NodeSerialConnection {
   }
 
   private processIncomingData(): void {
-    const { packets, remainder } = extractProtocolPackets(this.receiveBuffer);
+    const { frames, remainder } = extractProtocolPackets(this.receiveBuffer);
     this.receiveBuffer = Buffer.from(remainder);
-    for (const packet of packets) {
-      this.handlePacket(packet);
+    for (const frame of frames) {
+      this.observePacket(frame.packet);
+      if (frame.accepted) {
+        this.dispatchPacket(frame.packet);
+      }
     }
   }
 
-  private handlePacket(packet: number[]): void {
+  private observePacket(packet: number[]): void {
     if (!packet || packet.length < 3) {
       return;
     }
@@ -217,6 +241,9 @@ export class NodeSerialConnection {
         console.error('Packet observer error:', err);
       }
     }
+  }
+
+  private dispatchPacket(packet: number[]): void {
     const packetType = packet[2];
     const handlers = this.packetHandlers.get(packetType) ?? [];
     for (const handler of handlers) {

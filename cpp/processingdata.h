@@ -216,7 +216,7 @@ private:
     void processWaceReal(QByteArray buffer);
     //处理更新通道包。
     void processUpdatCh(QByteArray buffer);
-    //校验数据包。
+    // Validate complete device-to-host packet checksum and framing.
     bool packCheeckSelf(const QByteArray &buffer) const;
     bool isValidPacketSize(uint8_t type, uint8_t size) const;
     //处理设备类型数据包。

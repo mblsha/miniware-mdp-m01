@@ -333,7 +333,7 @@ describe('Serial Communication Flow Integration Test', () => {
       
       // Simulate device sending channel update
       mockPort.simulateData(new Uint8Array([
-        0x5A, 0x5A, 0x14, 0x07, 0xEE, 0x02, 0x02 // Switch to channel 2
+        0x5A, 0x5A, 0x14, 0x07, 0x02, 0x02, 0x02 // Switch to channel 2
       ]));
       await serialConnection.triggerPacketProcessing();
       

@@ -5,16 +5,18 @@ import {
   type MockDeviceConfig
 } from './mocks/mock-serial';
 import {
-  createSetChannelPacket,
   createSetVoltagePacket,
   createSetCurrentPacket,
-  createSetOutputPacket,
   createHeartbeatPacket
 } from '../../webui/src/lib/packet-encoder';
+import {
+  executeOutputCommand,
+  executeSetpointCommand
+} from '../../webui/src/lib/command-executor';
 
 describe('Command Handler Tests', () => {
   describe('Set Voltage Command', () => {
-    it('should send SET_CH and SET_V packets to correct PSU', async () => {
+    it('should send one SET_V packet to the correct PSU without changing selection', async () => {
       const configs: MockDeviceConfig[] = [
         { portPath: '/dev/ttyUSB0', deviceType: 'P906' },
         { portPath: '/dev/ttyUSB1', deviceType: 'P906' }
@@ -43,28 +45,23 @@ describe('Command Handler Tests', () => {
       const voltage = 5.0;
       const current = 1.0;
 
-      await psu1Connection.sendPacket(createSetChannelPacket(channel));
-      await psu1Connection.sendPacket(createSetVoltagePacket(channel, voltage, current));
+      await executeSetpointCommand(psu1Connection, channel, voltage, current, 'voltage');
 
       // Verify packets were sent to psu1
       const psu1Packets = psu1Connection.getSentPackets();
-      expect(psu1Packets).toHaveLength(2);
-
-      // Verify SET_CH packet (0x19)
-      expect(psu1Packets[0][2]).toBe(0x19);
-      expect(psu1Packets[0][4]).toBe(channel);
+      expect(psu1Packets).toHaveLength(1);
 
       // Verify SET_V packet (0x1A)
-      expect(psu1Packets[1][2]).toBe(0x1a);
-      expect(psu1Packets[1][4]).toBe(channel);
+      expect(psu1Packets[0][2]).toBe(0x1a);
+      expect(psu1Packets[0][4]).toBe(channel);
 
       // Verify voltage/current in packet data (little-endian)
       const voltageMv = voltage * 1000;
       const currentMa = current * 1000;
-      expect(psu1Packets[1][6]).toBe(voltageMv & 0xff);
-      expect(psu1Packets[1][7]).toBe((voltageMv >> 8) & 0xff);
-      expect(psu1Packets[1][8]).toBe(currentMa & 0xff);
-      expect(psu1Packets[1][9]).toBe((currentMa >> 8) & 0xff);
+      expect(psu1Packets[0][6]).toBe(voltageMv & 0xff);
+      expect(psu1Packets[0][7]).toBe((voltageMv >> 8) & 0xff);
+      expect(psu1Packets[0][8]).toBe(currentMa & 0xff);
+      expect(psu1Packets[0][9]).toBe((currentMa >> 8) & 0xff);
 
       // Verify NO packets sent to psu2
       const psu2Packets = psu2Connection.getSentPackets();
@@ -89,22 +86,19 @@ describe('Command Handler Tests', () => {
       const voltage = 12.0;
       const current = 2.0;
 
-      await psuConnection.sendPacket(createSetChannelPacket(channel));
-      await psuConnection.sendPacket(createSetVoltagePacket(channel, voltage, current));
+      await executeSetpointCommand(psuConnection, channel, voltage, current, 'voltage');
 
       const packets = psuConnection.getSentPackets();
-      expect(packets).toHaveLength(2);
+      expect(packets).toHaveLength(1);
 
-      // Verify channel field in both packets
       expect(packets[0][4]).toBe(3);
-      expect(packets[1][4]).toBe(3);
 
       await psuConnection.disconnect();
     });
   });
 
   describe('Set Current Command', () => {
-    it('should send SET_CH and SET_I packets to correct Load', async () => {
+    it('should send one SET_I packet to the correct Load', async () => {
       const configs: MockDeviceConfig[] = [
         { portPath: '/dev/ttyUSB0', deviceType: 'L1060' },
         { portPath: '/dev/ttyUSB1', deviceType: 'L1060' }
@@ -131,23 +125,19 @@ describe('Command Handler Tests', () => {
       const voltage = 12.0;
       const current = 3.0;
 
-      await load2Connection.sendPacket(createSetChannelPacket(channel));
-      await load2Connection.sendPacket(createSetCurrentPacket(channel, voltage, current));
+      await executeSetpointCommand(load2Connection, channel, voltage, current, 'current');
 
       // Verify packets sent to load2
       const load2Packets = load2Connection.getSentPackets();
-      expect(load2Packets).toHaveLength(2);
-
-      // Verify SET_CH packet (0x19)
-      expect(load2Packets[0][2]).toBe(0x19);
+      expect(load2Packets).toHaveLength(1);
 
       // Verify SET_I packet (0x1B)
-      expect(load2Packets[1][2]).toBe(0x1b);
+      expect(load2Packets[0][2]).toBe(0x1b);
 
       // Verify current in packet
       const currentMa = current * 1000;
-      expect(load2Packets[1][8]).toBe(currentMa & 0xff);
-      expect(load2Packets[1][9]).toBe((currentMa >> 8) & 0xff);
+      expect(load2Packets[0][8]).toBe(currentMa & 0xff);
+      expect(load2Packets[0][9]).toBe((currentMa >> 8) & 0xff);
 
       // Verify NO packets sent to load1
       expect(load1Connection.getSentPackets()).toHaveLength(0);
@@ -158,7 +148,7 @@ describe('Command Handler Tests', () => {
   });
 
   describe('Output On/Off Command', () => {
-    it('should send SET_CH and SET_ISOUTPUT ON to correct PSU', async () => {
+    it('should send one SET_ISOUTPUT ON to the correct PSU', async () => {
       const configs: MockDeviceConfig[] = [
         { portPath: '/dev/ttyUSB0', deviceType: 'P906' },
         { portPath: '/dev/ttyUSB1', deviceType: 'L1060' }
@@ -181,15 +171,14 @@ describe('Command Handler Tests', () => {
       loadConnection.clearSentPackets();
 
       const channel = 0;
-      await psuConnection.sendPacket(createSetChannelPacket(channel));
-      await psuConnection.sendPacket(createSetOutputPacket(channel, true));
+      await executeOutputCommand(psuConnection, channel, true);
 
       const psuPackets = psuConnection.getSentPackets();
-      expect(psuPackets).toHaveLength(2);
+      expect(psuPackets).toHaveLength(1);
 
       // Verify SET_ISOUTPUT packet (0x16)
-      expect(psuPackets[1][2]).toBe(0x16);
-      expect(psuPackets[1][6]).toBe(1); // ON
+      expect(psuPackets[0][2]).toBe(0x16);
+      expect(psuPackets[0][6]).toBe(1); // ON
 
       // Verify Load was not affected
       expect(loadConnection.getSentPackets()).toHaveLength(0);
@@ -209,16 +198,15 @@ describe('Command Handler Tests', () => {
       psuConnection.clearSentPackets();
 
       const channel = 2;
-      await psuConnection.sendPacket(createSetChannelPacket(channel));
-      await psuConnection.sendPacket(createSetOutputPacket(channel, false));
+      await executeOutputCommand(psuConnection, channel, false);
 
       const packets = psuConnection.getSentPackets();
-      expect(packets).toHaveLength(2);
+      expect(packets).toHaveLength(1);
 
       // Verify SET_ISOUTPUT OFF
-      expect(packets[1][2]).toBe(0x16);
-      expect(packets[1][4]).toBe(channel);
-      expect(packets[1][6]).toBe(0); // OFF
+      expect(packets[0][2]).toBe(0x16);
+      expect(packets[0][4]).toBe(channel);
+      expect(packets[0][6]).toBe(0); // OFF
 
       await psuConnection.disconnect();
     });
@@ -246,14 +234,13 @@ describe('Command Handler Tests', () => {
       loadConnection.clearSentPackets();
 
       const channel = 0;
-      await loadConnection.sendPacket(createSetChannelPacket(channel));
-      await loadConnection.sendPacket(createSetOutputPacket(channel, true));
+      await executeOutputCommand(loadConnection, channel, true);
 
       // Verify Load received the packets
       const loadPackets = loadConnection.getSentPackets();
-      expect(loadPackets).toHaveLength(2);
-      expect(loadPackets[1][2]).toBe(0x16);
-      expect(loadPackets[1][6]).toBe(1);
+      expect(loadPackets).toHaveLength(1);
+      expect(loadPackets[0][2]).toBe(0x16);
+      expect(loadPackets[0][6]).toBe(1);
 
       // Verify PSU was NOT affected
       expect(psuConnection.getSentPackets()).toHaveLength(0);
@@ -274,12 +261,11 @@ describe('Command Handler Tests', () => {
       await psuConnection.connect();
       psuConnection.clearSentPackets();
 
-      await psuConnection.sendPacket(createSetChannelPacket(0));
-      await psuConnection.sendPacket(createSetVoltagePacket(0, 5.0, 1.0));
+      await executeSetpointCommand(psuConnection, 0, 5.0, 1.0, 'voltage');
 
       const packets = psuConnection.getSentPackets();
-      expect(packets[0][4]).toBe(0); // SET_CH channel
-      expect(packets[1][4]).toBe(0); // SET_V channel
+      expect(packets).toHaveLength(1);
+      expect(packets[0][4]).toBe(0);
 
       await psuConnection.disconnect();
     });
@@ -296,15 +282,29 @@ describe('Command Handler Tests', () => {
       for (let ch = 0; ch <= 5; ch++) {
         psuConnection.clearSentPackets();
 
-        await psuConnection.sendPacket(createSetChannelPacket(ch));
-        await psuConnection.sendPacket(createSetOutputPacket(ch, true));
+        await executeOutputCommand(psuConnection, ch, true);
 
         const packets = psuConnection.getSentPackets();
         expect(packets[0][4]).toBe(ch);
-        expect(packets[1][4]).toBe(ch);
       }
 
       await psuConnection.disconnect();
+    });
+
+    it('should reject broadcast and out-of-range channel indexes before sending', async () => {
+      const connections = createMockDevices([
+        { portPath: '/dev/ttyUSB0', deviceType: 'P906' }
+      ]);
+      const connection = connections.get('/dev/ttyUSB0')!;
+      await connection.connect();
+
+      await expect(executeOutputCommand(connection, 0xEE, true)).rejects.toThrow('between 0 and 5');
+      await expect(
+        executeSetpointCommand(connection, -1, 5, 1, 'voltage')
+      ).rejects.toThrow('between 0 and 5');
+      expect(connection.getSentPackets()).toHaveLength(0);
+
+      await connection.disconnect();
     });
   });
 
@@ -330,12 +330,11 @@ describe('Command Handler Tests', () => {
       psu3Connection.clearSentPackets();
 
       // Send command to psu2 only
-      await psu2Connection.sendPacket(createSetChannelPacket(0));
-      await psu2Connection.sendPacket(createSetVoltagePacket(0, 5.0, 1.0));
+      await executeSetpointCommand(psu2Connection, 0, 5.0, 1.0, 'voltage');
 
       // Verify only psu2 received packets
       expect(psu1Connection.getSentPackets()).toHaveLength(0);
-      expect(psu2Connection.getSentPackets()).toHaveLength(2);
+      expect(psu2Connection.getSentPackets()).toHaveLength(1);
       expect(psu3Connection.getSentPackets()).toHaveLength(0);
 
       await psu1Connection.disconnect();

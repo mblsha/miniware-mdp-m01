@@ -194,6 +194,43 @@ TEST_F(EdgeCaseTest, TestMalformedFrameRecoversToNextPacket) {
     EXPECT_EQ(processor->machineType, processingData::noLcd);
 }
 
+TEST_F(EdgeCaseTest, TestPlausibleIncompleteHeaderDoesNotHideLaterFrame) {
+    QByteArray falseWaveHeader = QByteArray::fromHex("5a5a12ce0000");
+    falseWaveHeader.append(QByteArray::fromHex("010203"));
+    const QByteArray valid = createPacket(
+        processingData::PACK_MACHINE,
+        0,
+        QByteArray(1, static_cast<char>(processingData::haveLcd))
+    );
+    QSignalSpy machineSpy(processor, &processingData::signalSetMachine);
+
+    processor->slotDisposeRawPack(falseWaveHeader + valid);
+
+    EXPECT_EQ(machineSpy.count(), 1);
+    EXPECT_EQ(processor->machineType, processingData::haveLcd);
+}
+
+TEST_F(EdgeCaseTest, TestBadChecksumRecoversToNextPacket) {
+    QByteArray corrupt = createPacket(
+        processingData::PACK_MACHINE,
+        0,
+        QByteArray(1, static_cast<char>(processingData::haveLcd))
+    );
+    corrupt[processingData::PACK_CHECK] = static_cast<char>(
+        static_cast<uint8_t>(corrupt.at(processingData::PACK_CHECK)) ^ 0xff);
+    const QByteArray valid = createPacket(
+        processingData::PACK_MACHINE,
+        0,
+        QByteArray(1, static_cast<char>(processingData::noLcd))
+    );
+    QSignalSpy machineSpy(processor, &processingData::signalSetMachine);
+
+    processor->slotDisposeRawPack(corrupt + valid);
+
+    EXPECT_EQ(machineSpy.count(), 1);
+    EXPECT_EQ(processor->machineType, processingData::noLcd);
+}
+
 // ========== 2. Parser-Specific Edge Cases ==========
 
 // Test wave packet without prior synthesize
@@ -401,6 +438,35 @@ TEST_F(EdgeCaseTest, TestAddressFrequencyBoundaries) {
     }
 }
 
+TEST_F(EdgeCaseTest, TestCommandWrappersRejectUnsafeIndexesAndFrequencies) {
+    QSignalSpy sendSpy(processor, &processingData::signalsSendPack);
+
+    processor->slotSendNowCh(static_cast<char>(-1));
+    processor->slotSendNowCh(6);
+    processor->slotSendVoltaToLower(-1);
+    processor->slotSendVoltaToLower(6);
+    processor->slotSendElectToLower(-1);
+    processor->slotSendElectToLower(6);
+    processor->slotSendSetOutputState(-1);
+    processor->slotSendSetOutputState(6);
+    processor->slotSendAddrToLower(-1);
+    processor->slotSendAddrToLower(6);
+    EXPECT_EQ(sendSpy.count(), 0);
+
+    for (int channel = 0; channel < 6; channel++) {
+        processor->MDP[channel].upDatFreq = 2400;
+    }
+    processor->MDP[2].upDatFreq = 2399;
+    processor->slotSendAllAddrToLower();
+    processor->MDP[2].upDatFreq = 2484;
+    processor->slotSendAllAddrToLower();
+    EXPECT_EQ(sendSpy.count(), 0);
+
+    processor->MDP[2].upDatFreq = 2400;
+    processor->slotSendAllAddrToLower();
+    EXPECT_EQ(sendSpy.count(), 1);
+}
+
 // Test RGB packet edge case
 TEST_F(EdgeCaseTest, TestRGBPacketWorkaround) {
     QSignalSpy sendSpy(processor, &processingData::signalsSendPack);
@@ -491,7 +557,13 @@ TEST_F(EdgeCaseTest, TestChecksumCalculation) {
     uint8_t expectedChecksum = 0xAA ^ 0x55 ^ 0xFF ^ 0x00;
     EXPECT_EQ(expectedChecksum, 0x00);
     
-    QByteArray packet = createPacket(processingData::PACK_SET_V, 0, testData);
+    // The receive parser intentionally accepts device-to-host packet types
+    // only. Use an exact-size MACHINE response to exercise its checksum path;
+    // SET_V is an outbound command and must not be dispatched as telemetry.
+    QByteArray machineData;
+    machineData.append(static_cast<char>(0x10));
+    QByteArray packet = createPacket(processingData::PACK_MACHINE, 0xEE, machineData);
+    expectedChecksum = 0x10;
     
     // Verify checksum in packet
     EXPECT_EQ(static_cast<uint8_t>(packet[5]), expectedChecksum);
