@@ -1,4 +1,5 @@
 import { writable, derived } from 'svelte/store';
+import { extractProtocolPackets } from '../../src/lib/protocol.js';
 
 export const ConnectionStatus = {
   DISCONNECTED: 'disconnected',
@@ -122,67 +123,11 @@ export class TestSerialConnection {
   }
 
   processBuffer() {
-    while (this.receiveBuffer.length >= 6) {
-      // Find packet header (0x5A 0x5A) - search for the pattern, not just the first byte
-      let headerIndex = -1;
-      for (let i = 0; i <= this.receiveBuffer.length - 2; i++) {
-        if (this.receiveBuffer[i] === 0x5A && this.receiveBuffer[i + 1] === 0x5A) {
-          // Validate that this is a real header by checking the packet structure
-          // Need at least 4 more bytes: type, size, channel, checksum
-          if (i + 5 < this.receiveBuffer.length) {
-            const packetType = this.receiveBuffer[i + 2];
-            const packetSize = this.receiveBuffer[i + 3];
-            // Validate packet type and size
-            if (packetType >= 0x11 && packetType <= 0x23 && packetSize >= 6 && packetSize <= 256) {
-              headerIndex = i;
-              break;
-            }
-          } else if (i + 3 < this.receiveBuffer.length) {
-            // Have type and size, check those at minimum
-            const packetType = this.receiveBuffer[i + 2];
-            const packetSize = this.receiveBuffer[i + 3];
-            if (packetType >= 0x11 && packetType <= 0x23 && packetSize >= 6 && packetSize <= 256) {
-              headerIndex = i;
-              break;
-            }
-          } else {
-            // Not enough data to validate properly, continue searching
-            continue;
-          }
-        }
-      }
-
-      // No valid header found
-      if (headerIndex === -1) {
-        // If we have more than 256 bytes without a header, clear buffer to prevent memory issues
-        if (this.receiveBuffer.length > 256) {
-          console.warn('Clearing receive buffer - no valid header found');
-          this.receiveBuffer = [];
-        }
-        // If there's any data but no valid header, remove the first byte and try again
-        else if (this.receiveBuffer.length > 0) {
-          this.receiveBuffer.shift();
-          continue;
-        }
-        break;
-      }
-
-      // Remove any garbage before header
-      if (headerIndex > 0) {
-        this.receiveBuffer.splice(0, headerIndex);
-      }
-
-      // Check if we have enough data for the complete packet
-      if (this.receiveBuffer.length < 4) break; // Need at least 4 bytes to read size
-      
-      const packetSize = this.receiveBuffer[3];
-      if (this.receiveBuffer.length < packetSize) {
-        // Not enough data yet for complete packet
-        break;
-      }
-      
-      // Extract complete packet
-      const packet = this.receiveBuffer.splice(0, packetSize);
+    const { packets, remainder } = extractProtocolPackets(
+      Uint8Array.from(this.receiveBuffer)
+    );
+    this.receiveBuffer = Array.from(remainder);
+    for (const packet of packets) {
       this.handlePacket(packet);
     }
   }

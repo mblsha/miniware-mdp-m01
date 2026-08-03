@@ -16,6 +16,7 @@ vi.mock('../../webui/src/lib/packet-decoder', () => ({
 import {
   requestChannelStatus,
   requestPacket,
+  requestSynthesizeChannels,
   requestSynthesizeChannelsWithRetry
 } from '../src/device-requests';
 import { PackType } from '../src/packet-types';
@@ -38,12 +39,30 @@ describe('device request sequencing', () => {
         isOutput: true,
         online: true,
       }],
+      synthesizeEveryCommands: 3,
     });
     await connection.connect();
 
-    const status = await requestChannelStatus(connection, 0, 50);
+    const status = await requestChannelStatus(connection, 0, 50, 1);
 
     expect(status).toMatchObject({ channel: 0, online: true, isOutput: true, voltage: 4.2 });
+    expect(connection.getSentPackets().map((packet) => packet[2])).toEqual([
+      PackType.HEARTBEAT,
+      PackType.HEARTBEAT,
+      PackType.HEARTBEAT,
+    ]);
+  });
+
+  it('does not assume one heartbeat has a one-to-one synthesize response', async () => {
+    const connection = new MockNodeSerialConnection({
+      portPath: '/dev/mock',
+      deviceType: 'P906',
+      synthesizeEveryCommands: 4,
+    });
+    await connection.connect();
+
+    await expect(requestSynthesizeChannels(connection, 50, 1)).resolves.not.toBeNull();
+    expect(connection.getSentPackets()).toHaveLength(4);
   });
 
   it('captures an immediate machine response', async () => {
@@ -74,7 +93,20 @@ describe('device request sequencing', () => {
       sendPacket: async () => undefined,
     };
 
-    await expect(requestChannelStatus(connection, 99, 50)).resolves.toBeNull();
+    await expect(requestChannelStatus(connection, 5, 50, 1)).resolves.toBeNull();
+  });
+
+  it('rejects an unsafe channel before probing the device', async () => {
+    const sendPacket = vi.fn(async () => undefined);
+    const connection = {
+      waitForPacket: async () => null,
+      sendPacket,
+    };
+
+    await expect(requestChannelStatus(connection, 0xEE, 50, 1)).rejects.toThrow(
+      'Channel must be an integer between 0 and 5'
+    );
+    expect(sendPacket).not.toHaveBeenCalled();
   });
 
   it('retries transiently missing synthesize status before device selection', async () => {
@@ -89,7 +121,7 @@ describe('device request sequencing', () => {
     };
 
     await expect(
-      requestSynthesizeChannelsWithRetry(connection, 50, 3)
+      requestSynthesizeChannelsWithRetry(connection, 50, 3, 1)
     ).resolves.toEqual([
       expect.objectContaining({
         channel: 0,

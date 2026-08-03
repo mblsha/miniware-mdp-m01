@@ -114,7 +114,7 @@ var MiniwareMdpM01 = (function() {
     }
     SetIsoutput.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.outputState = this._io.readU1();
     }
     Object.defineProperty(SetIsoutput.prototype, 'isOutputOn', {
@@ -139,7 +139,7 @@ var MiniwareMdpM01 = (function() {
     }
     Rgb.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.rgbState = this._io.readU1();
     }
     Object.defineProperty(Rgb.prototype, 'isRgbOn', {
@@ -164,7 +164,7 @@ var MiniwareMdpM01 = (function() {
     }
     UpdatCh.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.targetChannel = this._io.readU1();
     }
 
@@ -181,7 +181,7 @@ var MiniwareMdpM01 = (function() {
     }
     SetAllAddr.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.addresses = [];
       for (var i = 0; i < 6; i++) {
         this.addresses.push(new AddressEntry(this._io, this, this._root));
@@ -237,7 +237,7 @@ var MiniwareMdpM01 = (function() {
     }
     Synthesize.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.channels = [];
       for (var i = 0; i < 6; i++) {
         this.channels.push(new Chan(this._io, this, this._root));
@@ -348,7 +348,7 @@ var MiniwareMdpM01 = (function() {
     }
     Wave.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.groups = [];
       for (var i = 0; i < 10; i++) {
         this.groups.push(new Group(this._io, this, this._root));
@@ -427,7 +427,7 @@ var MiniwareMdpM01 = (function() {
     }
     Machine.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.machineTypeRaw = this._io.readU1();
     }
     Object.defineProperty(Machine.prototype, 'hasLcd', {
@@ -460,7 +460,7 @@ var MiniwareMdpM01 = (function() {
     }
     SetVoltageCurrent.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.voltageRaw = this._io.readU2le();
       this.currentRaw = this._io.readU2le();
     }
@@ -494,7 +494,7 @@ var MiniwareMdpM01 = (function() {
     }
     Addr.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.addresses = [];
       for (var i = 0; i < 6; i++) {
         this.addresses.push(new AddressEntry(this._io, this, this._root));
@@ -550,7 +550,7 @@ var MiniwareMdpM01 = (function() {
     }
     EmptyPacket.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
     }
 
     return EmptyPacket;
@@ -566,7 +566,7 @@ var MiniwareMdpM01 = (function() {
     }
     SetAddr.prototype._read = function() {
       this.channel = this._io.readU1();
-      this.dummy = this._io.readU1();
+      this.checksum = this._io.readU1();
       this.addrByte0 = this._io.readU1();
       this.addrByte1 = this._io.readU1();
       this.addrByte2 = this._io.readU1();

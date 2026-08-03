@@ -5,7 +5,7 @@ import { get } from 'svelte/store';
 import type { DeviceInfo } from './serial.js';
 import type { Channel, WaveformPoint } from './types';
 import type { AddressData, AddressEntry, MachineData, SynthesizeChannel, SynthesizeData, UpdateChannelData, WaveData } from './types/kaitai';
-import { PackType } from './protocol';
+import { PackType, validateProtocolPacket } from './protocol';
 
 export { PackType } from './protocol';
 
@@ -134,62 +134,19 @@ export function decodePacket(data: Uint8Array | number[] | null): DecodedPacket 
       return null;
     }
     
-    // Validate packet header
-    if (data[0] !== 0x5A || data[1] !== 0x5A) {
-      console.log('🚨 MALFORMED DATA: Invalid packet header');
-      console.log(`  Expected: 0x5A 0x5A, Got: 0x${data[0]?.toString(16).padStart(2, '0')} 0x${data[1]?.toString(16).padStart(2, '0')}`);
-      if (currentDebugState) {
-        console.log('❌ decodePacket FAILED: Invalid packet header', data[0], data[1]);
-      }
-      debugError('packet-decode', '  ❌ Invalid packet header');
-      return null;
-    }
-    
     const packetType = data[2];
     const typeDisplay = getPacketTypeDisplay(packetType);
     debugLog('packet-decode', `  Packet type: ${typeDisplay}`);
-    
-    // Validate packet size
-    const expectedSize = data[3];
-    if (data.length !== expectedSize) {
-      console.log('🚨 MALFORMED DATA: Packet size mismatch');
-      console.log(`  Expected size: ${expectedSize}, Actual size: ${data.length}`);
-      console.log(`  Packet data (hex): ${Array.from(data.slice(0, Math.min(16, data.length))).map((b: number) => b.toString(16).padStart(2, '0')).join(' ')}`);
-      if (currentDebugState) {
-        console.log('❌ decodePacket FAILED: Size mismatch, expected:', expectedSize, 'got:', data.length);
-      }
-      debugError('packet-decode', `  ❌ Packet size mismatch: expected ${expectedSize}, got ${data.length}`);
-      return null;
-    }
 
-    if (expectedSize < 6) {
+    // The firmware does not protect its channel array or type-specific payload
+    // reads. Reject malformed device frames before Kaitai sees them, including
+    // valid-checksum frames with a size belonging to a different packet type.
+    const frameValidation = validateProtocolPacket(data, 'device-to-host');
+    if (!frameValidation.ok) {
       if (currentDebugState) {
-        console.log('❌ decodePacket FAILED: Invalid packet size', expectedSize);
+        console.log('❌ decodePacket FAILED:', frameValidation.reason);
       }
-      debugError('packet-decode', `  ❌ Invalid packet size: ${expectedSize}`);
-      return null;
-    }
-
-    const validation = validatePacketChecksum(data);
-    if (!validation) {
-      if (currentDebugState) {
-        console.log('❌ decodePacket FAILED: Checksum validation unavailable');
-      }
-      debugError('packet-decode', '  ❌ Packet checksum validation unavailable');
-      return null;
-    }
-    if (!validation.ok) {
-      if (currentDebugState) {
-        console.log(
-          '❌ decodePacket FAILED: Checksum mismatch',
-          validation.actual,
-          validation.expected
-        );
-      }
-      debugError(
-        'packet-decode',
-        `  ❌ Packet checksum mismatch: expected ${validation.expected}, got ${validation.actual}`
-      );
+      debugError('packet-decode', `  ❌ ${frameValidation.reason}`);
       return null;
     }
 
@@ -352,9 +309,11 @@ export type ProcessedAddress = { channel: number; address: number[]; frequency: 
 
 function getAddressBytes(entry: AddressEntry | undefined): number[] {
   if (!entry) return [0, 0, 0, 0, 0];
-  if ('address' in entry) return Array.from(entry.address);
-  // For ADDR packets, the schema reads bytes into addrByte4..0 in order.
-  return [entry.addrByte4, entry.addrByte3, entry.addrByte2, entry.addrByte1, entry.addrByte0];
+  // ADDR reports the five bytes in wire order addr[4]..addr[0]. Expose the
+  // human/controller order consistently, regardless of which Kaitai mock or
+  // generated representation supplied the entry.
+  if ('address' in entry) return Array.from(entry.address).reverse();
+  return [entry.addrByte0, entry.addrByte1, entry.addrByte2, entry.addrByte3, entry.addrByte4];
 }
 
 export function processAddressPacket(packet: DecodedPacket | null): ProcessedAddress[] | null {
@@ -367,7 +326,7 @@ export function processAddressPacket(packet: DecodedPacket | null): ProcessedAdd
     const ch = addr.addresses[i];
     addresses.push({
       channel: i,
-      address: getAddressBytes(ch), // Keep as is for tests
+      address: getAddressBytes(ch),
       frequency: 2400 + (ch?.frequencyOffset ?? 0) // MHz
     });
   }

@@ -253,28 +253,28 @@ describe('Serial Connection', () => {
       mockSerial.setNextPort(mockPort);
       
       const machinePackets = [];
-      const heartbeatPackets = [];
+      const errorPackets = [];
       
       serialConnection.registerPacketHandler(0x15, (packet) => {
         machinePackets.push(packet);
       });
       
-      serialConnection.registerPacketHandler(0x22, (packet) => {
-        heartbeatPackets.push(packet);
+      serialConnection.registerPacketHandler(0x23, (packet) => {
+        errorPackets.push(packet);
       });
       
       await serialConnection.connect();
       
       // Send two different packets together
       const packet1 = createMachinePacket(0x10);
-      const packet2 = createHeartbeatPacket();
+      const packet2 = new Uint8Array([0x5A, 0x5A, 0x23, 6, 0xEE, 0]);
       const combined = new Uint8Array([...packet1, ...packet2]);
       
       mockPort.simulateData(combined);
       await serialConnection.triggerPacketProcessing();
       
       expect(machinePackets.length).toBe(1);
-      expect(heartbeatPackets.length).toBe(1);
+      expect(errorPackets.length).toBe(1);
     });
   });
 

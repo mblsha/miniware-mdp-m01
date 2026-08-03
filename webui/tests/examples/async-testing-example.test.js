@@ -91,7 +91,7 @@ describe('Async Testing Examples', () => {
       });
       
       // Queue packet - will be processed automatically
-      await serial.queuePacket([0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x00, 0x10]);
+      await serial.queuePacket([0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x10, 0x10]);
       
       expect(receivedPackets).toHaveLength(1);
       expect(receivedPackets[0][6]).toBe(0x10); // Machine type
@@ -106,8 +106,8 @@ describe('Async Testing Examples', () => {
       });
       
       // Queue multiple packets
-      serial.queuePacket([0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x00, 0x10]);
-      serial.queuePacket([0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x00, 0x11]);
+      serial.queuePacket([0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x10, 0x10]);
+      serial.queuePacket([0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x11, 0x11]);
       
       // Nothing processed yet
       expect(receivedPackets).toHaveLength(0);
@@ -127,10 +127,10 @@ describe('Async Testing Examples', () => {
       const packetPromise = serial.waitForPacketType(0x11, 1000);
       
       // Send different packet first
-      await serial.queuePacket([0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x00, 0x10]);
+      await serial.queuePacket([0x5A, 0x5A, 0x15, 0x07, 0xEE, 0x10, 0x10]);
       
       // Then send expected packet
-      await serial.queuePacket([0x5A, 0x5A, 0x11, 0x9C, 0xEE, 0x00, ...new Array(150).fill(0)]);
+      await serial.queuePacket([0x5A, 0x5A, 0x11, 0x9C, 0x00, 0x00, ...new Array(150).fill(0)]);
       
       // Wait should resolve with the synthesize packet
       const packet = await packetPromise;

@@ -114,7 +114,9 @@ describe('perfetto replay alert counts', () => {
 
     expect(alerts).toEqual({
       checksum_failed: 110,
-      delta_t_oos: 8,
+      // Strict resynchronization recovers valid WAVE frames that the old
+      // length-only replay parser discarded after corrupt candidates.
+      delta_t_oos: 6,
       voltage_oos: 0,
       current_oos: 0,
       power_oos: 0

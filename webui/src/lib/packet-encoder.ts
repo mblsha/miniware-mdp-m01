@@ -86,6 +86,8 @@ export function createSetVoltagePacket(channel: number, voltage: number, current
   return createVoltageCurrentPacket(PacketType.SET_V, channel, voltage, current);
 }
 
+// SET_V and SET_I both carry and update the complete voltage/current pair.
+// Their only recovered firmware difference is the selected edit/control mode.
 export function createSetCurrentPacket(channel: number, voltage: number, current: number): number[] {
   return createVoltageCurrentPacket(PacketType.SET_I, channel, voltage, current);
 }
@@ -139,6 +141,8 @@ export function createStopAutoMatchPacket(): number[] {
 }
 
 export function createResetToDfuPacket(): number[] {
+  // Kept for capture compatibility. MDP-M01 main firmware v2.02 dispatches
+  // RESET_TO_DFU as an explicit no-op and does not reboot into its DFU image.
   return createPacket(PacketType.RESET_TO_DFU, 0xEE);
 }
 

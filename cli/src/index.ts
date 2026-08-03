@@ -23,11 +23,12 @@ import { createPerfettoCapture, type PerfettoCapture } from '../../webui/src/lib
 import {
   createGetMachinePacket,
   createHeartbeatPacket,
-  createSetChannelPacket,
-  createSetCurrentPacket,
-  createSetOutputPacket,
-  createSetVoltagePacket
+  createSetChannelPacket
 } from '../../webui/src/lib/packet-encoder';
+import {
+  executeOutputCommand,
+  executeSetpointCommand
+} from '../../webui/src/lib/command-executor';
 import {
   decodePacket,
   processMachinePacket,
@@ -171,7 +172,7 @@ function delay(ms: number): Promise<void> {
 
 function assertAppliedTarget(name: string, actual: number | undefined, expected: number): void {
   if (actual === undefined || Math.abs(actual - expected) > 0.001) {
-    throw new Error(`${name} was not acknowledged by the device (expected ${expected}, received ${actual ?? 'unknown'})`);
+    throw new Error(`${name} was not observed in telemetry (expected ${expected}, received ${actual ?? 'unknown'})`);
   }
 }
 
@@ -455,17 +456,12 @@ async function handleContextCommand(
       );
     }
 
-    if (parsedVoltage !== undefined && voltageTarget !== undefined && currentTarget !== undefined) {
-      await connection.sendPacket(createSetChannelPacket(channel));
-      await delay(50);
-      await connection.sendPacket(createSetVoltagePacket(channel, voltageTarget, currentTarget));
-      await delay(50);
-    }
-
-    if (parsedCurrent !== undefined && voltageTarget !== undefined && currentTarget !== undefined) {
-      await connection.sendPacket(createSetChannelPacket(channel));
-      await delay(50);
-      await connection.sendPacket(createSetCurrentPacket(channel, voltageTarget, currentTarget));
+    if (wantsSets && voltageTarget !== undefined && currentTarget !== undefined) {
+      // Both opcodes carry both setpoints. If both CLI flags were supplied,
+      // preserve the previous final mode (current) with one command instead of
+      // sending two frames through the firmware's single-frame RX path.
+      const mode = parsedCurrent !== undefined ? 'current' : 'voltage';
+      await executeSetpointCommand(connection, channel, voltageTarget, currentTarget, mode);
       await delay(50);
     }
 
@@ -473,9 +469,7 @@ async function handleContextCommand(
       if (!['on', 'off'].includes(normalizedOutputState!)) {
         throw new Error('Output state must be "on" or "off"');
       }
-      await connection.sendPacket(createSetChannelPacket(channel));
-      await delay(50);
-      await connection.sendPacket(createSetOutputPacket(channel, normalizedOutputState === 'on'));
+      await executeOutputCommand(connection, channel, normalizedOutputState === 'on');
       await delay(50);
     }
 
@@ -483,7 +477,7 @@ async function handleContextCommand(
       ? await waitForChannelStatus(connection, channel)
       : baseline;
     if ((wantsStatus || wantsSets || wantsOutput) && !finalStatus) {
-      throw new Error('Device did not acknowledge the command with synthesize status');
+      throw new Error('No post-command synthesize telemetry was received');
     }
     if (finalStatus && wantsSets) {
       if (parsedVoltage !== undefined) {
@@ -494,7 +488,7 @@ async function handleContextCommand(
       }
     }
     if (finalStatus && wantsOutput && finalStatus.isOutput !== (normalizedOutputState === 'on')) {
-      throw new Error(`Output ${normalizedOutputState?.toUpperCase()} was not acknowledged by the device`);
+      throw new Error(`Post-command telemetry did not show output ${normalizedOutputState?.toUpperCase()}`);
     }
 
     if (options.statusJson && finalStatus) {
@@ -920,20 +914,18 @@ async function handleRecordCommand(
       outputOnTimer = setTimeout(() => {
         outputOnTimer = null;
         outputOnTransition = (async () => {
-          await connection.sendPacket(createSetChannelPacket(channel));
+          await executeOutputCommand(connection, channel, true);
           await delay(50);
-          await connection.sendPacket(createSetOutputPacket(channel, true));
-          await delay(50);
-          const acknowledged = connection instanceof NodeSerialConnection
+          const observed = connection instanceof NodeSerialConnection
             ? await waitForChannelStatus(connection, channel)
             : null;
-          if (!acknowledged || !acknowledged.isOutput) {
+          if (!observed || !observed.isOutput) {
             throw new Error(
-              `Scheduled output ON was not acknowledged for channel ${channel}`
+              `Scheduled output ON was not observed in telemetry for channel ${channel}`
             );
           }
           log(
-            `Scheduled output ON acknowledged for channel ${channel} ` +
+            `Scheduled output ON observed for channel ${channel} ` +
             `after ${outputOnAfterSeconds.toFixed(3)}s.`
           );
         })().catch((error: unknown) => {
@@ -1204,24 +1196,17 @@ program
       }
       validateDeviceTargets(baseline.machineType ?? 'Unknown', voltage, current);
 
-      await connection.sendPacket(createSetChannelPacket(channel));
+      const mode = requestedCurrent !== undefined ? 'current' : 'voltage';
+      await executeSetpointCommand(connection, channel, voltage, current, mode);
       await delay(50);
-      if (requestedVoltage !== undefined) {
-        await connection.sendPacket(createSetVoltagePacket(channel, voltage, current));
-        await delay(50);
-      }
-      if (requestedCurrent !== undefined) {
-        await connection.sendPacket(createSetCurrentPacket(channel, voltage, current));
-        await delay(50);
-      }
 
-      const acknowledged = await waitForChannelStatus(connection, channel);
-      if (!acknowledged) throw new Error('Device did not acknowledge the setpoint command');
+      const observed = await waitForChannelStatus(connection, channel);
+      if (!observed) throw new Error('No post-command synthesize telemetry was received');
       if (requestedVoltage !== undefined) {
-        assertAppliedTarget('Voltage target', acknowledged.targetVoltage, voltage);
+        assertAppliedTarget('Voltage target', observed.targetVoltage, voltage);
       }
       if (requestedCurrent !== undefined) {
-        assertAppliedTarget('Current target', acknowledged.targetCurrent, current);
+        assertAppliedTarget('Current target', observed.targetCurrent, current);
       }
       console.log(`Set channel ${channel} to ${voltage.toFixed(3)}V / ${current.toFixed(3)}A`);
     } finally {
@@ -1246,16 +1231,14 @@ program
     const connection = new NodeSerialConnection({ portPath });
     await connection.connect();
     try {
-      await connection.sendPacket(createSetChannelPacket(channel));
-      await delay(50);
       const enabled = normalized === 'on';
-      await connection.sendPacket(createSetOutputPacket(channel, enabled));
+      await executeOutputCommand(connection, channel, enabled);
       await delay(50);
-      const acknowledged = await waitForChannelStatus(connection, channel);
-      if (!acknowledged || acknowledged.isOutput !== enabled) {
-        throw new Error(`Device did not acknowledge output ${normalized.toUpperCase()}`);
+      const observed = await waitForChannelStatus(connection, channel);
+      if (!observed || observed.isOutput !== enabled) {
+        throw new Error(`Post-command telemetry did not show output ${normalized.toUpperCase()}`);
       }
-      console.log(`Channel ${channel} output ${acknowledged.isOutput ? 'ON' : 'OFF'}`);
+      console.log(`Channel ${channel} output ${observed.isOutput ? 'ON' : 'OFF'}`);
     } finally {
       await connection.disconnect();
     }

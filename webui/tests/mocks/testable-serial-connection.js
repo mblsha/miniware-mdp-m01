@@ -142,7 +142,7 @@ export class TestableSerialConnection extends TestSerialConnection {
    * Helper to create synthesize packet
    */
   _createSynthesizePacket(channelData) {
-    const packet = [0x5A, 0x5A, 0x11, 156, 0xEE, 0x00];
+    const packet = [0x5A, 0x5A, 0x11, 156, 0x00, 0x00];
     const data = [];
     
     for (let i = 0; i < 6; i++) {

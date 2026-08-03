@@ -129,7 +129,7 @@ describe('SerialConnection Buffer Management', () => {
     });
 
     it('should handle multiple packets with splits', async () => {
-      const packet1 = createHeartbeatPacket();
+      const packet1 = createErrorPacket();
       const packet2 = createMachinePacket(0x10);
       const packet3 = createUpdateChannelPacket(2);
 
@@ -146,9 +146,9 @@ describe('SerialConnection Buffer Management', () => {
       const packetTypes = [];
 
       // Register handlers for all packet types
-      serialConnection.registerPacketHandler(0x22, (packet) => {
+      serialConnection.registerPacketHandler(0x23, (packet) => {
         receivedPackets.push(packet);
-        packetTypes.push('heartbeat');
+        packetTypes.push('error');
       });
       serialConnection.registerPacketHandler(0x15, (packet) => {
         receivedPackets.push(packet);
@@ -175,17 +175,17 @@ describe('SerialConnection Buffer Management', () => {
       }
 
       expect(receivedPackets.length).toBe(3);
-      expect(packetTypes).toEqual(['heartbeat', 'machine', 'update_channel']);
+      expect(packetTypes).toEqual(['error', 'machine', 'update_channel']);
       expect(serialConnection.receiveBuffer.length).toBe(0);
     });
 
     it('should handle garbage data before valid packet', async () => {
-      const validPacket = createHeartbeatPacket();
+      const validPacket = createErrorPacket();
       const garbage = [0xFF, 0xAB, 0xCD, 0x12, 0x34];
       const dataWithGarbage = [...garbage, ...validPacket];
 
       const receivedPackets = [];
-      serialConnection.registerPacketHandler(0x22, (packet) => {
+      serialConnection.registerPacketHandler(0x23, (packet) => {
         receivedPackets.push(packet);
       });
 
@@ -198,11 +198,11 @@ describe('SerialConnection Buffer Management', () => {
     });
 
     it('should handle incomplete header at end of buffer', async () => {
-      const packet = createHeartbeatPacket();
+      const packet = createErrorPacket();
       const incompleteHeader = [0x5A]; // Just first byte of header
 
       const receivedPackets = [];
-      serialConnection.registerPacketHandler(0x22, (packet) => {
+      serialConnection.registerPacketHandler(0x23, (packet) => {
         receivedPackets.push(packet);
       });
 
@@ -217,7 +217,7 @@ describe('SerialConnection Buffer Management', () => {
       expect(serialConnection.receiveBuffer.length).toBe(1);
 
       // Complete the header and packet
-      const rest = [0x5A, 0x22, 0x06, 0xEE, 0x00];
+      const rest = [0x5A, 0x23, 0x06, 0xEE, 0x00];
       const combined = new Uint8Array(serialConnection.receiveBuffer.length + rest.length);
       combined.set(serialConnection.receiveBuffer);
       combined.set(new Uint8Array(rest), serialConnection.receiveBuffer.length);
@@ -273,6 +273,72 @@ describe('SerialConnection Buffer Management', () => {
     });
   });
 
+  describe('Outbound Frame Boundaries', () => {
+    it('serializes concurrent callers as one writer call per complete frame', async () => {
+      let releaseFirstWrite;
+      mockWriter.write
+        .mockImplementationOnce(() => new Promise((resolve) => {
+          releaseFirstWrite = resolve;
+        }))
+        .mockResolvedValueOnce(undefined);
+      serialConnection.writer = mockWriter;
+
+      const heartbeat = [0x5A, 0x5A, 0x22, 6, 0xEE, 0];
+      const getMachine = [0x5A, 0x5A, 0x21, 6, 0xEE, 0];
+      const first = serialConnection.sendPacket(heartbeat);
+      const second = serialConnection.sendPacket(getMachine);
+
+      await Promise.resolve();
+      expect(mockWriter.write).toHaveBeenCalledTimes(1);
+      expect(Array.from(mockWriter.write.mock.calls[0][0])).toEqual(heartbeat);
+
+      releaseFirstWrite();
+      await Promise.all([first, second]);
+      expect(mockWriter.write).toHaveBeenCalledTimes(2);
+      expect(Array.from(mockWriter.write.mock.calls[1][0])).toEqual(getMachine);
+    });
+
+    it('rejects partial, concatenated, bad-checksum, and device-direction writes', async () => {
+      serialConnection.writer = mockWriter;
+      const heartbeat = [0x5A, 0x5A, 0x22, 6, 0xEE, 0];
+
+      await expect(serialConnection.sendPacket(heartbeat.slice(0, 5))).rejects.toThrow(
+        'at least the 6-byte header'
+      );
+      await expect(serialConnection.sendPacket([...heartbeat, ...heartbeat])).rejects.toThrow(
+        'Declared packet size'
+      );
+      await expect(
+        serialConnection.sendPacket([0x5A, 0x5A, 0x16, 7, 0, 0, 1])
+      ).rejects.toThrow('checksum');
+      await expect(
+        serialConnection.sendPacket(createMachinePacket(0x10))
+      ).rejects.toThrow('invalid size or direction');
+      expect(mockWriter.write).not.toHaveBeenCalled();
+    });
+
+    it('finishes an in-flight frame and rejects new writes once disconnect starts', async () => {
+      let releaseWrite;
+      mockWriter.write.mockImplementationOnce(() => new Promise((resolve) => {
+        releaseWrite = resolve;
+      }));
+      serialConnection.writer = mockWriter;
+
+      const heartbeat = [0x5A, 0x5A, 0x22, 6, 0xEE, 0];
+      const getMachine = [0x5A, 0x5A, 0x21, 6, 0xEE, 0];
+      const inFlight = serialConnection.sendPacket(heartbeat);
+      await Promise.resolve();
+
+      const disconnecting = serialConnection.disconnect();
+      await expect(serialConnection.sendPacket(getMachine)).rejects.toThrow('Not connected');
+      releaseWrite();
+      await Promise.all([inFlight, disconnecting]);
+
+      expect(mockWriter.write).toHaveBeenCalledOnce();
+      expect(mockWriter.close).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('ReadLoop Integration', () => {
     it('should process split packets through readLoop', async () => {
       const packet = createSynthesizePacket();
@@ -307,12 +373,12 @@ describe('SerialConnection Buffer Management', () => {
     });
 
     it('should handle stream of mixed complete and split packets', async () => {
-      const heartbeat = createHeartbeatPacket();
+      const errorPacket = createErrorPacket();
       const machine = createMachinePacket(0x10);
       const wave = createWavePacket();
 
       // Create chunks that split across packet boundaries
-      const allData = [...heartbeat, ...machine, ...wave];
+      const allData = [...errorPacket, ...machine, ...wave];
       const chunks = [
         allData.slice(0, 8),      // Heartbeat + start of machine
         allData.slice(8, 15),     // Rest of machine + start of wave  
@@ -321,7 +387,7 @@ describe('SerialConnection Buffer Management', () => {
       ];
 
       const receivedTypes = [];
-      serialConnection.registerPacketHandler(0x22, () => receivedTypes.push('heartbeat'));
+      serialConnection.registerPacketHandler(0x23, () => receivedTypes.push('error'));
       serialConnection.registerPacketHandler(0x15, () => receivedTypes.push('machine'));
       serialConnection.registerPacketHandler(0x12, () => receivedTypes.push('wave'));
 
@@ -337,13 +403,13 @@ describe('SerialConnection Buffer Management', () => {
       await serialConnection.connect();
       await new Promise(resolve => setTimeout(resolve, 20));
 
-      expect(receivedTypes).toEqual(['heartbeat', 'machine', 'wave']);
+      expect(receivedTypes).toEqual(['error', 'machine', 'wave']);
     });
   });
 
   // Helper functions to create test packets
-  function createHeartbeatPacket() {
-    return [0x5A, 0x5A, 0x22, 0x06, 0xEE, 0x00];
+  function createErrorPacket() {
+    return [0x5A, 0x5A, 0x23, 0x06, 0xEE, 0x00];
   }
 
   function createMachinePacket(machineType) {
@@ -355,7 +421,7 @@ describe('SerialConnection Buffer Management', () => {
   function createUpdateChannelPacket(channel) {
     const data = [channel];
     const checksum = data[0];
-    return [0x5A, 0x5A, 0x14, 0x07, 0xEE, checksum, ...data];
+    return [0x5A, 0x5A, 0x14, 0x07, channel, checksum, ...data];
   }
 
   function createWavePacket() {
@@ -399,7 +465,7 @@ describe('SerialConnection Buffer Management', () => {
 
   function createSynthesizePacket() {
     // Create a 156-byte synthesize packet
-    const packet = [0x5A, 0x5A, 0x11, 156, 0xEE]; // header
+    const packet = [0x5A, 0x5A, 0x11, 156, 0x00]; // header with selected channel 0
     const data = [];
 
     // 6 channels, 25 bytes each
@@ -417,7 +483,7 @@ describe('SerialConnection Buffer Management', () => {
       data.push(0);                        // lock
       data.push(0);                        // statusLoad/statusPsu
       data.push(ch === 0 ? 1 : 0);        // outputOn
-      data.push(0, 0, 0);                  // color
+      data.push(0, 0, 0xEE);               // RGB565 plus fixed firmware marker
       data.push(0);                        // error
       data.push(0xFF);                     // end marker
     }

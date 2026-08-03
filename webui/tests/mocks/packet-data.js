@@ -67,8 +67,8 @@ export function createSynthesizePacket(channelData = []) {
     // outputOn
     data.push(ch.outputOn || 0);
     
-    // color (3 bytes)
-    data.push(0, 0, 0);
+    // RGB565 little-endian followed by the firmware's fixed 0xEE marker
+    data.push(0, 0, 0xEE);
     
     // error
     data.push(0);
@@ -135,22 +135,13 @@ export function createWavePacket(channel = 0, sizeOrPoints = []) {
 }
 
 export function createMachinePacket(type = 0x10) {
-  const packet = [0x5A, 0x5A, 0x15, 0x09, 0xEE]; // header: magic, type=0x15, size=9, channel
-  const data = [0xEE, 0x00, type]; // data: channel, dummy, machineTypeRaw
-  
-  // Calculate checksum on data bytes only
-  let checksum = 0;
-  for (const byte of data) {
-    checksum ^= byte;
-  }
-  packet.push(checksum);  // Add checksum as 6th byte
-  packet.push(...data);   // Add data after checksum
-  
-  return new Uint8Array(packet);
+  // MACHINE is exactly one payload byte; channel and checksum already belong
+  // to the common six-byte header.
+  return new Uint8Array([0x5A, 0x5A, 0x15, 0x07, 0xEE, type, type]);
 }
 
 export function createUpdateChannelPacket(channel = 0) {
-  const packet = [0x5A, 0x5A, 0x14, 0x07, 0xEE, channel, channel];
+  const packet = [0x5A, 0x5A, 0x14, 0x07, channel, channel, channel];
   return new Uint8Array(packet);
 }
 
@@ -249,4 +240,3 @@ export const mockScenarios = {
     createMalformedPacket('bad-checksum')
   ]
 };
-

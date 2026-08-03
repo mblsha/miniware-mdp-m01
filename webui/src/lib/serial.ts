@@ -2,7 +2,7 @@ import { writable, derived, type Writable, type Readable } from 'svelte/store';
 import type { SerialConfig, PacketHandler } from './types';
 import { decodePacket, isSynthesizePacket, isWavePacket, type SynthesizePacket, type WavePacket } from './packet-decoder';
 import { createGetMachinePacket, createHeartbeatPacket } from './packet-encoder';
-import { extractProtocolPackets } from './protocol';
+import { assertHostCommandPacket, extractProtocolPackets } from './protocol';
 /// <reference path="./types/web-serial.d.ts" />
 
 export const ConnectionStatus = {
@@ -37,6 +37,8 @@ export class SerialConnection {
   private deviceTypeStore: Writable<DeviceInfo | null>;
   private packetHandlers: Map<number, PacketHandler[]>;
   private receiveBuffer: Uint8Array;
+  private writeQueue: Promise<void>;
+  private closing: boolean;
   
   public readonly status: Readable<string>;
   public readonly error: Readable<string | null>;
@@ -50,6 +52,8 @@ export class SerialConnection {
     
     // Buffer for incomplete packets
     this.receiveBuffer = new Uint8Array(0);
+    this.writeQueue = Promise.resolve();
+    this.closing = false;
     
     // Create derived stores once
     this.status = derived(this.statusStore, $status => $status);
@@ -111,7 +115,9 @@ export class SerialConnection {
   }
 
   private async closeResources(setDisconnected: boolean): Promise<void> {
+    this.closing = true;
     this.stopHeartbeat();
+    await this.writeQueue.catch(() => undefined);
     const reader = this.reader;
     const writer = this.writer;
     const port = this.port;
@@ -142,6 +148,8 @@ export class SerialConnection {
       firstError ??= error;
     } finally {
       this.receiveBuffer = new Uint8Array(0);
+      this.writeQueue = Promise.resolve();
+      this.closing = false;
       this.deviceTypeStore.set(null);
       if (setDisconnected) {
         this.statusStore.set(ConnectionStatus.DISCONNECTED);
@@ -212,12 +220,26 @@ export class SerialConnection {
   }
 
   async sendPacket(packet: number[] | Uint8Array): Promise<void> {
-    if (!this.writer) {
+    const writer = this.writer;
+    if (!writer || this.closing) {
       throw new Error('Not connected');
     }
-    
-    const uint8Array = packet instanceof Uint8Array ? packet : new Uint8Array(packet);
-    await this.writer.write(uint8Array);
+
+    // A firmware RX frame must arrive in one USB OUT transaction. We cannot
+    // force browser/OS USB packetisation, but one immutable frame per queued
+    // writer.write() prevents application-level splitting, concatenation, and
+    // heartbeat/command overlap.
+    const uint8Array = packet instanceof Uint8Array
+      ? new Uint8Array(packet)
+      : Uint8Array.from(packet);
+    assertHostCommandPacket(uint8Array);
+
+    const write = this.writeQueue.then(async () => {
+      if (this.writer !== writer) throw new Error('Not connected');
+      await writer.write(uint8Array);
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
   }
 
   startHeartbeat(): void {

@@ -40,7 +40,7 @@ export interface MiniwareMdpM01Packet<TData = unknown> {
 export interface SynthesizeData {
   channels: SynthesizeChannel[];
   channel: number;
-  dummy: number;
+  checksum: number;
 }
 
 export interface SynthesizeChannel {
@@ -73,7 +73,7 @@ export interface SynthesizeChannel {
 export interface WaveData {
   groups: WaveGroup[];
   channel: number;
-  dummy?: number;
+  checksum?: number;
 }
 
 export interface WaveGroup {
@@ -90,7 +90,7 @@ export interface WaveItem {
 
 export interface AddressData {
   channel?: number;
-  dummy?: number;
+  checksum?: number;
   addresses: AddressEntry[];
 }
 
@@ -116,7 +116,7 @@ export interface AddressEntryFields {
 
 export interface MachineData {
   channel: number;
-  dummy: number;
+  checksum: number;
   machineTypeRaw: number;
   hasLcd?: boolean;
   machineName?: string;
@@ -124,20 +124,20 @@ export interface MachineData {
 
 export interface UpdateChannelData {
   channel: number;
-  dummy: number;
+  checksum: number;
   targetChannel: number;
 }
 
 export interface SetIsOutputData {
   channel: number;
-  dummy: number;
+  checksum: number;
   outputState: number;
   isOutputOn: boolean;
 }
 
 export interface SetVData {
   channel: number;
-  dummy: number;
+  checksum: number;
   voltageRaw: number;
   currentRaw: number;
   voltage: number;
@@ -146,7 +146,7 @@ export interface SetVData {
 
 export interface SetIData {
   channel: number;
-  dummy: number;
+  checksum: number;
   voltageRaw: number;
   currentRaw: number;
   voltage: number;
@@ -155,7 +155,7 @@ export interface SetIData {
 
 export interface SetAddrData {
   channel: number;
-  dummy: number;
+  checksum: number;
   addrByte0: number;
   addrByte1: number;
   addrByte2: number;
@@ -168,18 +168,18 @@ export interface SetAddrData {
 
 export interface SetAllAddrData {
   channel: number;
-  dummy: number;
+  checksum: number;
   addresses: AddressEntry[];
 }
 
 export interface RgbData {
   channel: number;
-  dummy: number;
+  checksum: number;
   rgbState: number;
   isRgbOn: boolean;
 }
 
 export interface EmptyPacketData {
   channel: number;
-  dummy: number;
+  checksum: number;
 }

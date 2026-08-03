@@ -1,202 +1,191 @@
-# Miniware MDP M01/M02 Protocol Overview
+# Miniware MDP-M01 serial protocol
 
-## Introduction
+This document describes the USB CDC serial protocol implemented by the
+GD32F303 MDP-M01 main firmware v2.02. It combines observed host traffic with
+the recovered firmware implementation. M02 controllers may differ.
 
-The Miniware MDP (Multi-channel Digital Power) protocol is a binary communication protocol used by the M01 (with LCD) and M02 (without LCD) power supply devices. The protocol enables real-time monitoring and control of up to 6 independent power channels over a serial connection.
+## Frame format
 
-## Protocol Structure
+Every frame is:
 
-### Packet Format
-
-All packets follow a consistent structure:
-
+```text
+offset  size  meaning
+0       2     magic: 5A 5A
+2       1     packet type
+3       1     total frame size, including this six-byte header
+4       1     channel: 0..5 for indexed packets, EE for broadcast packets
+5       1     XOR of payload bytes [6, size)
+6       ...   type-specific payload
 ```
-[0x5A][0x5A][Type][Size][Channel][Checksum][Data...]
+
+The byte at offset 5 is a checksum, not padding. Multi-byte integers are
+little-endian. Voltage and current values are unsigned millivolts and
+milliamps; temperature is an unsigned value in tenths of a degree Celsius.
+
+## Packet types
+
+### Device to host
+
+| Type | Name | Size | Channel | Payload |
+|---:|---|---:|---|---|
+| `11` | SYNTHESIZE | 156 | selected channel `0..5` | Six 25-byte status records |
+| `12` | WAVE | 126 or 206 | sampled channel `0..5` | Ten timestamp/sample groups |
+| `13` | ADDR | 42 | `EE` | Six address/frequency records |
+| `14` | UPDATE_CH | 7 | selected channel `0..5` | Same channel byte again |
+| `15` | MACHINE | 7 | `EE` | `10` for the LCD M01 |
+| `23` | ERR_240 | 6 | `EE` | None; retained for old captures |
+
+No construction or enqueue path for ERR_240 was found in v2.02, so it should
+be treated as a legacy possibility rather than an error the firmware is known
+to report.
+
+### Host to device
+
+| Type | Name | Size | Channel | Payload / firmware behaviour |
+|---:|---|---:|---|---|
+| `16` | SET_ISOUTPUT | 7 | `0..5` | Zero is off; any nonzero value is on |
+| `17` | GET_ADDR | 6 | `EE` | Sends ADDR immediately |
+| `18` | SET_ADDR | 12 | `0..5` | Five address bytes plus frequency offset |
+| `19` | SET_CH | 6 | `0..5` | Selects UI/wave channel and clears partial wave accumulation |
+| `1A` | SET_V | 10 | `0..5` | Voltage and current pair; selects voltage edit mode |
+| `1B` | SET_I | 10 | `0..5` | Voltage and current pair; selects current edit mode |
+| `1C` | SET_ALL_ADDR | 42 | `EE` | Six address/frequency records; sends ADDR immediately |
+| `1D` | START_AUTO_MATCH | 6 | `EE` | Starts matching; no direct response |
+| `1E` | STOP_AUTO_MATCH | 6 | `EE` | Stops matching; no direct response |
+| `1F` | RESET_TO_DFU | 6 | `EE` | Explicit no-op in v2.02 |
+| `20` | RGB | 7 | `EE` | Zero disables animation, nonzero enables it |
+| `21` | GET_MACHINE | 6 | `EE` | Sends MACHINE immediately |
+| `22` | HEARTBEAT | 6 | `EE` | No direct response; advances the telemetry scheduler |
+
+SET_V and SET_I do not independently update one value. Both consume the same
+four-byte `voltage_mV, current_mA` pair and write both setpoints. The opcode
+changes the controller's mode/state. A host changing only one value must first
+preserve the companion setpoint from recent telemetry.
+
+SET_CH is not required before SET_V, SET_I, SET_ISOUTPUT, or SET_ADDR. Those
+handlers use the channel in their own header directly. Sending SET_CH as an
+addressing preamble has an unrelated visible side effect and discards a
+partially accumulated WAVE packet.
+
+Radio-address byte order is asymmetric in v2.02. SET_ADDR and SET_ALL_ADDR are
+consumed as `addr[0]..addr[4]`, while ADDR responses emit each stored address as
+`addr[4]..addr[0]`. The shared decoder reverses ADDR response bytes before
+exposing them to callers, so a read-modify-write round trip retains the human
+order used by the command encoders.
+
+## Response semantics
+
+Only these requests have direct responses:
+
+- GET_MACHINE -> MACHINE
+- GET_ADDR -> ADDR
+- SET_ALL_ADDR -> ADDR
+
+The control setters do not ACK. To confirm one, compare a later SYNTHESIZE
+frame with the requested state. A telemetry timeout means “not observed”; it
+does not prove that the command was rejected.
+
+HEARTBEAT is also not a request/response pair. Every checksum-valid received
+frame advances a shared counter by 20. SYNTHESIZE is attempted when the
+counter is divisible by 200, UPDATE_CH at 300, and RGB animation work at 700.
+The initial scheduler phase is not established, so one heartbeat must never be
+assumed to produce one SYNTHESIZE frame. The CLI installs one telemetry waiter
+and sends separately paced heartbeat probes until status arrives or times out.
+
+## SYNTHESIZE layout
+
+The 150-byte payload contains six records. Record byte offsets are:
+
+| Offset | Size | Meaning |
+|---:|---:|---|
+| 0 | 1 | Record/channel number |
+| 1 | 2 | Output voltage, mV |
+| 3 | 2 | Output current, mA |
+| 5 | 2 | Input voltage, mV |
+| 7 | 2 | Input current, mA |
+| 9 | 2 | Set voltage, mV |
+| 11 | 2 | Set current, mA |
+| 13 | 2 | Temperature, 0.1 C |
+| 15 | 1 | Online flag |
+| 16 | 1 | Module type (`1` P905, `2` P906, `3` L1060) |
+| 17 | 1 | Lock flag |
+| 18 | 1 | PSU/load operating mode |
+| 19 | 1 | Output state |
+| 20 | 2 | RGB565 colour, little-endian |
+| 22 | 1 | Fixed `EE` marker |
+| 23 | 1 | Error flag |
+| 24 | 1 | Fixed `FF` end marker |
+
+For an offline or invalid-address slot the firmware zeroes the record and then
+sets only the record number; the fixed markers are consequently zero too.
+
+## WAVE layout and timing
+
+The firmware accumulates ten groups before it emits a WAVE frame:
+
+- 126-byte frame: ten groups with two voltage/current samples each.
+- 206-byte frame: ten groups with four voltage/current samples each.
+
+Each group starts with a little-endian `uint32` raw TIMER1 tick accumulator,
+followed by its sample pairs. The value is an interval accumulated for that
+group, not an absolute timestamp. The historical host conversion is:
+
+```text
+point interval = group_ticks / samples_per_group / 10
 ```
 
-- **Magic Header** (2 bytes): Always `0x5A 0x5A`
-- **Type** (1 byte): Packet type identifier (see command list below)
-- **Size** (1 byte): Total packet size including the 6-byte header
-- **Channel** (1 byte): Channel number (0-5) or `0xEE` for default/all channels
-- **Checksum** (1 byte): XOR of all data bytes (excluding header)
-- **Data** (variable): Packet-specific payload
+The exact wall-clock scale depends on the timer clock configuration. Preserve
+the raw tick value in captures when precise timing or later recalibration is
+important.
 
-### Data Encoding
+## USB transport behaviour
 
-- **Multi-byte integers**: Little-endian format
-- **Voltages**: Stored as millivolts (mV), divide by 1000 for volts
-- **Currents**: Stored as milliamps (mA), divide by 1000 for amps
-- **Temperature**: Raw value, divide by 10 for degrees Celsius
-- **Frequency**: Stored as offset from 2400 MHz base frequency
+Device-to-host traffic is a normal byte stream. Endpoint 5 transmits at most 64
+bytes per USB transfer, and the firmware flushes it every sixth qualifying USB
+SOF while configured. A single 126-, 156-, or 206-byte frame is therefore split
+across multiple host reads. Conversely, one host read can contain several
+complete frames. Host parsers must retain partial frames and extract all
+coalesced frames.
 
-## Device → Host Commands (Incoming)
+Host-to-device parsing is substantially more fragile. Endpoint 4 passes one
+USB OUT buffer and its length to the parser, whose state machine is sensitive
+to transfer boundaries:
 
-### PACK_SYNTHESIZE (0x11) - Channel Status Report
-**Size**: 156 bytes (6 header + 150 data)  
-**Purpose**: Comprehensive status update for all 6 channels
+- A frame split across USB OUT callbacks can be accepted prematurely and have
+  its remainder discarded.
+- Multiple frames coalesced into one callback can be appended together, after
+  which only the first declared frame is dispatched and the trailing data is
+  lost.
+- There is effectively one pending receive-frame slot.
 
-Provides real-time data including:
-- Output voltage and current
-- Input voltage and current  
-- Preset voltage and current settings
-- Temperature
-- Online/offline status
-- Machine type (P905/P906/L1060)
-- Operating mode (CC/CV/CR/CP)
-- Output state (on/off)
-- Channel color (RGB565 format)
-- Error status
+All legitimate host commands are at most 42 bytes, below the 64-byte endpoint
+size. The host implementation consequently:
 
-Each channel occupies 25 bytes in the data payload.
+1. validates one exact, checksummed host command before writing;
+2. performs one serial write per complete frame;
+3. serializes concurrent commands and heartbeats;
+4. avoids redundant SET_CH/control pairs;
+5. spaces status probes instead of emitting a tight burst.
 
-### PACK_WAVE (0x12) - Waveform Data
-**Size**: 126 or 206 bytes  
-**Purpose**: Time-series voltage and current measurements for graphing
+The Web Serial and serialport APIs cannot absolutely guarantee USB transaction
+boundaries, but these rules avoid creating splits or coalescing at the
+application layer.
 
-Contains 10 groups of timestamped measurements:
-- 126 bytes: 2 data points per group (20 points total)
-- 206 bytes: 4 data points per group (40 points total)
+## Defensive validation
 
-**Timestamp Decoding**:
-Each group starts with a 4-byte timestamp (uint32, little-endian) representing the time in microseconds when the group was sampled. To calculate individual point times within a group:
+The firmware does not validate type-specific sizes or channel indexes before
+several array accesses. In particular, sending `EE` with a channel-indexed
+command can write outside the six-slot arrays. It also accepts arbitrary radio
+frequency offsets. Host code must enforce:
 
-1. Read the 32-bit timestamp for the group
-2. Divide by the number of points in the group (2 or 4)
-3. Divide by 10 for the final time unit
-4. Add this interval between consecutive points
+- channel `0..5` for SET_ISOUTPUT, SET_ADDR, SET_CH, SET_V, and SET_I;
+- channel `EE` for broadcast commands;
+- exact type-specific sizes;
+- a frequency offset in `0..83` (2400–2483 MHz);
+- one complete frame, with XOR over payload bytes only;
+- voltage/current values representable as unsigned 16-bit milliunits.
 
-Example for a 2-point group with timestamp 10000:
-- Point interval = 10000 / 2 / 10 = 500 time units
-- Point 1: time = 0
-- Point 2: time = 500
-
-### PACK_ADDR (0x13) - Address and Frequency Report  
-**Size**: 42 bytes  
-**Purpose**: Reports wireless address and frequency for all 6 channels
-
-Each channel has:
-- 5-byte address (stored in reverse order in packet)
-- 1-byte frequency offset from 2400 MHz
-
-**Note**: Address bytes are reversed - packet byte 0 becomes address[4] in memory.
-
-### PACK_UPDAT_CH (0x14) - Channel Switch Notification
-**Size**: 7 bytes  
-**Purpose**: Notifies host that the active channel has changed on the device
-
-Contains the new channel number (0-5).
-
-### PACK_MACHINE (0x15) - Device Type Identification
-**Size**: 7 bytes  
-**Purpose**: Reports the device model
-
-Values:
-- `0x10`: M01 (with LCD display)
-- `0x11`: M02 (without LCD display)
-
-### PACK_ERR_240 (0x23) - Error Notification
-**Size**: 6 bytes  
-**Purpose**: Indicates a 240V module error condition
-
-No data payload - the packet itself is the error notification.
-
-## Host → Device Commands (Outgoing)
-
-### Control Commands
-
-#### PACK_SET_V (0x1A) - Set Voltage
-**Size**: 10 bytes  
-**Purpose**: Set target voltage and current limit for a channel
-
-Data: 2 bytes voltage (mV) + 2 bytes current (mA)
-
-#### PACK_SET_I (0x1B) - Set Current  
-**Size**: 10 bytes  
-**Purpose**: Set target current (identical format to SET_V)
-
-Data: 2 bytes voltage (mV) + 2 bytes current (mA)
-
-#### PACK_SET_ISOUTPUT (0x16) - Enable/Disable Output
-**Size**: 7 bytes  
-**Purpose**: Turn channel output on or off
-
-Data: 1 byte (0 = OFF, 1 = ON)
-
-#### PACK_SET_CH (0x19) - Select Active Channel
-**Size**: 6 bytes  
-**Purpose**: Change the currently active channel for display/control
-
-No data payload - channel number is in the header.
-
-### Configuration Commands
-
-#### PACK_SET_ADDR (0x18) - Set Single Channel Address
-**Size**: 12 bytes  
-**Purpose**: Configure wireless address and frequency for one channel
-
-Data: 5 address bytes + 1 frequency offset byte
-
-#### PACK_SET_ALL_ADDR (0x1C) - Set All Channel Addresses
-**Size**: 42 bytes  
-**Purpose**: Configure addresses and frequencies for all 6 channels at once
-
-Data: 6 × (5 address bytes + 1 frequency offset byte)
-
-#### PACK_START_AUTO_MATCH (0x1D) - Enable Auto-Matching
-**Size**: 6 bytes  
-**Purpose**: Start automatic channel matching mode
-
-#### PACK_STOP_AUTO_MATCH (0x1E) - Disable Auto-Matching  
-**Size**: 6 bytes  
-**Purpose**: Stop automatic channel matching mode
-
-#### PACK_RGB (0x20) - Control RGB LED
-**Size**: 7 bytes  
-**Purpose**: Turn RGB LED effects on or off
-
-Data: 1 byte (0 = OFF, 1 = ON)
-
-### Query Commands
-
-#### PACK_GET_ADDR (0x17) - Request Address Information
-**Size**: 6 bytes  
-**Purpose**: Request device to send PACK_ADDR with all channel addresses
-
-#### PACK_GET_MACHINE (0x21) - Request Device Type
-**Size**: 6 bytes  
-**Purpose**: Request device to send PACK_MACHINE with model information
-
-### Maintenance Commands
-
-#### PACK_HEARTBEAT (0x22) - Keep-Alive Signal
-**Size**: 6 bytes  
-**Purpose**: Maintain connection and prevent timeout
-
-#### PACK_RESET_TO_DFU (0x1F) - Enter Firmware Update Mode
-**Size**: 6 bytes  
-**Purpose**: Restart device in DFU (Device Firmware Update) mode
-
-## Communication Flow
-
-1. **Initial Connection**: Host sends PACK_GET_MACHINE to identify device type
-2. **Status Monitoring**: Device periodically sends PACK_SYNTHESIZE updates
-3. **Waveform Display**: After receiving synthesize packet, device sends PACK_WAVE data
-4. **Channel Control**: Host uses PACK_SET_CH to switch channels, PACK_SET_V/I to adjust settings
-5. **Keep-Alive**: Host sends periodic PACK_HEARTBEAT to maintain connection
-
-## Important Implementation Notes
-
-1. **Wave Processing**: Wave packets are only processed after receiving at least one synthesize packet (waitSynPack flag)
-2. **Channel Filtering**: Wave packets for non-active channels are ignored
-3. **Address Byte Order**: Incoming address packets have reversed byte order compared to outgoing
-4. **Checksum Calculation**: XOR of data bytes only, excluding 6-byte header
-5. **Default Channel**: Use channel value `0xEE` (238) when not targeting a specific channel
-
-## Machine Types
-
-The protocol supports three device types:
-- **P905**: Basic power supply
-- **P906**: Advanced power supply with CC/CV modes
-- **L1060**: Electronic load with CC/CV/CR/CP modes
-
-Operating modes vary by device type, with loads supporting constant resistance (CR) and constant power (CP) modes in addition to the standard constant current (CC) and constant voltage (CV) modes.
+The shared TypeScript stream extractor additionally rejects wrong-direction,
+bad-checksum, and semantically inconsistent UPDATE_CH frames and resynchronizes
+after corrupt or false headers. The C++ stream parser mirrors the important
+partial/coalesced-frame and resynchronization behaviour.

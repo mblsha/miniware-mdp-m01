@@ -11,6 +11,8 @@ export interface MockDeviceConfig {
   portPath: string;
   deviceType: MockDeviceType;
   channels?: MockChannelConfig[];
+  /** Test scheduler phase; v2.02 normally emits status after several accepted frames. */
+  synthesizeEveryCommands?: number;
 }
 
 export interface MockChannelConfig {
@@ -41,7 +43,7 @@ export function createSynthesizeResponse(config: MockDeviceConfig): number[] {
   // Synthesize = 0x11, size = 6 + 150 (6 channels * 25 bytes each) = 156
   const type = 0x11;
   const size = 156;
-  const headerChannel = 0xEE;
+  const headerChannel = 0;
 
   const data: number[] = [];
 
@@ -72,7 +74,7 @@ export function createSynthesizeResponse(config: MockDeviceConfig): number[] {
     data.push(0); // lock
     data.push(0); // statusLoad/statusPsu
     data.push(ch.isOutput ? 1 : 0); // outputOn
-    data.push(0, 0, 0); // color (3 bytes)
+    data.push(0, 0, 0xEE); // RGB565 plus fixed firmware marker
     data.push(0); // error
     data.push(0xff); // end marker
   }
@@ -128,6 +130,7 @@ export class MockNodeSerialConnection {
   private readonly sentPackets: number[][] = [];
   private connected = false;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private acceptedCommandCount = 0;
 
   constructor(config: MockDeviceConfig) {
     this.config = config;
@@ -155,7 +158,9 @@ export class MockNodeSerialConnection {
     const numericPacket = packet instanceof Uint8Array ? Array.from(packet) : packet;
     this.sentPackets.push(numericPacket);
 
-    // Simulate device response based on packet type
+    // Simulate device response based on packet type. GET_MACHINE is a direct
+    // response; HEARTBEAT is not. Scheduled SYNTHESIZE telemetry is driven by
+    // accepted host frames, as it is in the recovered v2.02 main firmware.
     const packetType = numericPacket[2];
     await this.simulateResponse(packetType);
   }
@@ -166,14 +171,12 @@ export class MockNodeSerialConnection {
       const response = createMachineResponse(this.config.deviceType);
       this.dispatchPacket(response);
     }
-    // HEARTBEAT (0x22) -> respond with SYNTHESIZE (0x11)
-    else if (requestType === 0x22) {
+    this.acceptedCommandCount += 1;
+    const synthesizeEvery = this.config.synthesizeEveryCommands ?? 10;
+    if (this.acceptedCommandCount % synthesizeEvery === 0) {
       const response = createSynthesizeResponse(this.config);
       this.dispatchPacket(response);
     }
-    // SET_CH (0x19), SET_V (0x1A), SET_I (0x1B), SET_ISOUTPUT (0x16)
-    // These don't get immediate responses in the real protocol,
-    // but we can optionally respond with a synthesize packet
   }
 
   private dispatchPacket(packet: number[]): void {

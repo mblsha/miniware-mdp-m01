@@ -20,6 +20,7 @@ void processingData::slotHeartBeat()
 //设置当前通道
 void processingData::slotSendNowCh(char ch)
 {
+    if (ch < 0 || ch > 5) return;
     QByteArray sendBuff;
 
     sendBuff.resize(PACK_HEAD_MAX);
@@ -118,15 +119,45 @@ void processingData::slotDisposeRawPack(QByteArray buffer)
             rawPackBuffer.remove(0, 1);
             continue;
         }
-        if (rawPackBuffer.size() < packetSize) return;
+        if (rawPackBuffer.size() < packetSize)
+        {
+            // A corrupted stream can contain a plausible type/size pair before
+            // a complete valid frame. Do not retain that false header forever.
+            qsizetype laterHeader = rawPackBuffer.indexOf(packHead, 1);
+            bool recovered = false;
+            while (laterHeader >= 0)
+            {
+                if (rawPackBuffer.size() - laterHeader >= 4)
+                {
+                    const uint8_t laterType = static_cast<uint8_t>(
+                        rawPackBuffer.at(laterHeader + PACK_TYPE_INDEX));
+                    const uint8_t laterSize = static_cast<uint8_t>(
+                        rawPackBuffer.at(laterHeader + PACK_SIZE_INDEX));
+                    if (isValidPacketSize(laterType, laterSize)
+                        && rawPackBuffer.size() - laterHeader >= laterSize
+                        && packCheeckSelf(rawPackBuffer.mid(laterHeader, laterSize)))
+                    {
+                        rawPackBuffer.remove(0, laterHeader);
+                        recovered = true;
+                        break;
+                    }
+                }
+                laterHeader = rawPackBuffer.indexOf(packHead, laterHeader + 1);
+            }
+            if (recovered) continue;
+            return;
+        }
 
         const QByteArray packet = rawPackBuffer.left(packetSize);
-        rawPackBuffer.remove(0, packetSize);
         if(!packCheeckSelf(packet))
         {
             qDebug() << "pack_error";
+            // Advance one byte so a valid header inside or immediately after a
+            // corrupt declared frame can still be found.
+            rawPackBuffer.remove(0, 1);
             continue;
         }
+        rawPackBuffer.remove(0, packetSize);
 
         //QString timeStr;
         //QTime time=QTime::currentTime();
@@ -171,6 +202,11 @@ void processingData::slotDisposeRawPack(QByteArray buffer)
 
 void processingData::slotSendAllAddrToLower()
 {
+    for (int i = 0; i < 6; i++)
+    {
+        if (MDP[i].upDatFreq < 2400 || MDP[i].upDatFreq > 2483) return;
+    }
+
     QByteArray sendBuffer;
     sendBuffer.clear();
     machine *p = MDP;
@@ -191,8 +227,10 @@ void processingData::slotSendAllAddrToLower()
 
 void processingData::slotSendAddrToLower(int ch)
 {
+    if (ch < 0 || ch > 5) return;
     QByteArray sendBuffer;
     machine *p = &(MDP[ch]);
+    if (p->upDatFreq < 2400 || p->upDatFreq > 2483) return;
 
     sendBuffer.append(static_cast<char>(p->upDatAddress[0]));
     sendBuffer.append(static_cast<char>(p->upDatAddress[1]));
@@ -206,6 +244,7 @@ void processingData::slotSendAddrToLower(int ch)
 }
 void processingData::slotSendVoltaToLower(int ch)
 {
+    if (ch < 0 || ch > 5) return;
 
     QByteArray sendBuffer;
     machine *p = &(MDP[ch]);
@@ -220,6 +259,7 @@ void processingData::slotSendVoltaToLower(int ch)
 }
 void processingData::slotSendElectToLower(int ch)
 {
+    if (ch < 0 || ch > 5) return;
 
     QByteArray sendBuffer;
     machine *p = &(MDP[ch]);
@@ -260,6 +300,7 @@ void processingData::slotSendStopRGB()
 
 void processingData::slotSendSetOutputState(int ch)
 {
+    if (ch < 0 || ch > 5) return;
     QByteArray sendBuffer;
     sendBuffer.append(1);
     sendBuffer[0] = (MDP[ch].updatoutPutState)?1:0;
@@ -669,21 +710,8 @@ bool processingData::isValidPacketSize(uint8_t type, uint8_t size) const
         case PACK_WAVE: return size == 126 || size == 206;
         case PACK_ADDR: return size == 42;
         case PACK_UPDAT_CH:
-        case PACK_MACHINE:
-        case PACK_SET_ISOUTPUT:
-        case PACK_RGB: return size == 7;
-        case PACK_GET_ADDR:
-        case PACK_SET_CH:
-        case PACK_START_ATUO_MATCH:
-        case PACK_STOP_ATUO_MATCH:
-        case PACK_RESET_TO_DFU:
-        case PACK_GET_MACHINE:
-        case PACK_HEARTBEAT:
+        case PACK_MACHINE: return size == 7;
         case PACK_ERR_240: return size == 6;
-        case PACK_SET_ADDR: return size == 12;
-        case PACK_SET_V:
-        case PACK_SET_I: return size == 10;
-        case PACK_SET_ALL_ADDR: return size == 42;
         default: return false;
     }
 }

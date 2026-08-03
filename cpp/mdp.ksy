@@ -116,7 +116,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
 
       - id: channels
@@ -158,7 +158,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
 
       - id: groups
@@ -191,7 +191,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
       - id: addresses
         type: address_entry
@@ -202,7 +202,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
       - id: target_channel
         type: u1
@@ -217,7 +217,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
       - id: machine_type_raw
         type: u1
@@ -227,7 +227,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
     -webide-representation: 'empty'
     
@@ -238,7 +238,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
       - id: output_state
         type: u1
@@ -253,7 +253,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
       - id: voltage_raw
         type: u2
@@ -270,7 +270,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
       - id: addr_byte0
         type: u1
@@ -311,7 +311,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
       - id: addresses
         type: address_entry
@@ -326,7 +326,7 @@ types:
     seq:
       - id: channel
         type: u1
-      - id: dummy
+      - id: checksum
         type: u1
       - id: rgb_state
         type: u1
