@@ -20,21 +20,19 @@ monitoring UI (`webui/`), and TypeScript device-control tooling (`cli/`).
 - Cross-validate changed parser/generator behavior against Kaitai with the
   relevant tests in `cpp/tests/`, including invalid sizes and checksums.
 
-## Validation commands
+## Validation entrypoints
 
-Choose checks for the changed component. Fix failures caused by the change and
-rerun affected checks; broaden validation when shared protocol behavior changes.
+Choose checks for the changed component, fix failures caused by the change, and
+rerun affected checks. Shared protocol changes need both C++ and web validation.
 
-- C++ requires Qt6 Core/Test, Google Test, and the Kaitai compiler:
-  `cmake -S cpp -B cpp/build`, `cmake --build cpp/build`, then
-  `ctest --test-dir cpp/build --output-on-failure`.
-- Focus a C++ suite with
-  `cpp/build/mdp_parser_test --gtest_filter="ProcessingDataTest.*"`.
-- Web unit tests: `npm --prefix webui run test:run -- <test-file>`;
-  omit the filter for the whole suite. Coverage: `npm --prefix webui run test:coverage`.
-- Web checks: `npm --prefix webui run check`, `npm --prefix webui run lint`,
-  and `npm --prefix webui run build`. Browser tests: `npm --prefix webui run test:e2e`.
-- Development server: `npm --prefix webui run dev`.
+- C++ requires Qt6 Core/Test, Google Test, and the Kaitai compiler. Configure
+  `cmake -S cpp -B cpp/build`, build with `cmake --build cpp/build`, then run
+  `ctest --test-dir cpp/build --output-on-failure`. The test binary supports
+  Google Test's `--gtest_filter` for focused checks.
+- Web: `npm --prefix webui run test:run -- <test-file>` runs a focused suite;
+  omit the filter for all unit tests. Use `check`, `lint`, and `build` for web
+  source changes, and `test:e2e` for browser interactions. `webui/package.json`
+  owns the remaining development and coverage commands.
 
 ## Test contracts
 
