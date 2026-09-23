@@ -23,7 +23,9 @@ export interface DeviceContext extends DeviceContextParams {
  * Alias assignment rules:
  * - Single device of a category: simple alias (e.g., "psu" or "load")
  * - Multiple devices of same category: numbered aliases (e.g., "psu1", "psu2")
- * - When multiple devices exist, the base category name becomes ambiguous
+ * - PSU channels on one controller also expose "psu" for channel 0, preserving
+ *   single-controller automation that predates per-channel aliases.
+ * - Otherwise, the base category name becomes ambiguous.
  *
  * IMPORTANT: Devices are sorted by portPath to ensure stable ordering across
  * reboots and USB topology changes. This prevents "psu1" from unexpectedly
@@ -59,7 +61,12 @@ export class ContextRegistry {
         return;
       }
 
-      if (devices.length > 1) {
+      const defaultPsu = category === 'psu' && devices.length > 1 &&
+        devices.every((device) => device.portPath === devices[0].portPath)
+        ? devices.find((device) => device.channel === 0)
+        : undefined;
+
+      if (devices.length > 1 && !defaultPsu) {
         this.ambiguousCategories.add(category);
       }
 
@@ -73,6 +80,11 @@ export class ContextRegistry {
         this.aliasMap.set(alias, device);
         this.pushUnique(device);
       });
+
+      if (defaultPsu) {
+        const numberedAlias = `${category}${devices.indexOf(defaultPsu) + 1}`;
+        this.aliasMap.set(category, { ...this.aliasMap.get(numberedAlias)!, alias: category });
+      }
     });
   }
 

@@ -73,6 +73,34 @@ describe('ContextRegistry', () => {
   });
 
   describe('multiple devices of same category', () => {
+    it('keeps psu as a channel-0 alias for PSUs on one controller', () => {
+      const contexts: DeviceContextParams[] = [
+        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906', channel: 1 },
+        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906', channel: 0 }
+      ];
+
+      const registry = new ContextRegistry(contexts);
+
+      expect(registry.getAliases()).toEqual(['psu', 'psu1', 'psu2']);
+      expect(registry.getContext('psu')).toMatchObject({
+        portPath: '/dev/ttyUSB0', channel: 0, alias: 'psu'
+      });
+      expect(registry.getContext('psu1')?.channel).toBe(0);
+      expect(registry.getContext('psu2')?.channel).toBe(1);
+      expect(registry.getAmbiguousCategories()).toEqual([]);
+      expect(registry.uniqueContextsByCategory.psu).toHaveLength(2);
+    });
+
+    it('keeps psu ambiguous when one controller has no channel 0', () => {
+      const registry = new ContextRegistry([
+        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906', channel: 1 },
+        { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906', channel: 2 }
+      ]);
+
+      expect(registry.getContext('psu')).toBeUndefined();
+      expect(registry.getAmbiguousCategories()).toEqual(['psu']);
+    });
+
     it('should assign numbered aliases for two PSUs', () => {
       const contexts: DeviceContextParams[] = [
         { portPath: '/dev/ttyUSB0', category: 'psu', machineType: 'P906' },
