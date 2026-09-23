@@ -985,6 +985,9 @@ function registerContextCommands(program: Command, registry: ContextRegistry): v
     program
       .command(category)
       .description(`Ambiguous alias (${category}) – use ${category}1/${category}2 etc.`)
+      .argument('[state]', 'Output state (on/off)')
+      .option('--status', 'Print textual status for a numbered alias')
+      .option('--status-json', 'Print JSON status for a numbered alias')
       .action(() => {
         const hints = registry.uniqueContextsByCategory[category]
           .map((ctx) => ctx.alias)
