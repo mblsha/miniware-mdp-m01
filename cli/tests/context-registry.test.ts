@@ -235,6 +235,8 @@ describe('ContextRegistry', () => {
       expect(registry.uniqueContextsByCategory.psu).toHaveLength(2);
       expect(registry.getContext('psu1')?.channel).toBe(0);
       expect(registry.getContext('psu2')?.channel).toBe(1);
+      expect(registry.getContext('psu')).toBeUndefined();
+      expect(registry.getAmbiguousCategories()).toContain('psu');
     });
   });
 
